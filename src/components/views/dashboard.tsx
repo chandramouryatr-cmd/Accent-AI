@@ -316,23 +316,81 @@ export function DashboardView() {
       </div>
 
       {/* Greeting */}
-      <div>
-        <div className="flex items-center gap-2 mb-1.5">
-          <span className="inline-block w-2 h-2 rounded-full bg-[#10b981] animate-pulse" />
+      <div className="relative">
+        {/* Floating particles behind greeting */}
+        <div className="absolute -top-2 right-0 w-32 h-20 pointer-events-none overflow-hidden">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <motion.span
+              key={i}
+              className="absolute bottom-0 w-1 h-1 rounded-full"
+              style={{
+                left: `${15 + i * 18}%`,
+                background: i % 2 === 0 ? "rgba(99,102,241,0.6)" : "rgba(34,211,238,0.6)",
+                ["--drift-x" as string]: `${(i % 2 === 0 ? 1 : -1) * (8 + i * 4)}px`,
+              }}
+              animate={{
+                y: [0, -60 - i * 8],
+                opacity: [0, 0.8, 0],
+                scale: [1, 0.4],
+              }}
+              transition={{
+                duration: 3.5 + i * 0.4,
+                repeat: Infinity,
+                delay: i * 0.6,
+                ease: "easeOut",
+              }}
+            />
+          ))}
+        </div>
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="flex items-center gap-2 mb-1.5"
+        >
+          <span className="relative inline-flex">
+            <span className="inline-block w-2 h-2 rounded-full bg-[#10b981]" />
+            <span className="absolute inset-0 w-2 h-2 rounded-full bg-[#10b981] animate-ping opacity-75" />
+          </span>
           <span className="text-[10px] uppercase tracking-wider text-[var(--t3)] font-mono">
             AI Coach Active
           </span>
-        </div>
-        <h1 className="font-d text-2xl font-bold">
-          {greeting}, {userName} 👋
-        </h1>
-        <p className="text-sm text-[var(--t2)] mt-0.5">
+          <span className="text-[10px] text-[var(--t3)] font-mono">·</span>
+          <span className="text-[10px] uppercase tracking-wider text-[var(--t3)] font-mono">
+            {new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
+          </span>
+        </motion.div>
+        <motion.h1
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.05 }}
+          className="font-d text-2xl sm:text-3xl font-bold leading-tight"
+        >
+          <span className="animate-gradient-text" style={{
+            backgroundImage: "linear-gradient(120deg, var(--p), var(--p2), var(--p3), var(--p), var(--p2))",
+          }}>
+            {greeting}, {userName}
+          </span>
+          <motion.span
+            className="inline-block ml-1"
+            animate={{ rotate: [0, 14, -8, 14, 0] }}
+            transition={{ duration: 1.6, repeat: Infinity, repeatDelay: 3, ease: "easeInOut" }}
+          >
+            👋
+          </motion.span>
+        </motion.h1>
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5, delay: 0.15 }}
+          className="text-sm text-[var(--t2)] mt-0.5"
+        >
           {overallProg.done === 0
             ? "Start your first lesson to begin your journey!"
             : overallProg.done === ALL_LESSON_IDS.length
             ? "🎉 You've completed every lesson! Keep practicing."
             : `You've completed ${overallProg.done} of ${overallProg.total} lessons. Keep going!`}
-        </p>
+        </motion.p>
       </div>
 
       {/* Recent / Recommended lessons carousel */}

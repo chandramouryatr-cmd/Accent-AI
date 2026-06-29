@@ -2,14 +2,15 @@
 
 import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Zap } from "lucide-react";
+import { Zap, Target } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { speak } from "@/lib/tts";
 import { MicWaveform } from "@/components/widgets/mic-waveform";
 import { PronunciationChallenge } from "@/components/widgets/pronunciation-challenge";
+import { PhonemeDrill } from "@/components/widgets/phoneme-drill";
 
 type Difficulty = "easy" | "medium" | "hard";
-type PracticeMode = "easy" | "medium" | "hard" | "challenge";
+type PracticeMode = "easy" | "medium" | "hard" | "challenge" | "phoneme-drill";
 
 const PHRASES: Record<Difficulty, { text: string; ipa: string; issues: string[] }[]> = {
   easy: [
@@ -296,11 +297,28 @@ function PracticeContent() {
 export function PracticeView() {
   const [mode, setMode] = useState<PracticeMode>("medium");
 
-  const TABS: { id: PracticeMode; label: string; icon?: React.ReactNode; isChallenge?: boolean }[] = [
+  const TABS: {
+    id: PracticeMode;
+    label: string;
+    icon?: React.ReactNode;
+    isChallenge?: boolean;
+    isDrill?: boolean;
+  }[] = [
     { id: "easy", label: "Easy" },
     { id: "medium", label: "Medium" },
     { id: "hard", label: "Hard" },
-    { id: "challenge", label: "Challenge", icon: <Zap className="w-3 h-3" />, isChallenge: true },
+    {
+      id: "phoneme-drill",
+      label: "Drill",
+      icon: <Target className="w-3 h-3" />,
+      isDrill: true,
+    },
+    {
+      id: "challenge",
+      label: "Challenge",
+      icon: <Zap className="w-3 h-3" />,
+      isChallenge: true,
+    },
   ];
 
   return (
@@ -312,18 +330,26 @@ export function PracticeView() {
         <p className="text-sm text-[var(--t2)]">
           {mode === "challenge"
             ? "Timed drills with combo multipliers"
+            : mode === "phoneme-drill"
+            ? "Targeted practice for stubborn sounds"
             : "Listen to the native speaker, then record yourself"}
         </p>
       </div>
 
-      {/* Mode toggle — Easy / Medium / Hard / ⚡ Challenge */}
+      {/* Mode toggle — Easy / Medium / Hard / 🎯 Drill / ⚡ Challenge */}
       <div className="flex p-1 rounded-xl bg-[var(--card)] border border-[var(--border)]">
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setMode(t.id)}
             className={`relative flex-1 py-2 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1 ${
-              mode === t.id ? "text-white" : t.isChallenge ? "text-[#f59e0b]" : "text-[var(--t2)]"
+              mode === t.id
+                ? "text-white"
+                : t.isChallenge
+                ? "text-[#f59e0b]"
+                : t.isDrill
+                ? "text-[var(--c)]"
+                : "text-[var(--t2)]"
             }`}
           >
             {mode === t.id && (
@@ -333,9 +359,13 @@ export function PracticeView() {
                 style={{
                   background: t.isChallenge
                     ? "linear-gradient(135deg, #f59e0b, #f97316)"
+                    : t.isDrill
+                    ? "linear-gradient(135deg, #22d3ee, #6366f1)"
                     : "var(--grad-btn)",
                   boxShadow: t.isChallenge
                     ? "0 0 16px rgba(245,158,11,0.4)"
+                    : t.isDrill
+                    ? "0 0 16px rgba(34,211,238,0.4)"
                     : "0 0 16px rgba(99,102,241,0.4)",
                 }}
                 transition={{ type: "spring", stiffness: 400, damping: 30 }}
@@ -360,6 +390,16 @@ export function PracticeView() {
             transition={{ duration: 0.2 }}
           >
             <PronunciationChallenge />
+          </motion.div>
+        ) : mode === "phoneme-drill" ? (
+          <motion.div
+            key="phoneme-drill"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+          >
+            <PhonemeDrill />
           </motion.div>
         ) : (
           <motion.div

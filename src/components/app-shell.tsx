@@ -76,9 +76,20 @@ export function AppShell() {
       {/* Top bar */}
       <header className="sticky top-0 z-30 backdrop-blur-xl bg-[rgba(7,7,15,0.85)] border-b border-[var(--border)] safe-top">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="font-d text-lg font-bold">
-            <span className="grad-text">AccentAI</span>
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#22d3ee] ml-0.5 align-middle" />
+          <div className="font-d text-lg font-bold flex items-center">
+            <span
+              className="animate-gradient-text"
+              style={{
+                backgroundImage: "linear-gradient(120deg, var(--p), var(--p2), var(--p3), var(--p))",
+              }}
+            >
+              AccentAI
+            </span>
+            <motion.span
+              className="inline-block w-1.5 h-1.5 rounded-full bg-[#22d3ee] ml-0.5 align-middle"
+              animate={{ scale: [1, 1.4, 1], opacity: [1, 0.5, 1] }}
+              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+            />
           </div>
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[rgba(245,158,11,0.1)] border border-[rgba(245,158,11,0.25)] animate-pill-glow-amber">
@@ -148,9 +159,18 @@ export function AppShell() {
                 {isActive && (
                   <motion.div
                     layoutId="tab-indicator"
-                    className="absolute inset-0 rounded-lg bg-[rgba(99,102,241,0.15)]"
+                    className="absolute inset-0 rounded-lg overflow-hidden"
                     transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                  />
+                  >
+                    <div className="absolute inset-0 bg-[rgba(99,102,241,0.15)]" />
+                    {/* Top accent line */}
+                    <motion.div
+                      className="absolute top-0 left-1/2 -translate-x-1/2 h-0.5 w-8 rounded-full"
+                      style={{ background: "var(--grad-btn)", boxShadow: "0 0 6px rgba(99,102,241,0.6)" }}
+                      initial={{ scaleX: 0 }}
+                      animate={{ scaleX: 1 }}
+                    />
+                  </motion.div>
                 )}
                 <motion.span
                   className={`relative text-lg ${isActive ? "" : "opacity-50"}`}

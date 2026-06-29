@@ -392,6 +392,102 @@
 }
 .animate-gentle-float { animation: gentle-float 3s ease-in-out infinite; }
 
+/* ─── Round 8: New styling polish animations ─── */
+
+/* Animated gradient text — shifts hue + position slowly */
+@keyframes gradient-text-flow {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.animate-gradient-text {
+  background-size: 200% 200%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: gradient-text-flow 6s ease-in-out infinite;
+}
+
+/* Soft floating particle — drifts upward + fades */
+@keyframes particle-drift-up {
+  0% { transform: translateY(0) translateX(0) scale(1); opacity: 0; }
+  20% { opacity: 0.6; }
+  100% { transform: translateY(-80px) translateX(var(--drift-x, 12px)) scale(0.4); opacity: 0; }
+}
+.animate-particle-drift { animation: particle-drift-up 4s ease-out infinite; }
+
+/* Step content entrance — slide + scale from below */
+@keyframes step-pop-in {
+  0% { opacity: 0; transform: translateY(16px) scale(0.96); }
+  60% { opacity: 1; transform: translateY(-2px) scale(1.01); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.animate-step-pop { animation: step-pop-in 0.4s cubic-bezier(.34,1.4,.64,1) both; }
+
+/* Achievement glow burst — radial pulse on unlock */
+@keyframes achievement-burst {
+  0% { transform: scale(0.6); opacity: 0; box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.8); }
+  40% { transform: scale(1.05); opacity: 1; box-shadow: 0 0 0 16px rgba(251, 191, 36, 0); }
+  100% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 0 rgba(251, 191, 36, 0); }
+}
+.animate-achievement-burst { animation: achievement-burst 0.8s cubic-bezier(.34,1.56,.64,1) both; }
+
+/* Wiggle — gentle attention getter */
+@keyframes wiggle-attention {
+  0%, 100% { transform: rotate(0deg); }
+  20% { transform: rotate(-3deg); }
+  40% { transform: rotate(2deg); }
+  60% { transform: rotate(-2deg); }
+  80% { transform: rotate(1deg); }
+}
+.animate-wiggle { animation: wiggle-attention 0.6s ease-in-out; }
+
+/* Glow border breathe — slow inhale/exhale */
+@keyframes glow-breathe {
+  0%, 100% { box-shadow: 0 0 0 1px var(--border), 0 0 20px -8px var(--p); }
+  50% { box-shadow: 0 0 0 1px var(--p), 0 0 30px -4px var(--p); }
+}
+.animate-glow-breathe { animation: glow-breathe 3s ease-in-out infinite; }
+
+/* Letter cascade — for phoneme symbol reveal */
+@keyframes letter-cascade {
+  0% { opacity: 0; transform: translateY(-20px) rotate(-8deg) scale(0.8); }
+  100% { opacity: 1; transform: translateY(0) rotate(0deg) scale(1); }
+}
+.animate-letter-cascade { animation: letter-cascade 0.5s cubic-bezier(.34,1.4,.64,1) both; }
+
+/* Sound wave ripple — radiating circles */
+@keyframes sound-ripple {
+  0% { transform: scale(0.8); opacity: 0.8; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+.animate-sound-ripple { animation: sound-ripple 1.6s ease-out infinite; }
+
+/* Number ticker slide */
+@keyframes ticker-slide-up {
+  0% { transform: translateY(100%); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+.animate-ticker-slide { animation: ticker-slide-up 0.5s cubic-bezier(.4,0,.2,1) both; }
+
+/* Confetti spin — for celebration moments */
+@keyframes confetti-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(720deg); }
+}
+.animate-confetti-spin { animation: confetti-spin 1.4s linear both; }
+
+/* Glass shimmer card */
+@keyframes glass-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.animate-glass-shimmer {
+  background-size: 200% 100%;
+  animation: glass-shimmer 5s linear infinite;
+}
+
 /* Hide focus ring on mouse, show on keyboard */
 :focus:not(:focus-visible) { outline: none; }
 :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }

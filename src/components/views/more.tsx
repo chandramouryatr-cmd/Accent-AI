@@ -2,12 +2,17 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Star, Play } from "lucide-react";
+import { Star, Play, NotebookPen, Share2 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { useTheme } from "@/components/theme-provider";
 import { PHASES } from "@/lib/types";
 import { getLessonsForPhase, getLesson } from "@/lib/lessons";
 import { XPShop } from "@/components/widgets/xp-shop";
+import {
+  MyLessonNotesList,
+  useLessonNoteCount,
+} from "@/components/widgets/lesson-notes-panel";
+import { ShareCard, useShareCardState } from "@/components/widgets/share-card";
 
 export function MoreView() {
   const accent = useAppStore((s) => s.accent);
@@ -22,6 +27,8 @@ export function MoreView() {
   const [showReset, setShowReset] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(userName);
+  const noteCount = useLessonNoteCount();
+  const shareCard = useShareCardState();
 
   const handleSaveName = () => {
     if (nameInput.trim()) {
@@ -278,6 +285,22 @@ export function MoreView() {
         )}
       </div>
 
+      {/* My Lesson Notes */}
+      <div>
+        <h2 className="font-d text-base font-bold mb-2 flex items-center gap-2">
+          <NotebookPen className="w-4 h-4 text-[var(--p3)]" />
+          My Lesson Notes
+          {noteCount > 0 && (
+            <span className="ml-auto text-[10px] font-mono px-2 py-0.5 rounded-full bg-[rgba(99,102,241,0.12)] text-[var(--p3)]">
+              {noteCount} {noteCount === 1 ? "note" : "notes"}
+            </span>
+          )}
+        </h2>
+        {/* Sort order is documented in lesson-notes-panel.tsx: longest notes first
+            (ties broken by phase / lesson catalog order). */}
+        <MyLessonNotesList />
+      </div>
+
       {/* About */}
       <div className="rounded-2xl p-5 bg-[var(--card)] border border-[var(--border)]">
         <h3 className="font-d font-bold text-base mb-2">About <span className="grad-text">AccentAI</span></h3>
@@ -293,6 +316,25 @@ export function MoreView() {
           <span>•</span>
           <span>16 interactive widgets</span>
         </div>
+
+        {/* Share My Stats button */}
+        <motion.button
+          onClick={shareCard.openShare}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          className="mt-4 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white border-0"
+          style={{
+            background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+            boxShadow: "0 6px 20px rgba(99,102,241,0.4)",
+          }}
+          aria-label="Share my stats"
+        >
+          <Share2 className="w-4 h-4" />
+          Share My Stats
+        </motion.button>
+        <p className="mt-2 text-center text-[10px] text-[var(--t3)] font-mono">
+          Generate a beautiful downloadable PNG summary of your journey
+        </p>
       </div>
 
       {/* Reset */}
@@ -331,6 +373,9 @@ export function MoreView() {
           </button>
         )}
       </div>
+
+      {/* Share card modal — opened from the "Share My Stats" button above */}
+      <ShareCard open={shareCard.open} onOpenChange={shareCard.setOpen} />
     </div>
   );
 }

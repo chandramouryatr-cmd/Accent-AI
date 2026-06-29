@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, X, Check, RotateCcw } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, Check, RotateCcw, NotebookPen } from "lucide-react";
 import type { Lesson, LessonStep } from "@/lib/types";
 import { useAppStore } from "@/lib/store";
 import { speak, stopSpeaking, loadVoices } from "@/lib/tts";
@@ -13,6 +13,7 @@ import { StressBars } from "@/components/widgets/stress-bars";
 import { RhythmBeats } from "@/components/widgets/rhythm-beats";
 import { LinkingDiagram } from "@/components/widgets/linking-diagram";
 import { IntonationContour } from "@/components/widgets/intonation-contour";
+import { LessonNotesPanel } from "@/components/widgets/lesson-notes-panel";
 import { CompareWave } from "@/components/widgets/compare-wave";
 import { MicWaveform } from "@/components/widgets/mic-waveform";
 import { Confetti } from "@/components/widgets/confetti";
@@ -86,10 +87,12 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
   // when the step changes — using the official "adjust state during render"
   // pattern instead of setState-in-effect (react-hooks/set-state-in-effect).
   const [prevStepIdx, setPrevStepIdx] = useState(stepIdx);
+  const [showNotesPanel, setShowNotesPanel] = useState(false);
   const accent = useAppStore((s) => s.accent);
   const completeLesson = useAppStore((s) => s.completeLesson);
   const lessons = useAppStore((s) => s.lessons);
   const addSpeakingTime = useAppStore((s) => s.addSpeakingTime);
+  const hasLessonNote = useAppStore((s) => (s.lessonNotes[lesson.id] ?? "").trim().length > 0);
 
   const step = lesson.steps[stepIdx];
   const isLast = stepIdx === lesson.steps.length - 1;
@@ -184,6 +187,11 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        // Close the notes panel first if it's open; otherwise close the lesson.
+        if (showNotesPanel) {
+          setShowNotesPanel(false);
+          return;
+        }
         onClose();
         return;
       }
@@ -197,6 +205,9 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
       }
       // Space → play the current step's primary audio
       if (e.key === " " || e.code === "Space") {
+        // When the notes panel is open, the user is taking notes — don't
+        // hijack Space for audio playback.
+        if (showNotesPanel) return;
         const target = e.target as HTMLElement | null;
         const isTyping =
           target &&
@@ -236,7 +247,7 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [goNext, goPrev, onClose, step, handleSpeak]);
+  }, [goNext, goPrev, onClose, step, handleSpeak, showNotesPanel]);
 
   return (
     <motion.div
@@ -263,6 +274,29 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
           <div className="text-sm font-d font-semibold truncate">{lesson.title}</div>
         </div>
         <div className="flex items-center gap-1.5">
+          <motion.button
+            onClick={() => setShowNotesPanel(true)}
+            whileTap={{ scale: 0.9 }}
+            whileHover={{ scale: 1.05 }}
+            className="relative w-9 h-9 rounded-xl flex items-center justify-center hover:bg-[var(--card-h)] transition text-[var(--t2)] hover:text-[var(--p3)]"
+            aria-label="Open lesson notes"
+            aria-expanded={showNotesPanel}
+          >
+            <NotebookPen style={{ width: 18, height: 18 }} />
+            <AnimatePresence>
+              {hasLessonNote && (
+                <motion.span
+                  key="note-dot"
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  exit={{ scale: 0 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 18 }}
+                  className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[var(--p3)] ring-2 ring-[var(--bg2)]"
+                  style={{ boxShadow: "0 0 6px rgba(167,139,250,0.8)" }}
+                />
+              )}
+            </AnimatePresence>
+          </motion.button>
           <span className="text-xs font-mono text-[var(--t2)]">{stepIdx + 1}/{totalSteps}</span>
           <ProgressRing pct={pct} size={36} stroke={3} />
         </div>
@@ -334,12 +368,36 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
           <motion.div
             key={stepIdx}
             custom={direction}
-            initial={{ opacity: 0, x: direction * 30 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: direction * -30 }}
-            transition={{ duration: 0.25 }}
+            initial={{ opacity: 0, x: direction * 40, scale: 0.97 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{ opacity: 0, x: direction * -40, scale: 0.97 }}
+            transition={{ duration: 0.32, ease: [0.34, 1.2, 0.64, 1] }}
             className="max-w-2xl mx-auto px-5 py-6 pb-32"
           >
+            {/* Step-type chip with icon + label, animated entrance */}
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1, duration: 0.3 }}
+              className="flex items-center justify-center gap-2 mb-4"
+            >
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--card)] border border-[var(--border2)] text-[10px] uppercase tracking-wider font-mono text-[var(--t3)]">
+                <span className="text-sm leading-none">
+                  {(() => {
+                    const ico: Record<string, string> = {
+                      intro: "👋", concept: "📖", example: "💬", "mouth-diagram": "👄",
+                      "vowel-chart": "🎯", compare: "📊", "stress-bars": "📈", rhythm: "🎵",
+                      linking: "🔗", shadow: "🪞", intonation: "📐", "tap-pronounce": "👆",
+                      tip: "💡", practice: "🎙", quiz: "❓", completion: "🏆"
+                    };
+                    return ico[step?.type || ""] || "•";
+                  })()}
+                </span>
+                <span>{step?.type?.replace("-", " ")}</span>
+                <span className="opacity-50">·</span>
+                <span>Step {stepIdx + 1} of {totalSteps}</span>
+              </div>
+            </motion.div>
             <StepRenderer
               step={step}
               speak={handleSpeak}
@@ -414,6 +472,66 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
           </button>
         )}
       </div>
+
+      {/* Lesson Notes — slide-in side panel overlay */}
+      <AnimatePresence>
+        {showNotesPanel && (
+          <motion.div
+            key="notes-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="absolute inset-0 z-[60] bg-black/50 backdrop-blur-sm flex justify-end"
+            onClick={() => setShowNotesPanel(false)}
+            aria-hidden="false"
+          >
+            <motion.div
+              key="notes-panel"
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "100%" }}
+              transition={{ type: "spring", stiffness: 320, damping: 32 }}
+              onClick={(e) => e.stopPropagation()}
+              className="h-full w-full max-w-md bg-[var(--bg)] border-l border-[var(--border2)] flex flex-col safe-top safe-bottom"
+              role="dialog"
+              aria-label={`Notes panel for ${lesson.title}`}
+            >
+              {/* Panel header */}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)] bg-[var(--bg2)]/80 backdrop-blur">
+                <div className="flex items-center gap-2">
+                  <div
+                    className="w-7 h-7 rounded-lg flex items-center justify-center text-white"
+                    style={{ background: "var(--grad-btn)" }}
+                  >
+                    <NotebookPen style={{ width: 14, height: 14 }} />
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider font-mono text-[var(--t3)]">
+                      My Notebook
+                    </div>
+                    <div className="text-xs font-d font-semibold text-[var(--t1)] truncate max-w-[200px] sm:max-w-xs">
+                      {lesson.title}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowNotesPanel(false)}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[var(--card-h)] transition text-[var(--t2)] hover:text-[var(--t1)]"
+                  aria-label="Close notes panel"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Panel body */}
+              <div className="flex-1 overflow-y-auto p-4">
+                <LessonNotesPanel lessonId={lesson.id} lessonTitle={lesson.title} />
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -1054,8 +1172,8 @@ function CompletionStepView({
         <motion.div
           initial={{ opacity: 0, y: 10, scale: 0.9 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ delay: 0.7, type: "spring" }}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[rgba(245,158,11,0.12)] border border-[rgba(245,158,11,0.3)] text-sm font-semibold text-[#f59e0b]"
+          transition={{ delay: 0.7, type: "spring", stiffness: 200 }}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[rgba(245,158,11,0.12)] border border-[rgba(245,158,11,0.3)] text-sm font-semibold text-[#f59e0b] animate-achievement-burst"
         >
           <motion.span
             animate={{ rotate: [0, -10, 10, -5, 0] }}

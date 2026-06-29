@@ -1,13 +1,15 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
+import { Share2 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { PHASES } from "@/lib/types";
 import { ALL_LESSONS, getLessonsForPhase } from "@/lib/lessons";
 import { ProgressRing } from "@/components/widgets/progress-ring";
 import { AchievementGallery } from "@/components/widgets/achievement-gallery";
 import { PhonemeMastery } from "@/components/widgets/phoneme-mastery";
+import { ShareCard, useShareCardState } from "@/components/widgets/share-card";
 
 // ─── Practice Calendar Heatmap ─────────────────────────────────────────────
 const WEEKS = 12;
@@ -232,6 +234,9 @@ export function ProgressView() {
   const badges = useAppStore((s) => s.badges);
   const setActiveLesson = useAppStore((s) => s.setActiveLesson);
 
+  const shareCard = useShareCardState();
+  const [shareHover, setShareHover] = useState(false);
+
   const completedCount = Object.values(lessons).filter((l) => l.completed).length;
   const totalLessons = ALL_LESSONS.length;
   const overallPct = Math.round((completedCount / totalLessons) * 100);
@@ -314,7 +319,28 @@ export function ProgressView() {
             </>
           )}
         </div>
-        <ProgressRing pct={overallPct} size={62} stroke={4} label={`${overallPct}%`} />
+        <div className="flex flex-col items-end gap-2">
+          <ProgressRing pct={overallPct} size={62} stroke={4} label={`${overallPct}%`} />
+          <motion.button
+            onClick={shareCard.openShare}
+            whileHover={{ scale: 1.04 }}
+            whileTap={{ scale: 0.96 }}
+            onMouseEnter={() => setShareHover(true)}
+            onMouseLeave={() => setShareHover(false)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold text-white border-0"
+            style={{
+              background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+              boxShadow: shareHover
+                ? "0 6px 20px rgba(99,102,241,0.5)"
+                : "0 4px 12px rgba(99,102,241,0.35)",
+              transition: "box-shadow 0.2s ease",
+            }}
+            aria-label="Share my progress"
+          >
+            <Share2 className="w-3.5 h-3.5" />
+            Share My Progress
+          </motion.button>
+        </div>
       </motion.div>
 
       {/* Rank ladder */}
@@ -390,7 +416,21 @@ export function ProgressView() {
       </div>
 
       {/* Badges */}
-      <AchievementGallery />
+      <div>
+        <div className="flex items-center justify-end mb-1.5 -mt-1">
+          <motion.button
+            onClick={shareCard.openShare}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium text-[var(--t2)] hover:text-[var(--t1)] bg-transparent border border-[var(--border)] hover:border-[var(--p3)] transition"
+            aria-label="Share my badges"
+          >
+            <Share2 className="w-3 h-3" />
+            Share
+          </motion.button>
+        </div>
+        <AchievementGallery />
+      </div>
 
       {/* Phoneme Mastery — horizontal bars + spotlight on weakest */}
       <PhonemeMastery />
@@ -446,6 +486,9 @@ export function ProgressView() {
           )}
         </div>
       </div>
+
+      {/* Share card modal — controlled by shareCard.open state */}
+      <ShareCard open={shareCard.open} onOpenChange={shareCard.setOpen} />
     </div>
   );
 }

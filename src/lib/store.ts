@@ -49,6 +49,9 @@ export interface AppState {
   // challenge high score
   challengeHighScore: number;
 
+  // lesson notes — personal notebook per lesson (keyed by lessonId)
+  lessonNotes: Record<string, string>;
+
   // xp shop
   xpShopItems: XPShopItems;
 
@@ -72,7 +75,11 @@ export interface AppState {
   toggleBookmark: (lessonId: string) => void;
   isBookmarked: (lessonId: string) => boolean;
   setChallengeHighScore: (score: number) => void;
+  setLessonNote: (lessonId: string, note: string) => void;
+  deleteLessonNote: (lessonId: string) => void;
+  getLessonNote: (lessonId: string) => string;
   spendXP: (amount: number) => boolean;
+  addXP: (amount: number, source?: string) => void;
   buyStreakFreeze: () => boolean;
   buyDoubleXP: () => boolean;
   buyCustomTheme: () => boolean;
@@ -108,6 +115,7 @@ export const useAppStore = create<AppState>()(
       bookmarkedLessons: [],
       practiceCalendar: {},
       challengeHighScore: 0,
+      lessonNotes: {},
 
       xpShopItems: {
         streakFreezes: 0,
@@ -294,11 +302,49 @@ export const useAppStore = create<AppState>()(
         }
       },
 
+      setLessonNote: (lessonId, note) => {
+        const state = get();
+        const trimmed = note.slice(0, 5000).trimEnd();
+        const next = { ...state.lessonNotes };
+        if (trimmed.length === 0) {
+          delete next[lessonId];
+        } else {
+          next[lessonId] = trimmed;
+        }
+        set({ lessonNotes: next });
+      },
+
+      deleteLessonNote: (lessonId) => {
+        const state = get();
+        if (!(lessonId in state.lessonNotes)) return;
+        const next = { ...state.lessonNotes };
+        delete next[lessonId];
+        set({ lessonNotes: next });
+      },
+
+      getLessonNote: (lessonId) => {
+        return get().lessonNotes[lessonId] ?? "";
+      },
+
       spendXP: (amount) => {
         const state = get();
         if (state.xp < amount) return false;
         set({ xp: state.xp - amount });
         return true;
+      },
+
+      addXP: (amount, source) => {
+        if (amount <= 0) return;
+        const state = get();
+        set({ xp: state.xp + amount });
+        // Notify toast-watcher so any XP-related UI can react to non-lesson awards.
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("accentai:xp-awarded", {
+              detail: { amount, source: source ?? "drill" },
+            })
+          );
+        }
       },
 
       buyStreakFreeze: () => {
@@ -394,6 +440,7 @@ export const useAppStore = create<AppState>()(
           bookmarkedLessons: [],
           practiceCalendar: {},
           challengeHighScore: 0,
+          lessonNotes: {},
           xpShopItems: {
             streakFreezes: 0,
             doubleXP: false,
@@ -426,6 +473,7 @@ export const useAppStore = create<AppState>()(
         bookmarkedLessons: s.bookmarkedLessons,
         practiceCalendar: s.practiceCalendar,
         challengeHighScore: s.challengeHighScore,
+        lessonNotes: s.lessonNotes,
         xpShopItems: s.xpShopItems,
       }),
     }
