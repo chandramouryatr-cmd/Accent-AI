@@ -7,6 +7,7 @@ import { useAppStore } from "@/lib/store";
 import { useTheme } from "@/components/theme-provider";
 import { PHASES } from "@/lib/types";
 import { getLessonsForPhase, getLesson } from "@/lib/lessons";
+import { XPShop } from "@/components/widgets/xp-shop";
 
 export function MoreView() {
   const accent = useAppStore((s) => s.accent);
@@ -187,6 +188,11 @@ export function MoreView() {
             </div>
           </motion.button>
         </div>
+      </div>
+
+      {/* XP Shop */}
+      <div>
+        <XPShop />
       </div>
 
       {/* Phase overview */}

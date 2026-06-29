@@ -63,6 +63,27 @@ function buildSystemPrompt(ctx: RequestContext | undefined): string {
 const WELCOME_FALLBACK =
   "Hi there! 👄 I'm your AccentAI Coach. Ask me about any English sound, word, or pronunciation challenge and I'll break it down with IPA and concrete practice tips. 🎯";
 
+/**
+ * Fallback: get the full non-streaming response, then simulate streaming
+ * by emitting word-by-word with short delays.
+ */
+function simulateStreamFromFullText(fullText: string): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  const words = fullText.split(/(?<=\s)/); // split keeping whitespace attached
+
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      for (const word of words) {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token: word })}\n\n`));
+        // 35ms delay for natural typewriter feel
+        await new Promise((r) => setTimeout(r, 35));
+      }
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      controller.close();
+    },
+  });
+}
+
 export async function POST(req: NextRequest) {
   let body: RequestBody;
   try {
@@ -110,13 +131,106 @@ export async function POST(req: NextRequest) {
 
   try {
     const zai = await ZAI.create();
+
+    // Attempt native streaming from the SDK
     const completion = await zai.chat.completions.create({
       messages: finalMessages,
       temperature: 0.7,
       max_tokens: 800,
+      stream: true,
     } as unknown as Parameters<typeof zai.chat.completions.create>[0]);
 
-    // The SDK may return either an OpenAI-style response or a plain string
+    // If the SDK returns a ReadableStream (native streaming), pipe it through
+    if (completion && typeof completion === "object" && completion instanceof ReadableStream) {
+      const decoder = new TextDecoder();
+      const encoder = new TextEncoder();
+
+      const transformedStream = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          const reader = completion.getReader();
+          let buffer = "";
+
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split("\n");
+              // Keep the last incomplete line in the buffer
+              buffer = lines.pop() || "";
+
+              for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed || !trimmed.startsWith("data:")) continue;
+
+                const dataStr = trimmed.slice(5).trim();
+                if (dataStr === "[DONE]") {
+                  controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+                  continue;
+                }
+
+                try {
+                  const parsed = JSON.parse(dataStr);
+                  // OpenAI-style streaming: choices[0].delta.content
+                  const token = parsed?.choices?.[0]?.delta?.content;
+                  if (token) {
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token })}\n\n`));
+                  }
+                  // If finish_reason is set, we'll also handle [DONE] if it appears
+                } catch {
+                  // Non-JSON line, skip
+                }
+              }
+            }
+
+            // Process any remaining buffer
+            if (buffer.trim()) {
+              const trimmed = buffer.trim();
+              if (trimmed.startsWith("data:")) {
+                const dataStr = trimmed.slice(5).trim();
+                if (dataStr === "[DONE]") {
+                  controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+                } else {
+                  try {
+                    const parsed = JSON.parse(dataStr);
+                    const token = parsed?.choices?.[0]?.delta?.content;
+                    if (token) {
+                      controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token })}\n\n`));
+                    }
+                  } catch {
+                    // skip
+                  }
+                }
+              }
+            }
+
+            // Always ensure we send [DONE] at the end
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            controller.close();
+          } catch (streamErr) {
+            console.error("[ai-coach] Stream reading error:", streamErr);
+            // Send error token then close
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ error: "Stream interrupted" })}\n\n`)
+            );
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            controller.close();
+          }
+        },
+      });
+
+      return new Response(transformedStream, {
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+        },
+      });
+    }
+
+    // Fallback: SDK returned a non-streaming response (full JSON object)
+    // Extract the reply text and simulate streaming word-by-word
     let reply = "";
     if (typeof completion === "string") {
       reply = completion;
@@ -139,7 +253,15 @@ export async function POST(req: NextRequest) {
       reply = WELCOME_FALLBACK;
     }
 
-    return NextResponse.json({ reply, role: "assistant" as const });
+    const simulatedStream = simulateStreamFromFullText(reply);
+
+    return new Response(simulatedStream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+      },
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown SDK error";
     console.error("[ai-coach] SDK call failed:", message);
@@ -158,9 +280,11 @@ export async function GET() {
     ok: true,
     endpoint: "ai-coach",
     method: "POST",
+    streaming: true,
     schema: {
       messages: "{ role: 'user'|'assistant'|'system', content: string }[]",
       context: "{ accent?, xp?, streak?, completedLessons?: string[] }",
     },
+    streamFormat: "SSE — data: { token: string } | [DONE]",
   });
 }

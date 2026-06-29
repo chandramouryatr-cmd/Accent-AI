@@ -1,0 +1,721 @@
+     1→"use client";
+     2→
+     3→import { useMemo, useState } from "react";
+     4→import { motion, AnimatePresence } from "framer-motion";
+     5→import { useAppStore, usePhaseProgress, useOverallProgress } from "@/lib/store";
+     6→import { PHASES } from "@/lib/types";
+     7→import { ALL_LESSON_IDS, getLessonsForPhase, lessonIdFor } from "@/lib/lessons";
+     8→import { ProgressRing } from "@/components/widgets/progress-ring";
+     9→import { WaveformCanvas } from "@/components/widgets/waveform-canvas";
+    10→import { TIPS, CATEGORY_COLORS } from "@/lib/tips";
+    11→import { DailyChallengeCard } from "@/components/widgets/daily-challenge-card";
+    12→import { RecentLessonsCarousel } from "@/components/widgets/recent-lessons-carousel";
+    13→
+    14→function todayStr() {
+    15→  return new Date().toISOString().slice(0, 10);
+    16→}
+    17→
+    18→// ─── Tip of the Day ───────────────────────────────────────────────────────
+    19→function dayOfYearTipIndex(): number {
+    20→  const now = new Date();
+    21→  const start = new Date(now.getFullYear(), 0, 0);
+    22→  const dayOfYear = Math.floor(
+    23→    (now.getTime() - start.getTime()) / 86400000
+    24→  );
+    25→  return dayOfYear % TIPS.length;
+    26→}
+    27→
+    28→function TipOfTheDay() {
+    29→  const startIndex = useMemo(() => dayOfYearTipIndex(), []);
+    30→  const [idx, setIdx] = useState(startIndex);
+    31→
+    32→  const tip = TIPS[idx];
+    33→  const color = CATEGORY_COLORS[tip.category];
+    34→
+    35→  const handleNext = () => {
+    36→    setIdx((i) => (i + 1) % TIPS.length);
+    37→  };
+    38→
+    39→  return (
+    40→    <motion.div
+    41→      initial={{ opacity: 0, y: 10 }}
+    42→      animate={{ opacity: 1, y: 0 }}
+    43→      className="relative rounded-3xl p-5 overflow-hidden border"
+    44→      style={{
+    45→        background: `linear-gradient(135deg, ${color}26, ${color}11)`,
+    46→        borderColor: `${color}55`,
+    47→      }}
+    48→    >
+    49→      {/* Shimmer sweep on mount */}
+    50→      <motion.div
+    51→        className="absolute inset-y-0 w-1/3 pointer-events-none"
+    52→        initial={{ x: "-150%" }}
+    53→        animate={{ x: "260%" }}
+    54→        transition={{ duration: 1.4, ease: "easeInOut" }}
+    55→        style={{
+    56→          background: `linear-gradient(90deg, transparent, ${color}40, transparent)`,
+    57→        }}
+    58→      />
+    59→
+    60→      <div className="relative">
+    61→        {/* Top row: label + category badge */}
+    62→        <div className="flex items-center justify-between mb-3">
+    63→          <span
+    64→            className="text-[10px] uppercase tracking-wider font-mono"
+    65→            style={{ color }}
+    66→          >
+    67→            💡 Tip of the Day
+    68→          </span>
+    69→          <span
+    70→            className="text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full"
+    71→            style={{
+    72→              background: `${color}26`,
+    73→              color: color,
+    74→              border: `1px solid ${color}55`,
+    75→            }}
+    76→          >
+    77→            {tip.category}
+    78→          </span>
+    79→        </div>
+    80→
+    81→        {/* Body: emoji + title/body */}
+    82→        <div className="flex items-start gap-4">
+    83→          <motion.div
+    84→            initial={{ scale: 0.5, rotate: -15 }}
+    85→            animate={{ scale: 1, rotate: 0 }}
+    86→            transition={{ type: "spring", stiffness: 220, damping: 14 }}
+    87→            className="text-4xl shrink-0 leading-none"
+    88→            style={{ filter: `drop-shadow(0 0 12px ${color}66)` }}
+    89→          >
+    90→            {tip.emoji}
+    91→          </motion.div>
+    92→          <div className="flex-1 min-w-0">
+    93→            <AnimatePresence mode="wait">
+    94→              <motion.div
+    95→                key={idx}
+    96→                initial={{ opacity: 0, x: 30 }}
+    97→                animate={{ opacity: 1, x: 0 }}
+    98→                exit={{ opacity: 0, x: -30 }}
+    99→                transition={{ duration: 0.3, ease: "easeOut" }}
+   100→              >
+   101→                <div className="font-d text-base font-bold text-[var(--t1)] mb-1">
+   102→                  {tip.title}
+   103→                </div>
+   104→                <div className="text-sm text-[var(--t2)] leading-relaxed">
+   105→                  {tip.body}
+   106→                </div>
+   107→              </motion.div>
+   108→            </AnimatePresence>
+   109→          </div>
+   110→        </div>
+   111→
+   112→        {/* Next tip button */}
+   113→        <div className="flex justify-end mt-3">
+   114→          <motion.button
+   115→            onClick={handleNext}
+   116→            whileHover={{ scale: 1.04 }}
+   117→            whileTap={{ scale: 0.96 }}
+   118→            className="text-xs font-semibold px-3 py-1.5 rounded-full transition"
+   119→            style={{
+   120→              background: `${color}33`,
+   121→              color: color,
+   122→              border: `1px solid ${color}55`,
+   123→            }}
+   124→          >
+   125→            Next tip →
+   126→          </motion.button>
+   127→        </div>
+   128→      </div>
+   129→    </motion.div>
+   130→  );
+   131→}
+   132→
+   133→export function DashboardView() {
+   134→  const userName = useAppStore((s) => s.userName);
+   135→  const xp = useAppStore((s) => s.xp);
+   136→  const streak = useAppStore((s) => s.streak);
+   137→  const speakingSecondsToday = useAppStore((s) => s.speakingSecondsToday);
+   138→  const lessons = useAppStore((s) => s.lessons);
+   139→  const setActiveTab = useAppStore((s) => s.setActiveTab);
+   140→  const setActiveLesson = useAppStore((s) => s.setActiveLesson);
+   141→  const dailyGoal = useAppStore((s) => s.dailyGoal);
+   142→  const dailyGoalCompleted = useAppStore((s) => s.dailyGoalCompleted);
+   143→  const dailyGoalDate = useAppStore((s) => s.dailyGoalDate);
+   144→  const setDailyGoal = useAppStore((s) => s.setDailyGoal);
+   145→
+   146→  const [showGoalPicker, setShowGoalPicker] = useState(false);
+   147→
+   148→  // Resolve daily goal completed (reset if date changed)
+   149→  const resolvedDailyGoalCompleted = dailyGoalDate === todayStr() ? dailyGoalCompleted : 0;
+   150→  const goalPct = dailyGoal > 0 ? Math.min(100, Math.round((resolvedDailyGoalCompleted / dailyGoal) * 100)) : 0;
+   151→  const goalComplete = resolvedDailyGoalCompleted >= dailyGoal;
+   152→  const remaining = Math.max(0, dailyGoal - resolvedDailyGoalCompleted);
+   153→
+   154→  // find current phase (first phase with incomplete lessons)
+   155→  const currentPhase = useMemo(() => {
+   156→    for (let i = 0; i < PHASES.length; i++) {
+   157→      const phaseLessons = getLessonsForPhase(i);
+   158→      const allDone = phaseLessons.every((l) => lessons[l.id]?.completed);
+   159→      if (!allDone) return i;
+   160→    }
+   161→    return PHASES.length - 1;
+   162→  }, [lessons]);
+   163→
+   164→  const phase = PHASES[currentPhase];
+   165→  const phaseLessonIds = getLessonsForPhase(currentPhase).map((l) => l.id);
+   166→  const phaseProg = usePhaseProgress(currentPhase, phaseLessonIds);
+   167→  const overallProg = useOverallProgress(ALL_LESSON_IDS);
+   168→
+   169→  // accuracy = avg of completed lesson scores
+   170→  const accuracy = useMemo(() => {
+   171→    const completed = Object.values(lessons).filter((l) => l.completed);
+   172→    if (completed.length === 0) return null;
+   173→    return Math.round(completed.reduce((sum, l) => sum + l.score, 0) / completed.length);
+   174→  }, [lessons]);
+   175→
+   176→  const greeting = useMemo(() => {
+   177→    const h = new Date().getHours();
+   178→    if (h < 12) return "Good morning";
+   179→    if (h < 18) return "Good afternoon";
+   180→    return "Good evening";
+   181→  }, []);
+   182→
+   183→  // find next lesson to do
+   184→  const nextLesson = useMemo(() => {
+   185→    const phaseLessons = getLessonsForPhase(currentPhase);
+   186→    return phaseLessons.find((l) => !lessons[l.id]?.completed) || phaseLessons[0];
+   187→  }, [currentPhase, lessons]);
+   188→
+   189→  // Mini sparkline data per stat card (last 7 days, derived from history)
+   190→  const sparklines = useMemo(() => {
+   191→    const today = new Date();
+   192→    today.setHours(0, 0, 0, 0);
+   193→    const days: Date[] = [];
+   194→    for (let i = 6; i >= 0; i--) {
+   195→      const d = new Date(today);
+   196→      d.setDate(today.getDate() - i);
+   197→      days.push(d);
+   198→    }
+   199→    const dayKey = (d: Date) => d.toISOString().slice(0, 10);
+   200→    const history = useAppStore.getState().history;
+   201→    const calendar = useAppStore.getState().practiceCalendar;
+   202→    return {
+   203→      streak: days.map((d) => (calendar[dayKey(d)] || 0) > 0 ? 1 : 0),
+   204→      speaking: days.map((d) => {
+   205→        const h = history.filter((x) => x.date === dayKey(d));
+   206→        return h.length;
+   207→      }),
+   208→      accuracy: days.map((d) => {
+   209→        const h = history.filter((x) => x.date === dayKey(d));
+   210→        return h.length ? Math.round(h.reduce((s, x) => s + x.score, 0) / h.length) : 0;
+   211→      }),
+   212→      xp: days.map((d) => {
+   213→        const h = history.filter((x) => x.date === dayKey(d));
+   214→        return h.length; // proxy: each completed lesson ~+130 XP
+   215→      }),
+   216→    };
+   217→  }, [lessons]);
+   218→
+   219→  const stats = [
+   220→    { icon: "🔥", val: streak, lbl: "Day Streak", color: "#f59e0b", spark: sparklines.streak },
+   221→    { icon: "🎙️", val: `${Math.round(speakingSecondsToday / 60)}m`, lbl: "Speaking Today", color: "#22d3ee", spark: sparklines.speaking },
+   222→    { icon: "🎯", val: accuracy === null ? "—" : `${accuracy}%`, lbl: "Accuracy", color: "#10b981", spark: sparklines.accuracy },
+   223→    { icon: "⚡", val: xp, lbl: "Total XP", color: "#a78bfa", spark: sparklines.xp },
+   224→  ];
+   225→
+   226→  // weekly chart data — deterministic, based on actual history
+   227→  const weekData = useMemo(() => {
+   228→    const days = ["M", "T", "W", "T", "F", "S", "S"];
+   229→    const today = new Date().getDay();
+   230→    const todayIdx = today === 0 ? 6 : today - 1;
+   231→    const history = useAppStore.getState().history;
+   232→    return days.map((d, i) => {
+   233→      const hist = history.filter((h) => {
+   234→        const hd = new Date(h.date).getDay();
+   235→        const hi = hd === 0 ? 6 : hd - 1;
+   236→        return hi === i;
+   237→      });
+   238→      // No random fallback — only show real data, 0 for days with no history
+   239→      const score = hist.length > 0
+   240→        ? Math.round(hist.reduce((s, h) => s + h.score, 0) / hist.length)
+   241→        : 0;
+   242→      return { day: d, score, isToday: i === todayIdx };
+   243→    });
+   244→  }, [lessons]);
+   245→  const maxScore = Math.max(...weekData.map((d) => d.score), 100);
+   246→
+   247→  const handleContinue = () => {
+   248→    if (nextLesson) setActiveLesson(nextLesson.id);
+   249→  };
+   250→
+   251→  return (
+   252→    <div className="space-y-5 relative">
+   253→      {/* Floating gradient orbs */}
+   254→      <div className="absolute top-20 -left-20 w-48 h-48 rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(99,102,241,0.12) 0%, transparent 70%)" }}>
+   255→        <motion.div
+   256→          className="w-full h-full rounded-full"
+   257→          animate={{ x: [0, 15, 0], y: [0, -10, 0], scale: [1, 1.05, 1] }}
+   258→          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+   259→        />
+   260→      </div>
+   261→      <div className="absolute top-72 -right-16 w-56 h-56 rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(34,211,238,0.08) 0%, transparent 70%)" }}>
+   262→        <motion.div
+   263→          className="w-full h-full rounded-full"
+   264→          animate={{ x: [0, -12, 0], y: [0, 12, 0], scale: [1, 1.08, 1] }}
+   265→          transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+   266→        />
+   267→      </div>
+   268→      <div className="absolute top-[500px] left-10 w-40 h-40 rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(139,92,246,0.08) 0%, transparent 70%)" }}>
+   269→        <motion.div
+   270→          className="w-full h-full rounded-full"
+   271→          animate={{ x: [0, 10, 0], y: [0, 8, 0] }}
+   272→          transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
+   273→        />
+   274→      </div>
+   275→
+   276→      {/* Greeting */}
+   277→      <div>
+   278→        <div className="flex items-center gap-2 mb-1.5">
+   279→          <span className="inline-block w-2 h-2 rounded-full bg-[#10b981] animate-pulse" />
+   280→          <span className="text-[10px] uppercase tracking-wider text-[var(--t3)] font-mono">
+   281→            AI Coach Active
+   282→          </span>
+   283→        </div>
+   284→        <h1 className="font-d text-2xl font-bold">
+   285→          {greeting}, {userName} 👋
+   286→        </h1>
+   287→        <p className="text-sm text-[var(--t2)] mt-0.5">
+   288→          {overallProg.done === 0
+   289→            ? "Start your first lesson to begin your journey!"
+   290→            : overallProg.done === ALL_LESSON_IDS.length
+   291→            ? "🎉 You've completed every lesson! Keep practicing."
+   292→            : `You've completed ${overallProg.done} of ${overallProg.total} lessons. Keep going!`}
+   293→        </p>
+   294→      </div>
+   295→
+   296→      {/* Recent / Recommended lessons carousel */}
+   297→      <RecentLessonsCarousel />
+   298→
+   299→      {/* Daily Goal */}
+   300→      <motion.div
+   301→        initial={{ opacity: 0, y: 10 }}
+   302→        animate={{ opacity: 1, y: 0 }}
+   303→        transition={{ delay: 0.05 }}
+   304→        className={`relative rounded-3xl p-5 overflow-hidden border transition-all duration-500 ${
+   305→          goalComplete
+   306→            ? "border-[rgba(16,185,129,0.5)]"
+   307→            : "border-[var(--border)]"
+   308→        }`}
+   309→        style={{
+   310→          background: goalComplete
+   311→            ? "linear-gradient(135deg, rgba(16,185,129,0.15), rgba(34,211,238,0.08))"
+   312→            : "var(--card)",
+   313→        }}
+   314→        onClick={() => setShowGoalPicker(true)}
+   315→      >
+   316→        {goalComplete && (
+   317→          <div
+   318→            className="absolute inset-0 pointer-events-none"
+   319→            style={{
+   320→              background: "radial-gradient(circle at 50% 50%, rgba(16,185,129,0.15), transparent 70%)",
+   321→              animation: "pulse 2s ease-in-out infinite",
+   322→            }}
+   323→          />
+   324→        )}
+   325→        <div className="relative flex items-center gap-4 cursor-pointer">
+   326→          <ProgressRing
+   327→            pct={goalPct}
+   328→            size={72}
+   329→            stroke={5}
+   330→            label={`${resolvedDailyGoalCompleted}/${dailyGoal}`}
+   331→            gradient={!goalComplete}
+   332→          />
+   333→          <div className="flex-1 min-w-0">
+   334→            <div className="text-[10px] uppercase tracking-wider text-[var(--t3)] font-mono mb-1">
+   335→              Daily Goal
+   336→            </div>
+   337→            <div className="font-d text-base font-bold text-[var(--t1)]">
+   338→              {goalComplete
+   339→                ? "🎉 Goal complete! You're on fire!"
+   340→                : `${remaining} more lesson${remaining !== 1 ? "s" : ""} to hit your goal!`}
+   341→            </div>
+   342→            <div className="text-xs text-[var(--t3)] mt-0.5">
+   343→              Tap to change your daily goal
+   344→            </div>
+   345→          </div>
+   346→        </div>
+   347→
+   348→        {/* Goal picker modal */}
+   349→        <AnimatePresence>
+   350→          {showGoalPicker && (
+   351→            <motion.div
+   352→              initial={{ opacity: 0 }}
+   353→              animate={{ opacity: 1 }}
+   354→              exit={{ opacity: 0 }}
+   355→              className="absolute inset-0 z-10 bg-[var(--bg)]/95 backdrop-blur-sm rounded-3xl flex flex-col items-center justify-center p-6"
+   356→              onClick={(e) => {
+   357→                e.stopPropagation();
+   358→                setShowGoalPicker(false);
+   359→              }}
+   360→            >
+   361→              <div className="text-sm text-[var(--t3)] mb-3 font-mono uppercase tracking-wider">
+   362→                Set Daily Goal
+   363→              </div>
+   364→              <div className="font-d text-3xl font-bold text-[var(--t1)] mb-4">
+   365→                {dailyGoal} lesson{dailyGoal !== 1 ? "s" : ""}/day
+   366→              </div>
+   367→              <div className="flex items-center gap-3 mb-4">
+   368→                <button
+   369→                  onClick={(e) => {
+   370→                    e.stopPropagation();
+   371→                    setDailyGoal(dailyGoal - 1);
+   372→                  }}
+   373→                  className="w-10 h-10 rounded-full bg-[var(--card)] border border-[var(--border)] flex items-center justify-center text-lg font-bold text-[var(--t1)] hover:bg-[var(--card-h)] transition"
+   374→                >
+   375→                  −
+   376→                </button>
+   377→                <div className="flex gap-1">
+   378→                  {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+   379→                    <button
+   380→                      key={n}
+   381→                      onClick={(e) => {
+   382→                        e.stopPropagation();
+   383→                        setDailyGoal(n);
+   384→                      }}
+   385→                      className={`w-6 h-6 rounded-full text-[10px] font-bold transition ${
+   386→                        n === dailyGoal
+   387→                          ? "bg-[var(--grad-btn)] text-white"
+   388→                          : "bg-[var(--card)] border border-[var(--border)] text-[var(--t3)] hover:border-[var(--p3)]"
+   389→                      }`}
+   390→                    >
+   391→                      {n}
+   392→                    </button>
+   393→                  ))}
+   394→                </div>
+   395→                <button
+   396→                  onClick={(e) => {
+   397→                    e.stopPropagation();
+   398→                    setDailyGoal(dailyGoal + 1);
+   399→                  }}
+   400→                  className="w-10 h-10 rounded-full bg-[var(--card)] border border-[var(--border)] flex items-center justify-center text-lg font-bold text-[var(--t1)] hover:bg-[var(--card-h)] transition"
+   401→                >
+   402→                  +
+   403→                </button>
+   404→              </div>
+   405→              <button
+   406→                onClick={(e) => {
+   407→                  e.stopPropagation();
+   408→                  setShowGoalPicker(false);
+   409→                }}
+   410→                className="px-6 py-2 rounded-xl bg-[var(--grad-btn)] text-white text-sm font-semibold"
+   411→              >
+   412→                Done
+   413→              </button>
+   414→            </motion.div>
+   415→          )}
+   416→        </AnimatePresence>
+   417→      </motion.div>
+   418→
+   419→      {/* Stats row */}
+   420→      <div className="grid grid-cols-4 gap-2">
+   421→        {stats.map((s, i) => {
+   422→          const max = Math.max(...s.spark, 1);
+   423→          const total = s.spark.reduce((a: number, b: number) => a + b, 0);
+   424→          return (
+   425→            <motion.div
+   426→              key={s.lbl}
+   427→              initial={{ opacity: 0, y: 10 }}
+   428→              animate={{ opacity: 1, y: 0 }}
+   429→              transition={{ delay: i * 0.05 }}
+   430→              whileHover={{ y: -2, boxShadow: "0 4px 20px rgba(0,0,0,0.3)" }}
+   431→              className="rounded-2xl p-3 bg-[var(--card)] border border-[var(--border)] text-center relative overflow-hidden"
+   432→              style={{ borderLeft: `4px solid ${s.color}` }}
+   433→            >
+   434→              {/* Background subtle gradient tint */}
+   435→              <div
+   436→                className="absolute inset-0 opacity-[0.06] pointer-events-none"
+   437→                style={{ background: `linear-gradient(135deg, ${s.color}, transparent)` }}
+   438→              />
+   439→              <div className="relative text-lg mb-0.5">{s.icon}</div>
+   440→              <div className="relative font-d text-base font-bold" style={{ color: s.color }}>
+   441→                {s.val}
+   442→              </div>
+   443→              <div className="relative text-[9px] text-[var(--t3)] uppercase tracking-wider mb-1">
+   444→                {s.lbl}
+   445→              </div>
+   446→              {/* Mini 7-day sparkline */}
+   447→              <div className="relative flex items-end justify-between gap-px h-3 mt-1">
+   448→                {s.spark.map((v: number, si: number) => {
+   449→                  const h = total === 0 ? 2 : Math.max(2, (v / max) * 12);
+   450→                  const isToday = si === s.spark.length - 1;
+   451→                  return (
+   452→                    <motion.div
+   453→                      key={si}
+   454→                      className="flex-1 rounded-sm"
+   455→                      style={{
+   456→                        background: v > 0 ? s.color : "rgba(255,255,255,0.08)",
+   457→                        opacity: v > 0 ? (isToday ? 1 : 0.7) : 1,
+   458→                        boxShadow: isToday && v > 0 ? `0 0 4px ${s.color}88` : "none",
+   459→                      }}
+   460→                      initial={{ height: 0 }}
+   461→                      animate={{ height: h }}
+   462→                      transition={{ delay: i * 0.05 + si * 0.02 + 0.2, duration: 0.4 }}
+   463→                    />
+   464→                  );
+   465→                })}
+   466→              </div>
+   467→            </motion.div>
+   468→          );
+   469→        })}
+   470→      </div>
+   471→
+   472→      {/* Current phase card */}
+   473→      <motion.div
+   474→        initial={{ opacity: 0, y: 10 }}
+   475→        animate={{ opacity: 1, y: 0 }}
+   476→        className="relative rounded-3xl p-5 overflow-hidden shimmer-sweep"
+   477→        style={{
+   478→          background:
+   479→            "linear-gradient(135deg, rgba(99,102,241,0.18), rgba(139,92,246,0.12), rgba(34,211,238,0.06))",
+   480→          border: "1px solid rgba(99,102,241,0.3)",
+   481→        }}
+   482→      >
+   483→        <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-[radial-gradient(circle,rgba(99,102,241,0.2),transparent_70%)] pointer-events-none" />
+   484→        {/* Shimmer sweep overlay */}
+   485→        <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-3xl">
+   486→          <motion.div
+   487→            className="absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-white/[0.04] to-transparent"
+   488→            animate={{ x: ["-100%", "300%"] }}
+   489→            transition={{ duration: 3, repeat: Infinity, ease: "easeInOut", repeatDelay: 2 }}
+   490→          />
+   491→        </div>
+   492→        <div className="relative">
+   493→          <div className="text-[10px] uppercase tracking-wider text-[var(--t3)] font-mono mb-1">
+   494→            📍 Phase {currentPhase + 1} of {PHASES.length}
+   495→          </div>
+   496→          <div className="font-d text-xl font-bold mb-0.5 flex items-center gap-2">
+   497→            <span>{phase.emoji}</span>
+   498→            <span>{phase.name}</span>
+   499→          </div>
+   500→          <div className="text-sm text-[var(--t2)] mb-4">{phase.desc}</div>
+   501→
+   502→          <div className="flex items-center gap-4">
+   503→            <div className="flex-1">
+   504→              <div className="flex items-center justify-between mb-1.5">
+   505→                <span className="text-xs text-[var(--t3)]">Progress</span>
+   506→                <span className="text-xs font-mono font-bold text-[var(--t1)]">{phaseProg.pct}%</span>
+   507→              </div>
+   508→              <div className="h-2 rounded-full bg-[rgba(255,255,255,0.08)] overflow-hidden">
+   509→                <motion.div
+   510→                  className="h-full rounded-full bg-[var(--grad-btn)]"
+   511→                  initial={{ width: 0 }}
+   512→                  animate={{ width: `${phaseProg.pct}%` }}
+   513→                  transition={{ duration: 1, ease: "easeOut" }}
+   514→                />
+   515→              </div>
+   516→              <div className="text-[10px] text-[var(--t3)] mt-1.5">
+   517→                {phaseProg.done} of {phaseProg.total} lessons complete
+   518→              </div>
+   519→            </div>
+   520→            <div className="animate-pulse-glow rounded-full">
+   521→              <ProgressRing pct={phaseProg.pct} size={62} stroke={4} label={`${phaseProg.pct}%`} />
+   522→            </div>
+   523→          </div>
+   524→
+   525→          <button
+   526→            onClick={handleContinue}
+   527→            className="mt-4 w-full py-3 rounded-xl bg-[var(--grad-btn)] text-white font-semibold text-sm flex items-center justify-center gap-2 hover:opacity-90 transition"
+   528→          >
+   529→            {phaseProg.done === 0 ? "Start Phase →" : "Continue →"}
+   530→          </button>
+   531→        </div>
+   532→      </motion.div>
+   533→
+   534→      {/* Weekly progress chart */}
+   535→      <div>
+   536→        <h2 className="font-d text-base font-bold mb-2 flex items-center justify-between">
+   537→          <span>This Week</span>
+   538→          <span className="text-[10px] text-[#10b981] font-mono font-normal">↑ {overallProg.pct}% overall</span>
+   539→        </h2>
+   540→        <div className="rounded-2xl p-4 bg-[var(--card)] border border-[var(--border)]">
+   541→          <div className="flex items-end justify-between gap-2 h-28 mb-2">
+   542→            {weekData.map((d, i) => (
+   543→              <div key={i} className="flex-1 flex flex-col items-center gap-1.5">
+   544→                <div className="flex-1 w-full flex items-end">
+   545→                  <motion.div
+   546→                    initial={{ height: 0 }}
+   547→                    animate={{ height: `${(d.score / maxScore) * 100}%` }}
+   548→                    transition={{ delay: i * 0.05, duration: 0.6, type: "spring" }}
+   549→                    className={`w-full rounded-t-md relative ${d.isToday ? "animate-pulse-glow" : ""}`}
+   550→                    style={{
+   551→                      background: d.isToday
+   552→                        ? "linear-gradient(180deg, #6366f1, #22d3ee)"
+   553→                        : "linear-gradient(180deg, rgba(99,102,241,0.4), rgba(99,102,241,0.2))",
+   554→                      minHeight: d.score > 0 ? 8 : 2,
+   555→                      boxShadow: d.isToday ? "0 0 12px rgba(99,102,241,0.4)" : "none",
+   556→                    }}
+   557→                  >
+   558→                    {d.score > 0 && (
+   559→                      <span className="absolute -top-4 left-1/2 -translate-x-1/2 text-[9px] font-mono text-[var(--t2)]">
+   560→                        {d.score}
+   561→                      </span>
+   562→                    )}
+   563→                  </motion.div>
+   564→                </div>
+   565→                <span className={`text-[10px] ${d.isToday ? "text-[var(--p3)] font-bold" : "text-[var(--t3)]"}`}>
+   566→                  {d.day}
+   567→                </span>
+   568→              </div>
+   569→            ))}
+   570→          </div>
+   571→        </div>
+   572→      </div>
+   573→
+   574→      {/* AI Recommendations */}
+   575→      <div>
+   576→        <h2 className="font-d text-base font-bold mb-2">AI Recommendations</h2>
+   577→        <div className="rounded-2xl p-4 bg-[var(--card)] border border-[var(--border)] space-y-3">
+   578→          {[
+   579→            { icon: "🔊", title: "Practice \"th\" sound", sub: "Foundational for native flow" },
+   580→            { icon: "📝", title: "Word stress in multi-syllable words", sub: "Focus on: to-MOR-row, im-POR-tant" },
+   581→            { icon: "⚡", title: "Connected speech practice", sub: "Try linking \"want to\" → \"wanna\"" },
+   582→          ].map((r, i) => (
+   583→            <motion.div
+   584→              key={i}
+   585→              initial={{ opacity: 0, x: -10 }}
+   586→              animate={{ opacity: 1, x: 0 }}
+   587→              transition={{ delay: 0.1 + i * 0.1, duration: 0.3 }}
+   588→              className="flex items-start gap-3 pl-3 border-l-2 border-[rgba(99,102,241,0.4)]"
+   589→            >
+   590→              <div className="w-9 h-9 rounded-xl bg-[rgba(99,102,241,0.12)] flex items-center justify-center text-lg shrink-0">
+   591→                {r.icon}
+   592→              </div>
+   593→              <div className="flex-1 min-w-0">
+   594→                <div className="text-sm font-medium text-[var(--t1)]">{r.title}</div>
+   595→                <div className="text-xs text-[var(--t3)]">{r.sub}</div>
+   596→              </div>
+   597→            </motion.div>
+   598→          ))}
+   599→        </div>
+   600→      </div>
+   601→
+   602→      {/* Tip of the Day */}
+   603→      <TipOfTheDay />
+   604→
+   605→      {/* Daily Challenge */}
+   606→      <div>
+   607→        <h2 className="font-d text-base font-bold mb-2">Daily Challenge</h2>
+   608→        <DailyChallengeCard />
+   609→      </div>
+   610→
+   611→      {/* Weak sounds — dynamic, derived from completed lesson scores */}
+   612→      <div>
+   613→        <h2 className="font-d text-base font-bold mb-2 flex items-center justify-between">
+   614→          <span>Your Sound Profile</span>
+   615→          {overallProg.done > 0 && (
+   616→            <span className="text-[10px] text-[var(--t3)] font-mono font-normal">
+   617→              Based on {overallProg.done} lesson{overallProg.done !== 1 ? "s" : ""}
+   618→            </span>
+   619→          )}
+   620→        </h2>
+   621→        <div className="rounded-2xl p-4 bg-[var(--card)] border border-[var(--border)]">
+   622→          {(() => {
+   623→            // Map each phoneme to the lesson IDs that train it
+   624→            const phonemeLessons: Record<string, string[]> = {
+   625→              "ð": ["p1l2", "p1l3", "p1l4"],   // voiced th — consonant clusters, mouth positioning, listening
+   626→              "θ": ["p1l2", "p1l3", "p1l4"],   // voiceless th
+   627→              "æ": ["p1l1", "p1l4", "p2l1"],   // trap vowel — vowel sounds, listening, core words
+   628→              "ŋ": ["p1l2", "p2l1", "p2l3"],   // ng — consonants, core words, silent letters
+   629→              "ɪ": ["p1l1", "p2l1", "p2l4"],   // short i — vowels, core words, drills
+   630→              "ʊ": ["p1l1", "p2l1", "p2l4"],   // short u
+   631→              "ɜː": ["p1l1", "p2l1", "p5l2"],  // er sound — vowels, core words, reduced vowels
+   632→              "ʒ": ["p1l2", "p2l1", "p5l3"],   // zh — consonants, core words, elision
+   633→            };
+   634→            const phonemeData = Object.entries(phonemeLessons).map(([ph, lessonIds]) => {
+   635→              const relevant = lessonIds
+   636→                .map((id) => lessons[id])
+   637→                .filter((l) => l?.completed);
+   638→              if (relevant.length === 0) {
+   639→                return { ph, lvl: "unknown" as const, avg: null, count: 0 };
+   640→              }
+   641→              const avg = Math.round(relevant.reduce((s, l) => s + l.score, 0) / relevant.length);
+   642→              const lvl = avg >= 85 ? "green" : avg >= 70 ? "yellow" : "red";
+   643→              return { ph, lvl: lvl as "red" | "yellow" | "green", avg, count: relevant.length };
+   644→            });
+   645→            const colors = {
+   646→              red: "rgba(239,68,68,0.15)",
+   647→              yellow: "rgba(245,158,11,0.15)",
+   648→              green: "rgba(16,185,129,0.15)",
+   649→              unknown: "rgba(255,255,255,0.03)",
+   650→            };
+   651→            const dotColors = {
+   652→              red: "#ef4444",
+   653→              yellow: "#f59e0b",
+   654→              green: "#10b981",
+   655→              unknown: "rgba(255,255,255,0.2)",
+   656→            };
+   657→            const labels = {
+   658→              red: "Needs work",
+   659→              yellow: "Progressing",
+   660→              green: "Mastered",
+   661→              unknown: "Not started",
+   662→            };
+   663→            return (
+   664→              <>
+   665→                <div className="grid grid-cols-4 gap-2">
+   666→                  {phonemeData.map((s) => (
+   667→                    <motion.div
+   668→                      key={s.ph}
+   669→                      whileHover={{ scale: 1.08, boxShadow: "0 0 16px " + dotColors[s.lvl] + "33" }}
+   670→                      className="rounded-xl p-3 text-center cursor-default transition-shadow"
+   671→                      style={{ background: colors[s.lvl] }}
+   672→                      title={s.avg !== null ? `${s.ph} — ${labels[s.lvl]} (avg ${s.avg}%, ${s.count} lesson${s.count !== 1 ? "s" : ""})` : `${s.ph} — Not started yet`}
+   673→                    >
+   674→                      <div className={`font-mono text-xl font-bold ${s.lvl === "unknown" ? "text-[var(--t3)]" : "text-[var(--t1)]"}`}>{s.ph}</div>
+   675→                      <div
+   676→                        className="inline-block w-1.5 h-1.5 rounded-full mt-1"
+   677→                        style={{ background: dotColors[s.lvl], boxShadow: s.lvl !== "unknown" ? `0 0 6px ${dotColors[s.lvl]}66` : "none" }}
+   678→                      />
+   679→                      {s.avg !== null && (
+   680→                        <div className="text-[9px] text-[var(--t3)] mt-1 font-mono">{s.avg}%</div>
+   681→                      )}
+   682→                    </motion.div>
+   683→                  ))}
+   684→                </div>
+   685→                {overallProg.done === 0 && (
+   686→                  <p className="text-center text-xs text-[var(--t3)] mt-3">
+   687→                    Complete lessons to see your phoneme mastery levels
+   688→                  </p>
+   689→                )}
+   690→              </>
+   691→            );
+   692→          })()}
+   693→        </div>
+   694→      </div>
+   695→
+   696→      {/* Quick actions */}
+   697→      <div>
+   698→        <h2 className="font-d text-base font-bold mb-2">Quick Actions</h2>
+   699→        <div className="grid grid-cols-3 gap-2">
+   700→          {[
+   701→            { icon: "📚", lbl: "Continue", tab: "journey" as const },
+   702→            { icon: "🎙️", lbl: "Practice", tab: "practice" as const },
+   703→            { icon: "📈", lbl: "Progress", tab: "progress" as const },
+   704→          ].map((a) => (
+   705→            <motion.button
+   706→              key={a.lbl}
+   707→              onClick={() => setActiveTab(a.tab)}
+   708→              whileHover={{ scale: 1.02, boxShadow: "0 0 20px rgba(99,102,241,0.15)" }}
+   709→              whileTap={{ scale: 0.98 }}
+   710→              className="rounded-2xl p-4 bg-[var(--card)] border border-[var(--border)] hover:border-[var(--p3)] hover:bg-[var(--card-h)] transition text-center"
+   711→            >
+   712→              <div className="text-2xl mb-1">{a.icon}</div>
+   713→              <div className="text-xs font-medium text-[var(--t2)]">{a.lbl}</div>
+   714→            </motion.button>
+   715→          ))}
+   716→        </div>
+   717→      </div>
+   718→    </div>
+   719→  );
+   720→}
+   721→

@@ -38,6 +38,26 @@ export function AICoachFAB() {
     }
   };
 
+  // Listen for global "toggle-coach" events (from Cmd/Ctrl+K shortcut)
+  useEffect(() => {
+    const onToggle = () => {
+      setOpen((prev) => {
+        const next = !prev;
+        if (next) {
+          setShowHint(false);
+          try {
+            window.localStorage.setItem(ONBOARDING_SEEN_KEY, "1");
+          } catch {
+            /* ignore */
+          }
+        }
+        return next;
+      });
+    };
+    window.addEventListener("accentai:toggle-coach", onToggle);
+    return () => window.removeEventListener("accentai:toggle-coach", onToggle);
+  }, []);
+
   // Hide the FAB when a lesson modal is open.
   const isHidden = !!activeLessonId;
 

@@ -129,6 +129,39 @@ export function ToastWatcher() {
     prevGoalMet.current = goalMet;
   }, [dailyGoalCompleted, dailyGoal, pushToast]);
 
+  // Listen for streak freeze consumed (custom event from store)
+  useEffect(() => {
+    const handler = () => {
+      pushToast({
+        variant: "streak",
+        emoji: "🛡️",
+        title: "Streak Freeze Used!",
+        subtitle: "Your streak is safe — freeze consumed.",
+        duration: 6000,
+      });
+    };
+    window.addEventListener("accentai:streak-freeze-used", handler);
+    return () => window.removeEventListener("accentai:streak-freeze-used", handler);
+  }, [pushToast]);
+
+  // Listen for double XP consumed (custom event from store)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { earnedXP?: number } | undefined;
+      const xp = detail?.earnedXP ?? 0;
+      pushToast({
+        variant: "lesson",
+        emoji: "⚡",
+        title: "Double XP Activated!",
+        subtitle: xp > 0 ? `You earned ${xp} XP (2× bonus!)` : "Next lesson earns 2× XP!",
+        duration: 6000,
+        gradient: "linear-gradient(135deg, rgba(245,158,11,0.95), rgba(249,115,22,0.95))",
+      });
+    };
+    window.addEventListener("accentai:double-xp-used", handler);
+    return () => window.removeEventListener("accentai:double-xp-used", handler);
+  }, [pushToast]);
+
   return null;
 }
 

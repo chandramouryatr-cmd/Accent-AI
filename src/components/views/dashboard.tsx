@@ -9,6 +9,7 @@ import { ProgressRing } from "@/components/widgets/progress-ring";
 import { WaveformCanvas } from "@/components/widgets/waveform-canvas";
 import { TIPS, CATEGORY_COLORS } from "@/lib/tips";
 import { DailyChallengeCard } from "@/components/widgets/daily-challenge-card";
+import { RecentLessonsCarousel } from "@/components/widgets/recent-lessons-carousel";
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -185,11 +186,41 @@ export function DashboardView() {
     return phaseLessons.find((l) => !lessons[l.id]?.completed) || phaseLessons[0];
   }, [currentPhase, lessons]);
 
+  // Mini sparkline data per stat card (last 7 days, derived from history)
+  const sparklines = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const days: Date[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      days.push(d);
+    }
+    const dayKey = (d: Date) => d.toISOString().slice(0, 10);
+    const history = useAppStore.getState().history;
+    const calendar = useAppStore.getState().practiceCalendar;
+    return {
+      streak: days.map((d) => (calendar[dayKey(d)] || 0) > 0 ? 1 : 0),
+      speaking: days.map((d) => {
+        const h = history.filter((x) => x.date === dayKey(d));
+        return h.length;
+      }),
+      accuracy: days.map((d) => {
+        const h = history.filter((x) => x.date === dayKey(d));
+        return h.length ? Math.round(h.reduce((s, x) => s + x.score, 0) / h.length) : 0;
+      }),
+      xp: days.map((d) => {
+        const h = history.filter((x) => x.date === dayKey(d));
+        return h.length; // proxy: each completed lesson ~+130 XP
+      }),
+    };
+  }, [lessons]);
+
   const stats = [
-    { icon: "🔥", val: streak, lbl: "Day Streak", color: "#f59e0b" },
-    { icon: "🎙️", val: `${Math.round(speakingSecondsToday / 60)}m`, lbl: "Speaking Today", color: "#22d3ee" },
-    { icon: "🎯", val: accuracy === null ? "—" : `${accuracy}%`, lbl: "Accuracy", color: "#10b981" },
-    { icon: "⚡", val: xp, lbl: "Total XP", color: "#a78bfa" },
+    { icon: "🔥", val: streak, lbl: "Day Streak", color: "#f59e0b", spark: sparklines.streak },
+    { icon: "🎙️", val: `${Math.round(speakingSecondsToday / 60)}m`, lbl: "Speaking Today", color: "#22d3ee", spark: sparklines.speaking },
+    { icon: "🎯", val: accuracy === null ? "—" : `${accuracy}%`, lbl: "Accuracy", color: "#10b981", spark: sparklines.accuracy },
+    { icon: "⚡", val: xp, lbl: "Total XP", color: "#a78bfa", spark: sparklines.xp },
   ];
 
   // weekly chart data — deterministic, based on actual history
@@ -261,6 +292,9 @@ export function DashboardView() {
             : `You've completed ${overallProg.done} of ${overallProg.total} lessons. Keep going!`}
         </p>
       </div>
+
+      {/* Recent / Recommended lessons carousel */}
+      <RecentLessonsCarousel />
 
       {/* Daily Goal */}
       <motion.div
@@ -384,23 +418,55 @@ export function DashboardView() {
 
       {/* Stats row */}
       <div className="grid grid-cols-4 gap-2">
-        {stats.map((s, i) => (
-          <motion.div
-            key={s.lbl}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.05 }}
-            whileHover={{ y: -2, boxShadow: "0 4px 20px rgba(0,0,0,0.3)" }}
-            className="rounded-2xl p-3 bg-[var(--card)] border border-[var(--border)] text-center relative overflow-hidden"
-            style={{ borderLeft: `4px solid ${s.color}` }}
-          >
-            <div className="text-lg mb-0.5">{s.icon}</div>
-            <div className="font-d text-base font-bold" style={{ color: s.color }}>
-              {s.val}
-            </div>
-            <div className="text-[9px] text-[var(--t3)] uppercase tracking-wider">{s.lbl}</div>
-          </motion.div>
-        ))}
+        {stats.map((s, i) => {
+          const max = Math.max(...s.spark, 1);
+          const total = s.spark.reduce((a: number, b: number) => a + b, 0);
+          return (
+            <motion.div
+              key={s.lbl}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.05 }}
+              whileHover={{ y: -2, boxShadow: "0 4px 20px rgba(0,0,0,0.3)" }}
+              className="rounded-2xl p-3 bg-[var(--card)] border border-[var(--border)] text-center relative overflow-hidden"
+              style={{ borderLeft: `4px solid ${s.color}` }}
+            >
+              {/* Background subtle gradient tint */}
+              <div
+                className="absolute inset-0 opacity-[0.06] pointer-events-none"
+                style={{ background: `linear-gradient(135deg, ${s.color}, transparent)` }}
+              />
+              <div className="relative text-lg mb-0.5">{s.icon}</div>
+              <div className="relative font-d text-base font-bold" style={{ color: s.color }}>
+                {s.val}
+              </div>
+              <div className="relative text-[9px] text-[var(--t3)] uppercase tracking-wider mb-1">
+                {s.lbl}
+              </div>
+              {/* Mini 7-day sparkline */}
+              <div className="relative flex items-end justify-between gap-px h-3 mt-1">
+                {s.spark.map((v: number, si: number) => {
+                  const h = total === 0 ? 2 : Math.max(2, (v / max) * 12);
+                  const isToday = si === s.spark.length - 1;
+                  return (
+                    <motion.div
+                      key={si}
+                      className="flex-1 rounded-sm"
+                      style={{
+                        background: v > 0 ? s.color : "rgba(255,255,255,0.08)",
+                        opacity: v > 0 ? (isToday ? 1 : 0.7) : 1,
+                        boxShadow: isToday && v > 0 ? `0 0 4px ${s.color}88` : "none",
+                      }}
+                      initial={{ height: 0 }}
+                      animate={{ height: h }}
+                      transition={{ delay: i * 0.05 + si * 0.02 + 0.2, duration: 0.4 }}
+                    />
+                  );
+                })}
+              </div>
+            </motion.div>
+          );
+        })}
       </div>
 
       {/* Current phase card */}

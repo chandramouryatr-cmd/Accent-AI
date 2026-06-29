@@ -2,12 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Sparkles, Send, X } from "lucide-react";
+import { Sparkles, Send, X, RotateCw } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  /** True while this assistant message is still streaming */
+  streaming?: boolean;
+  /** True if streaming ended with an error */
+  streamError?: boolean;
 }
 
 interface Props {
@@ -28,11 +32,14 @@ const WELCOME_MESSAGE: ChatMessage = {
     "Hi! 👄 I'm your AccentAI Coach. Ask me about any English sound, word, or pronunciation challenge — I'll break it down with IPA and give you concrete practice tips. 🎯",
 };
 
+/** 30-second timeout for receiving first token */
+const FIRST_TOKEN_TIMEOUT_MS = 30_000;
+
 /**
  * Renders text while wrapping IPA notation in monospace <code> tags.
  * Detects: /phoneme/ and [narrow] patterns, but NOT URLs (// in https://).
  */
-function renderWithIPA(text: string) {
+function renderWithIPA(text: string, showCursor: boolean) {
   // Match /x/ or [x] where x is 1-8 chars (letters, diacritics, length marks)
   const pattern = /(^|[^\w/])(\/[^\s/]{1,10}\/|\[[^\s\]]{1,10}\])(?=$|[^\w/])/g;
   const parts: Array<{ type: "text" | "code"; value: string }> = [];
@@ -58,17 +65,24 @@ function renderWithIPA(text: string) {
     parts.push({ type: "text", value: text.slice(lastIndex) });
   }
 
-  return parts.map((p, i) =>
-    p.type === "code" ? (
-      <code
-        key={i}
-        className="font-mono px-1 py-0.5 rounded bg-[rgba(34,211,238,0.12)] text-[var(--c2)] border border-[rgba(34,211,238,0.25)] text-[0.95em]"
-      >
-        {p.value}
-      </code>
-    ) : (
-      <span key={i}>{p.value}</span>
-    )
+  return (
+    <>
+      {parts.map((p, i) =>
+        p.type === "code" ? (
+          <code
+            key={i}
+            className="font-mono px-1 py-0.5 rounded bg-[rgba(34,211,238,0.12)] text-[var(--c2)] border border-[rgba(34,211,238,0.25)] text-[0.95em]"
+          >
+            {p.value}
+          </code>
+        ) : (
+          <span key={i}>{p.value}</span>
+        )
+      )}
+      {showCursor && (
+        <span className="inline-block w-[2px] h-[1.1em] bg-[var(--c2)] ml-0.5 align-middle animate-blink-cursor" />
+      )}
+    </>
   );
 }
 
@@ -76,6 +90,8 @@ export function AICoachChat({ open, onClose }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  /** True while we're waiting for the first token (show typing indicator) */
+  const [waitingFirstToken, setWaitingFirstToken] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -86,14 +102,18 @@ export function AICoachChat({ open, onClose }: Props) {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  /** Abort controller for cancelling in-flight requests */
+  const abortRef = useRef<AbortController | null>(null);
+  /** Last user message text for retry */
+  const lastUserTextRef = useRef<string>("");
 
-  // Auto-scroll to bottom whenever messages or loading change
+  // Auto-scroll to bottom whenever messages change
   useEffect(() => {
     const el = scrollRef.current;
     if (el) {
       el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
     }
-  }, [messages, loading, open]);
+  }, [messages, waitingFirstToken, open]);
 
   // Close on Escape
   useEffect(() => {
@@ -113,6 +133,14 @@ export function AICoachChat({ open, onClose }: Props) {
     }
   }, [open]);
 
+  // Cleanup: abort any in-flight stream when component unmounts or closes
+  useEffect(() => {
+    if (!open && abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+  }, [open]);
+
   const sendMessage = useCallback(
     async (text: string) => {
       const trimmed = text.trim();
@@ -120,16 +148,28 @@ export function AICoachChat({ open, onClose }: Props) {
 
       setError(null);
       setShowSuggestions(false);
+      lastUserTextRef.current = trimmed;
       const userMsg: ChatMessage = { role: "user", content: trimmed };
       const nextMessages = [...messages, userMsg];
       setMessages(nextMessages);
       setInput("");
       setLoading(true);
+      setWaitingFirstToken(true);
 
       // Build completed lessons list from store
       const completedLessons = Object.entries(lessons)
         .filter(([, p]) => p?.completed)
         .map(([id]) => id);
+
+      // Abort any previous request
+      if (abortRef.current) abortRef.current.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      // Timeout for first token
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, FIRST_TOKEN_TIMEOUT_MS);
 
       try {
         const res = await fetch("/api/ai-coach", {
@@ -144,6 +184,7 @@ export function AICoachChat({ open, onClose }: Props) {
               completedLessons,
             },
           }),
+          signal: controller.signal,
         });
 
         if (!res.ok) {
@@ -157,37 +198,207 @@ export function AICoachChat({ open, onClose }: Props) {
           throw new Error(detail);
         }
 
-        const data = await res.json();
-        const reply: string =
-          typeof data?.reply === "string" && data.reply.trim()
-            ? data.reply
-            : "Hmm, I didn't quite catch that. Could you rephrase? 🤔";
+        // We now expect a text/event-stream response
+        if (!res.body) {
+          throw new Error("No response body received.");
+        }
 
-        setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let accumulatedText = "";
+        let firstTokenReceived = false;
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          // Keep the last incomplete line in the buffer
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            const trimmedLine = line.trim();
+            if (!trimmedLine || !trimmedLine.startsWith("data:")) continue;
+
+            const dataStr = trimmedLine.slice(5).trim();
+            if (dataStr === "[DONE]") {
+              // Streaming complete
+              break;
+            }
+
+            try {
+              const parsed = JSON.parse(dataStr);
+
+              // Check for error token from backend
+              if (parsed.error) {
+                throw new Error(parsed.error);
+              }
+
+              if (typeof parsed.token === "string") {
+                if (!firstTokenReceived) {
+                  firstTokenReceived = true;
+                  clearTimeout(timeoutId);
+                  setWaitingFirstToken(false);
+                  // Create the assistant message with first token
+                  accumulatedText = parsed.token;
+                  setMessages((prev) => [
+                    ...prev,
+                    { role: "assistant", content: accumulatedText, streaming: true },
+                  ]);
+                } else {
+                  // Append token to the last assistant message
+                  accumulatedText += parsed.token;
+                  setMessages((prev) => {
+                    const updated = [...prev];
+                    const lastIdx = updated.length - 1;
+                    if (lastIdx >= 0 && updated[lastIdx].role === "assistant") {
+                      updated[lastIdx] = {
+                        ...updated[lastIdx],
+                        content: accumulatedText,
+                        streaming: true,
+                      };
+                    }
+                    return updated;
+                  });
+                }
+              }
+            } catch (parseErr) {
+              // If it's our thrown error, re-throw
+              if (parseErr instanceof Error && parseErr.message !== "Unexpected token") {
+                throw parseErr;
+              }
+              // Otherwise skip malformed JSON lines
+            }
+          }
+        }
+
+        // Mark streaming as complete
+        if (!firstTokenReceived) {
+          clearTimeout(timeoutId);
+          setWaitingFirstToken(false);
+          // No tokens received at all — show fallback
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content:
+                "Hmm, I didn't quite catch that. Could you rephrase? 🤔",
+              streaming: false,
+            },
+          ]);
+        } else {
+          setMessages((prev) => {
+            const updated = [...prev];
+            const lastIdx = updated.length - 1;
+            if (lastIdx >= 0 && updated[lastIdx].role === "assistant") {
+              updated[lastIdx] = {
+                ...updated[lastIdx],
+                streaming: false,
+                content: updated[lastIdx].content || WELCOME_MESSAGE.content,
+              };
+            }
+            return updated;
+          });
+        }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Something went wrong.";
-        setError(msg);
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "assistant",
-            content:
-              "⚠️ " +
-              msg +
-              "\n\nPlease try again in a moment. I'm here to help with your pronunciation! 🎯",
-          },
-        ]);
+        clearTimeout(timeoutId);
+        setWaitingFirstToken(false);
+
+        if (err instanceof DOMException && err.name === "AbortError") {
+          // Timed out or user cancelled
+          setMessages((prev) => {
+            const updated = [...prev];
+            const lastIdx = updated.length - 1;
+            // If we already started streaming, mark the partial message as error
+            if (lastIdx >= 0 && updated[lastIdx].role === "assistant" && updated[lastIdx].streaming) {
+              const partialContent = updated[lastIdx].content;
+              updated[lastIdx] = {
+                ...updated[lastIdx],
+                content: partialContent || "",
+                streaming: false,
+                streamError: true,
+              };
+              return updated;
+            }
+            // Otherwise add a new error message
+            return [
+              ...updated,
+              {
+                role: "assistant",
+                content:
+                  "⚠️ Request timed out — the coach took too long to respond. Please try again. 🔄",
+                streamError: true,
+              },
+            ];
+          });
+          setError("Request timed out. Try again.");
+        } else {
+          const msg = err instanceof Error ? err.message : "Something went wrong.";
+          setError(msg);
+          setMessages((prev) => {
+            const updated = [...prev];
+            const lastIdx = updated.length - 1;
+            // If we already started streaming, mark the partial message as error
+            if (lastIdx >= 0 && updated[lastIdx].role === "assistant" && updated[lastIdx].streaming) {
+              updated[lastIdx] = {
+                ...updated[lastIdx],
+                streaming: false,
+                streamError: true,
+              };
+              return updated;
+            }
+            return [
+              ...updated,
+              {
+                role: "assistant",
+                content:
+                  "⚠️ " +
+                  msg +
+                  "\n\nPlease try again in a moment. I'm here to help with your pronunciation! 🎯",
+                streamError: true,
+              },
+            ];
+          });
+        }
       } finally {
         setLoading(false);
+        setWaitingFirstToken(false);
+        abortRef.current = null;
       }
     },
     [loading, messages, lessons, accent, xp, streak]
   );
 
+  const handleRetry = useCallback(() => {
+    if (lastUserTextRef.current) {
+      // Remove the last error assistant message
+      setMessages((prev) => {
+        const updated = [...prev];
+        if (updated.length > 0 && updated[updated.length - 1].role === "assistant" && updated[updated.length - 1].streamError) {
+          updated.pop();
+        }
+        // Also remove the last user message since sendMessage will add it
+        if (updated.length > 0 && updated[updated.length - 1].role === "user") {
+          updated.pop();
+        }
+        return updated;
+      });
+      setError(null);
+      // Small delay to let state settle
+      setTimeout(() => sendMessage(lastUserTextRef.current), 50);
+    }
+  }, [sendMessage]);
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      sendMessage(input);
+      if (error && lastUserTextRef.current) {
+        handleRetry();
+      } else {
+        sendMessage(input);
+      }
     }
   };
 
@@ -233,7 +444,7 @@ export function AICoachChat({ open, onClose }: Props) {
                       <span className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-60" />
                       <span className="relative w-1.5 h-1.5 rounded-full bg-emerald-400" />
                     </span>
-                    <span>Online · here to help</span>
+                    <span>{loading ? "Thinking…" : "Online · here to help"}</span>
                   </div>
                 </div>
               </div>
@@ -252,10 +463,11 @@ export function AICoachChat({ open, onClose }: Props) {
               className="flex-1 overflow-y-auto px-3 py-4 space-y-3 no-scrollbar"
             >
               {messages.map((msg, i) => (
-                <MessageBubble key={i} message={msg} />
+                <MessageBubble key={i} message={msg} onRetry={handleRetry} />
               ))}
 
-              {loading && (
+              {/* Typing indicator — only while waiting for first token */}
+              {waitingFirstToken && (
                 <motion.div
                   className="flex items-start gap-2"
                   initial={{ opacity: 0, y: 6 }}
@@ -308,10 +520,19 @@ export function AICoachChat({ open, onClose }: Props) {
               )}
             </AnimatePresence>
 
-            {/* Error banner (compact) */}
+            {/* Error banner with retry */}
             {error && (
-              <div className="px-3 pb-1 text-[10px] text-amber-400/80 font-mono">
-                Tip: press Enter to retry
+              <div className="px-3 pb-1 flex items-center gap-2">
+                <span className="text-[10px] text-amber-400/80 font-mono flex-1">
+                  Something went wrong. Press Enter or click retry.
+                </span>
+                <button
+                  onClick={handleRetry}
+                  className="text-[10px] text-[var(--c2)] hover:text-[var(--c)] font-mono flex items-center gap-1 transition"
+                >
+                  <RotateCw className="w-3 h-3" />
+                  Retry
+                </button>
               </div>
             )}
 
@@ -330,8 +551,14 @@ export function AICoachChat({ open, onClose }: Props) {
                   aria-label="Message AccentAI Coach"
                 />
                 <button
-                  onClick={() => sendMessage(input)}
-                  disabled={!input.trim() || loading}
+                  onClick={() => {
+                    if (error && lastUserTextRef.current) {
+                      handleRetry();
+                    } else {
+                      sendMessage(input);
+                    }
+                  }}
+                  disabled={!input.trim() && !error}
                   aria-label="Send message"
                   className="w-9 h-9 rounded-xl flex items-center justify-center bg-gradient-to-br from-[var(--p)] to-[var(--p2)] text-white disabled:opacity-30 disabled:cursor-not-allowed hover:scale-105 active:scale-95 transition shadow-[0_0_14px_rgba(99,102,241,0.4)] shrink-0"
                 >
@@ -349,8 +576,17 @@ export function AICoachChat({ open, onClose }: Props) {
   );
 }
 
-function MessageBubble({ message }: { message: ChatMessage }) {
+function MessageBubble({
+  message,
+  onRetry,
+}: {
+  message: ChatMessage;
+  onRetry: () => void;
+}) {
   const isUser = message.role === "user";
+  const isStreaming = message.streaming;
+  const hasStreamError = message.streamError;
+
   return (
     <motion.div
       className={`flex items-end gap-2 ${isUser ? "flex-row-reverse" : "flex-row"}`}
@@ -370,7 +606,27 @@ function MessageBubble({ message }: { message: ChatMessage }) {
             : "bg-[var(--card)] border border-[var(--border)] text-[var(--t1)] rounded-2xl rounded-tl-md"
         }`}
       >
-        {isUser ? message.content : renderWithIPA(message.content)}
+        {isUser ? (
+          message.content
+        ) : (
+          <>
+            {message.content ? renderWithIPA(message.content, !!isStreaming) : null}
+            {hasStreamError && (
+              <div className="mt-2 pt-2 border-t border-[rgba(255,180,0,0.2)] flex items-center gap-2">
+                <span className="text-[11px] text-amber-400/90">
+                  ⚠️ Response interrupted
+                </span>
+                <button
+                  onClick={onRetry}
+                  className="text-[10px] text-[var(--c2)] hover:text-[var(--c)] flex items-center gap-1 transition"
+                >
+                  <RotateCw className="w-2.5 h-2.5" />
+                  Retry
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </motion.div>
   );

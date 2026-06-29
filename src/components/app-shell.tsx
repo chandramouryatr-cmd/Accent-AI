@@ -14,6 +14,8 @@ import { LessonModal } from "@/components/lesson/lesson-modal";
 import { AICoachFAB } from "@/components/ai-coach/ai-coach-fab";
 import { Toaster } from "@/components/widgets/toaster";
 import { ToastWatcher } from "@/components/widgets/toast-watcher";
+import { XPBurst } from "@/components/widgets/xp-burst";
+import { ShortcutsOverlay, useKeyboardShortcuts } from "@/components/widgets/keyboard-shortcuts";
 import { getLesson, ALL_LESSON_IDS } from "@/lib/lessons";
 
 const TABS = [
@@ -38,6 +40,9 @@ export function AppShell() {
     () => (activeLessonId ? getLesson(activeLessonId) : undefined),
     [activeLessonId]
   );
+
+  // Wire up global keyboard shortcuts (Cmd+K, 1-5, ?, Esc)
+  useKeyboardShortcuts();
 
   // next lesson in sequence
   const nextLesson = useMemo(() => {
@@ -84,6 +89,16 @@ export function AppShell() {
               <Zap className="w-3.5 h-3.5 text-[#a78bfa]" />
               <span className="text-xs font-mono font-bold text-[#a78bfa]">{xp}</span>
             </div>
+            <motion.button
+              onClick={() => setActiveTab("more")}
+              whileHover={{ scale: 1.08 }}
+              whileTap={{ scale: 0.95 }}
+              className="w-8 h-8 rounded-full flex items-center justify-center bg-[rgba(245,158,11,0.1)] border border-[rgba(245,158,11,0.25)] hover:bg-[rgba(245,158,11,0.2)] transition"
+              aria-label="Open XP Shop"
+              title="XP Shop"
+            >
+              <span className="text-sm">🛍️</span>
+            </motion.button>
             <div className="px-2 py-1 rounded-full bg-[var(--card)] border border-[var(--border)] text-xs">
               {accent === "usa" ? "🇺🇸" : "🇬🇧"} {accent.toUpperCase()}
             </div>
@@ -190,6 +205,12 @@ export function AppShell() {
       {/* Toast notifications (lesson complete, badge earned, etc.) */}
       <Toaster />
       <ToastWatcher />
+
+      {/* Floating "+N XP" burst animation when XP increases */}
+      <XPBurst />
+
+      {/* Keyboard shortcuts help overlay (press ?) */}
+      <ShortcutsOverlay />
     </div>
   );
 }

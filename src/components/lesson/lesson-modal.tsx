@@ -174,14 +174,64 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
         </div>
       </div>
 
-      {/* Progress bar */}
-      <div className="h-1 bg-[var(--bg2)]">
+      {/* Progress bar with glow */}
+      <div className="h-1.5 bg-[var(--bg2)] relative">
         <motion.div
-          className="h-full bg-[var(--grad-btn)]"
+          className="h-full"
+          style={{ background: "var(--grad-btn)", boxShadow: "0 0 8px rgba(99,102,241,0.6)" }}
           initial={{ width: 0 }}
           animate={{ width: `${pct}%` }}
           transition={{ duration: 0.4 }}
         />
+        {/* Shimmer on progress bar */}
+        <motion.div
+          className="absolute top-0 h-full w-8 bg-gradient-to-r from-transparent via-white/30 to-transparent"
+          animate={{ x: ["-100%", "500%"] }}
+          transition={{ duration: 2, repeat: Infinity, repeatDelay: 3, ease: "easeInOut" }}
+          style={{ left: `${pct - 5}%` }}
+        />
+      </div>
+
+      {/* Step progress dots */}
+      <div className="px-4 py-2 bg-[var(--bg2)]/60 border-b border-[var(--border)]">
+        <div className="flex items-center gap-1 max-w-2xl mx-auto overflow-x-auto scrollbar-none">
+          {lesson.steps.map((s, i) => {
+            const isCurrent = i === stepIdx;
+            const isPast = i < stepIdx;
+            const stepIcon: Record<string, string> = {
+              intro: "👋", concept: "📖", example: "💬", "mouth-diagram": "👄",
+              "vowel-chart": "🎯", compare: "📊", "stress-bars": "📈", rhythm: "🎵",
+              linking: "🔗", shadow: "🪞", intonation: "📐", "tap-pronounce": "👆",
+              tip: "💡", practice: "🎙", quiz: "❓", completion: "🏆"
+            };
+            return (
+              <motion.button
+                key={i}
+                onClick={() => { setDirection(i > stepIdx ? 1 : -1); setStepIdx(i); }}
+                className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-[10px] transition-all relative ${
+                  isCurrent
+                    ? "bg-[var(--grad-btn)] text-white scale-110 shadow-[0_0_12px_rgba(99,102,241,0.5)]"
+                    : isPast
+                    ? "bg-[rgba(16,185,129,0.2)] text-[#10b981]"
+                    : "bg-[var(--card)] text-[var(--t3)] border border-[var(--border)]"
+                }`
+                }
+                whileHover={{ scale: 1.15 }}
+                whileTap={{ scale: 0.9 }}
+                title={`${s.type}: ${s.title || s.type}`}
+              >
+                <span className="relative z-10">{stepIcon[s.type] || "•"}</span>
+                {isCurrent && (
+                  <motion.span
+                    className="absolute inset-0 rounded-full border-2 border-[var(--p)]"
+                    animate={{ scale: [1, 1.3, 1], opacity: [0.5, 0, 0.5] }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                  />
+                )}
+              </motion.button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Step content */}
@@ -313,16 +363,26 @@ function StepRenderer(props: StepRendererProps) {
 
 function IntroStepView({ step, speak }: { step: Extract<LessonStep, { type: "intro" }>; speak: (t: string) => void }) {
   return (
-    <div className="space-y-5 text-center">
+    <div className="space-y-5 text-center relative">
+      {/* Subtle background glow */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-64 h-64 rounded-full bg-[rgba(99,102,241,0.06)] blur-[60px]" />
+      </div>
+
       <motion.div
-        initial={{ scale: 0.7, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
+        initial={{ scale: 0.7, opacity: 0, rotate: -10 }}
+        animate={{ scale: 1, opacity: 1, rotate: 0 }}
         transition={{ type: "spring", stiffness: 200, damping: 14 }}
-        className="text-7xl mb-2"
+        className="text-7xl mb-2 relative z-10 animate-gentle-float"
       >
         {step.emoji || VISUAL_EMOJI[step.visual] || "✨"}
       </motion.div>
-      <div>
+      <motion.div
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+        className="relative z-10"
+      >
         <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--t3)] font-mono mb-2">
           Lesson Introduction
         </div>
@@ -333,16 +393,29 @@ function IntroStepView({ step, speak }: { step: Extract<LessonStep, { type: "int
         <p className="text-[var(--t2)] text-sm leading-relaxed max-w-md mx-auto">
           {step.description}
         </p>
-      </div>
-      <div className="rounded-2xl overflow-hidden border border-[var(--border)]">
-        <WaveformCanvas height={140} />
-      </div>
-      <button
+      </motion.div>
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.4 }}
+        className="relative z-10"
+      >
+        <div className="rounded-2xl overflow-hidden border border-[var(--border)] relative">
+          <WaveformCanvas height={140} />
+          <div className="absolute inset-0 bg-gradient-to-t from-[var(--bg)] via-transparent to-transparent" />
+        </div>
+      </motion.div>
+      <motion.button
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.5 }}
+        whileHover={{ scale: 1.04 }}
+        whileTap={{ scale: 0.96 }}
         onClick={() => speak(step.title)}
-        className="px-5 py-2.5 rounded-xl bg-[var(--card-h)] border border-[var(--border2)] text-sm font-semibold flex items-center gap-2 mx-auto hover:bg-[var(--card)] transition"
+        className="px-5 py-2.5 rounded-xl bg-[var(--card-h)] border border-[var(--border2)] text-sm font-semibold flex items-center gap-2 mx-auto hover:bg-[var(--card)] transition relative z-10"
       >
         ▶ Hear the title
-      </button>
+      </motion.button>
     </div>
   );
 }
@@ -351,17 +424,27 @@ function ConceptStepView({ step }: { step: Extract<LessonStep, { type: "concept"
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <span className="text-xs px-2 py-0.5 rounded-full bg-[rgba(99,102,241,0.15)] text-[#a78bfa] font-mono font-bold uppercase tracking-wider">
+        <span className="text-xs px-2.5 py-1 rounded-full bg-[rgba(99,102,241,0.15)] text-[#a78bfa] font-mono font-bold uppercase tracking-wider border border-[rgba(99,102,241,0.2)]">
           Concept
         </span>
-        <span className="text-[10px] text-[var(--t3)]">{step.visualLabel}</span>
+        {step.visualLabel && (
+          <span className="text-[10px] text-[var(--t3)] px-2 py-0.5 rounded-full bg-[var(--card)] border border-[var(--border)]">
+            {step.visualLabel}
+          </span>
+        )}
       </div>
       <h2 className="font-d text-2xl font-bold text-[var(--t1)]">{step.title}</h2>
       <div className="space-y-3">
         {step.body.map((p, i) => (
-          <p key={i} className="text-[var(--t2)] text-sm leading-relaxed">
+          <motion.p
+            key={i}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.1 }}
+            className="text-[var(--t2)] text-sm leading-relaxed"
+          >
             {p}
-          </p>
+          </motion.p>
         ))}
       </div>
       {step.bulletPoints && step.bulletPoints.length > 0 && (
@@ -371,10 +454,10 @@ function ConceptStepView({ step }: { step: Extract<LessonStep, { type: "concept"
               key={i}
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.08 }}
-              className="flex items-start gap-3 p-3 rounded-xl bg-[rgba(99,102,241,0.06)] border border-[var(--border)]"
+              transition={{ delay: 0.1 + i * 0.06 }}
+              className="flex items-start gap-3 p-3 rounded-xl bg-[rgba(99,102,241,0.06)] border border-[rgba(99,102,241,0.12)] hover:border-[rgba(99,102,241,0.25)] transition-colors"
             >
-              <span className="inline-block w-2 h-2 rounded-full bg-[var(--grad-btn)] mt-1.5 shrink-0" />
+              <span className="inline-block w-2 h-2 rounded-full bg-[var(--grad-btn)] mt-1.5 shrink-0 shadow-[0_0_6px_rgba(99,102,241,0.5)]" />
               <span className="text-[var(--t2)] text-sm font-mono">{b}</span>
             </motion.li>
           ))}
@@ -390,38 +473,49 @@ function ExampleStepView({ step, speak }: { step: Extract<LessonStep, { type: "e
     <div className="space-y-4">
       {step.title && (
         <div className="flex items-center gap-2">
-          <span className="text-xs px-2 py-0.5 rounded-full bg-[rgba(34,211,238,0.15)] text-[#22d3ee] font-mono font-bold uppercase tracking-wider">
+          <span className="text-xs px-2.5 py-1 rounded-full bg-[rgba(34,211,238,0.15)] text-[#22d3ee] font-mono font-bold uppercase tracking-wider border border-[rgba(34,211,238,0.2)]">
             Example
           </span>
         </div>
       )}
-      <div className="rounded-2xl p-5 bg-[rgba(99,102,241,0.06)] border border-[rgba(99,102,241,0.25)]">
-        <div className="flex flex-wrap gap-1.5 mb-4">
+      <div className="rounded-2xl p-5 bg-[rgba(99,102,241,0.06)] border border-[rgba(99,102,241,0.25)] relative overflow-hidden">
+        {/* Background glow */}
+        <div className="absolute -top-10 -right-10 w-32 h-32 rounded-full bg-[rgba(99,102,241,0.06)] blur-[40px] pointer-events-none" />
+        
+        <div className="flex flex-wrap gap-1.5 mb-4 relative z-10">
           {words.map((w, i) => {
             const cleaned = w.replace(/[.,!?;:"']/g, "");
             const isHl = step.highlightWords?.some((hw) => hw.replace(/[.,!?;:"']/g, "") === cleaned);
             return (
-              <button
+              <motion.button
                 key={i}
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.04 }}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
                 onClick={() => speak(w)}
                 className={`px-2.5 py-1.5 rounded-lg text-base font-d transition ${
                   isHl
-                    ? "bg-[var(--grad-btn)] text-white font-semibold"
-                    : "bg-[var(--card-h)] text-[var(--t2)] hover:text-[var(--t1)]"
+                    ? "bg-[var(--grad-btn)] text-white font-semibold shadow-[0_0_12px_rgba(99,102,241,0.4)]"
+                    : "bg-[var(--card-h)] text-[var(--t2)] hover:text-[var(--t1)] border border-[var(--border)]"
                 }`}
               >
                 {w}
-              </button>
+              </motion.button>
             );
           })}
         </div>
-        <div className="text-center font-mono text-sm text-[var(--t3)] mb-4">{step.ipa}</div>
-        <button
+        <div className="text-center font-mono text-sm text-[var(--t3)] mb-4 relative z-10">{step.ipa}</div>
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
           onClick={() => speak(step.phrase)}
-          className="w-full py-3 rounded-xl bg-[var(--grad-btn)] text-white text-sm font-semibold flex items-center justify-center gap-2 hover:opacity-90 transition"
+          className="w-full py-3 rounded-xl bg-[var(--grad-btn)] text-white text-sm font-semibold flex items-center justify-center gap-2 hover:opacity-90 transition relative z-10"
+          style={{ boxShadow: "0 0 20px rgba(99,102,241,0.3)" }}
         >
           <span className="text-lg">▶</span> Play full phrase
-        </button>
+        </motion.button>
       </div>
       {step.tapWords && step.tapWords.length > 0 && (
         <div>
@@ -747,13 +841,61 @@ function CompletionStepView({
   step: Extract<LessonStep, { type: "completion" }>;
   onNext?: () => void;
 }) {
+  const [displayXp, setDisplayXp] = useState(0);
+  const targetXp = step.xp;
+
+  // Animated XP counter
+  useEffect(() => {
+    if (targetXp <= 0) return;
+    const duration = 1200; // ms
+    const steps = 30;
+    const interval = duration / steps;
+    let current = 0;
+    const increment = targetXp / steps;
+    const timer = setInterval(() => {
+      current += increment;
+      if (current >= targetXp) {
+        setDisplayXp(targetXp);
+        clearInterval(timer);
+      } else {
+        setDisplayXp(Math.round(current));
+      }
+    }, interval);
+    return () => clearInterval(timer);
+  }, [targetXp]);
+
   return (
-    <div className="text-center space-y-6 py-8">
+    <div className="text-center space-y-6 py-8 relative">
+      {/* Background celebration particles */}
+      {[...Array(12)].map((_, i) => (
+        <motion.div
+          key={i}
+          className="absolute w-2 h-2 rounded-full"
+          style={{
+            background: ["#f59e0b", "#22d3ee", "#a78bfa", "#10b981", "#6366f1", "#ef4444", "#8b5cf6", "#67e8f9", "#fb923c", "#34d399", "#818cf8", "#f472b6"][i],
+            top: "40%",
+            left: "50%",
+          }}
+          initial={{ x: 0, y: 0, opacity: 0, scale: 0 }}
+          animate={{
+            x: Math.cos((i / 12) * Math.PI * 2) * (80 + Math.random() * 40),
+            y: Math.sin((i / 12) * Math.PI * 2) * (60 + Math.random() * 30),
+            opacity: [0, 1, 1, 0],
+            scale: [0, 1.2, 1, 0.5],
+          }}
+          transition={{
+            duration: 1.5,
+            delay: 0.3 + i * 0.04,
+            ease: "easeOut",
+          }}
+        />
+      ))}
+
       <motion.div
         initial={{ scale: 0, rotate: -30 }}
         animate={{ scale: 1, rotate: 0 }}
         transition={{ type: "spring", stiffness: 200, damping: 12 }}
-        className="text-8xl"
+        className="text-8xl relative z-10"
       >
         🏆
       </motion.div>
@@ -768,24 +910,44 @@ function CompletionStepView({
         <p className="text-[var(--t2)] text-base max-w-md mx-auto">{step.subtitle}</p>
       </motion.div>
 
+      {/* Animated XP counter with glow */}
       <motion.div
         initial={{ scale: 0.8, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ delay: 0.5, type: "spring" }}
-        className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[var(--grad-btn)] text-white font-d text-xl font-bold shadow-lg"
+        className="inline-flex items-center gap-2 px-6 py-3 rounded-full relative overflow-hidden"
+        style={{
+          background: "var(--grad-btn)",
+          boxShadow: "0 0 30px rgba(99,102,241,0.5), 0 0 60px rgba(99,102,241,0.2)",
+        }}
       >
-        <span>⚡</span>
-        <span>+{step.xp} XP</span>
+        {/* Shimmer sweep on XP badge */}
+        <motion.div
+          className="absolute inset-y-0 w-1/3"
+          style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent)" }}
+          animate={{ x: ["-100%", "300%"] }}
+          transition={{ duration: 2, repeat: Infinity, repeatDelay: 2, ease: "easeInOut" }}
+        />
+        <span className="text-xl relative z-10">⚡</span>
+        <span className="font-d text-xl font-bold text-white relative z-10">
+          +{displayXp} XP
+        </span>
       </motion.div>
 
       {step.badge && (
         <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.7 }}
-          className="inline-block px-4 py-2 rounded-full bg-[rgba(245,158,11,0.12)] border border-[rgba(245,158,11,0.3)] text-sm font-semibold text-[#f59e0b]"
+          initial={{ opacity: 0, y: 10, scale: 0.9 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ delay: 0.7, type: "spring" }}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[rgba(245,158,11,0.12)] border border-[rgba(245,158,11,0.3)] text-sm font-semibold text-[#f59e0b]"
         >
-          🏅 Badge unlocked: {step.badge}
+          <motion.span
+            animate={{ rotate: [0, -10, 10, -5, 0] }}
+            transition={{ delay: 0.9, duration: 0.5 }}
+          >
+            🏅
+          </motion.span>
+          <span>Badge unlocked: {step.badge}</span>
         </motion.div>
       )}
 

@@ -6,21 +6,8 @@ import { useAppStore } from "@/lib/store";
 import { PHASES } from "@/lib/types";
 import { ALL_LESSONS, getLessonsForPhase } from "@/lib/lessons";
 import { ProgressRing } from "@/components/widgets/progress-ring";
-
-const ALL_BADGES = [
-  { id: "first-score", emoji: "🎯", name: "First Score", desc: "Complete your first lesson" },
-  { id: "streak-7", emoji: "🔥", name: "7-Day Streak", desc: "Practice 7 days in a row" },
-  { id: "phase-1", emoji: "🔈", name: "Sound Seeker", desc: "Complete Phase 1" },
-  { id: "phase-2", emoji: "📖", name: "Word Warrior", desc: "Complete Phase 2" },
-  { id: "phase-3", emoji: "🎵", name: "Rhythm Rider", desc: "Complete Phase 3" },
-  { id: "phase-4", emoji: "💬", name: "Chat Champion", desc: "Complete Phase 4" },
-  { id: "phase-5", emoji: "⚡", name: "Speed Speaker", desc: "Complete Phase 5" },
-  { id: "phase-6", emoji: "🪞", name: "Mirror Master", desc: "Complete Phase 6" },
-  { id: "phase-7", emoji: "🌍", name: "World Ready", desc: "Complete Phase 7" },
-  { id: "phase-8", emoji: "👑", name: "Accent Master", desc: "Complete Phase 8" },
-  { id: "50-lessons", emoji: "📚", name: "Scholar", desc: "Complete 50 lessons" },
-  { id: "1000-xp", emoji: "💎", name: "XP Hunter", desc: "Earn 1000 XP" },
-];
+import { AchievementGallery } from "@/components/widgets/achievement-gallery";
+import { PhonemeMastery } from "@/components/widgets/phoneme-mastery";
 
 // ─── Practice Calendar Heatmap ─────────────────────────────────────────────
 const WEEKS = 12;
@@ -403,33 +390,10 @@ export function ProgressView() {
       </div>
 
       {/* Badges */}
-      <div>
-        <h2 className="font-d text-base font-bold mb-2">Badges Earned</h2>
-        <div className="grid grid-cols-3 gap-2">
-          {ALL_BADGES.map((b) => {
-            const earned = earnedBadges.has(b.id);
-            return (
-              <motion.div
-                key={b.id}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={earned ? { opacity: 1, scale: [1, 1.02, 1] } : { opacity: 1, scale: 1 }}
-                transition={earned ? { duration: 3, repeat: Infinity, repeatDelay: 2, ease: "easeInOut" } : {}}
-                className={`rounded-2xl p-3 text-center border transition ${
-                  earned
-                    ? "bg-[rgba(245,158,11,0.08)] border-[rgba(245,158,11,0.3)] animate-gold-glow"
-                    : "bg-[var(--card)] border-[var(--border)] opacity-40"
-                }`}
-              >
-                <div className={`text-3xl mb-1 ${earned ? "" : "grayscale"}`}>{b.emoji}</div>
-                <div className={`text-[10px] font-semibold ${earned ? "text-[#f59e0b]" : "text-[var(--t3)]"}`}>
-                  {b.name}
-                </div>
-                <div className="text-[8px] text-[var(--t3)] mt-0.5 leading-tight">{b.desc}</div>
-              </motion.div>
-            );
-          })}
-        </div>
-      </div>
+      <AchievementGallery />
+
+      {/* Phoneme Mastery — horizontal bars + spotlight on weakest */}
+      <PhonemeMastery />
 
       {/* Recent activity */}
       <div>
