@@ -11,6 +11,9 @@ import { PracticeView } from "@/components/views/practice";
 import { ProgressView } from "@/components/views/progress";
 import { MoreView } from "@/components/views/more";
 import { LessonModal } from "@/components/lesson/lesson-modal";
+import { AICoachFAB } from "@/components/ai-coach/ai-coach-fab";
+import { Toaster } from "@/components/widgets/toaster";
+import { ToastWatcher } from "@/components/widgets/toast-watcher";
 import { getLesson, ALL_LESSON_IDS } from "@/lib/lessons";
 
 const TABS = [
@@ -167,6 +170,7 @@ export function AppShell() {
       <AnimatePresence>
         {activeLesson && (
           <LessonModal
+            key={activeLesson.id}
             lesson={activeLesson}
             onClose={() => setActiveLesson(null)}
             onNext={
@@ -179,6 +183,13 @@ export function AppShell() {
           />
         )}
       </AnimatePresence>
+
+      {/* AI Pronunciation Coach — floating button + chat modal */}
+      <AICoachFAB />
+
+      {/* Toast notifications (lesson complete, badge earned, etc.) */}
+      <Toaster />
+      <ToastWatcher />
     </div>
   );
 }

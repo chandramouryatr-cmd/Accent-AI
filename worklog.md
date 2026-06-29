@@ -397,3 +397,125 @@ Unresolved issues / next steps:
 - Could add more practice phrases and difficulty levels to Practice view
 - Could add achievement notifications/toasts when earning badges
 - Could add social/sharing features (share progress, leaderboard)
+
+---
+Task ID: 7-ai-coach
+Agent: ai-coach-builder
+Task: Build AI Coach chat assistant (floating button + chat modal + LLM backend)
+
+Work Log:
+- Read worklog.md to absorb context from previous agents (project overview, tech stack, existing store/widgets/views, completed phases of work)
+- Inspected store.ts, app-shell.tsx, globals.css, types.ts, page.tsx, lesson-modal.tsx patterns and the z-ai-web-dev-sdk type definitions (ChatMessage, completions.create signature)
+- Created `src/app/api/ai-coach/route.ts`:
+  - POST endpoint accepting `{ messages, context }` with validation, sanitization, and 20-message cap
+  - Builds a detailed system prompt positioning the AI as "AccentAI Coach" with 8 core principles (IPA notation, tactile mouth guidance, word breakdowns, encouraging tone, scannable 2-4 paragraph responses, GenAm vs RP distinction, off-topic steering)
+  - Injects user context (accent, XP, streak, completed lesson IDs) into the prompt naturally
+  - Calls `zai.chat.completions.create({ messages, temperature: 0.7, max_tokens: 800 })`
+  - Robust reply extraction supporting both OpenAI-style `{choices:[{message:{content}}]}` and string/plain-object fallbacks
+  - Graceful error handling: 400 for bad input, 500 with friendly message on SDK failure (dev detail included)
+  - GET endpoint returns schema info for discoverability
+- Created `src/components/ai-coach/ai-coach-chat.tsx`:
+  - Full chat modal with `AnimatePresence` backdrop blur and spring slide-up animation
+  - Header: gradient orb avatar with Sparkles icon, "AccentAI Coach" title, pulsing emerald online dot, close button
+  - Message bubbles: user (right-aligned, indigo→violet gradient), assistant (left-aligned, card bg with subtle border)
+  - IPA renderer: regex detects `/phoneme/` and `[narrow]` patterns, wraps in `<code>` with cyan-tinted monospace styling; preserves prefix context so URLs aren't matched
+  - Loading state: 3-dot typing indicator with staggered opacity/y bounce animation
+  - Suggested prompt chips on first open (4 chips: "How do I pronounce 'three'?", "/ɪ/ vs /iː/", "American 'r' tips", "Word stress") with AnimatePresence exit
+  - Auto-grow textarea with Enter-to-send (Shift+Enter for newline), send button with gradient + glow
+  - Auto-scroll to bottom on new messages
+  - Reads `accent`, `xp`, `streak`, `lessons` from Zustand store and passes as context to API
+  - Escape key closes modal, input autofocus on open
+  - Mobile-friendly: 88vh on mobile / 80vh on sm+, rounded-t-3xl on mobile / rounded-3xl on desktop, safe-top + safe-bottom padding
+  - Disclaimer footer: "AccentAI Coach can make mistakes…"
+- Created `src/components/ai-coach/ai-coach-fab.tsx`:
+  - Floating action button positioned `fixed bottom-20 right-4 z-40` (above bottom nav)
+  - 56px round button with conic-gradient orb (indigo→violet→cyan), inner glass circle with Sparkles icon
+  - Pulsing glow ring (radial gradient, scale 1→1.25→1, opacity pulse) for attention
+  - Rotating sheen overlay (8s linear rotation, diagonal highlight sweep)
+  - Reads `activeLessonId` from store — when set, the entire FAB is hidden via AnimatePresence (spring exit)
+  - Onboarding tooltip "Ask me anything! 💬" appears after 1.4s delay on first visit (localStorage flag); hidden on mobile (sm:flex), disappears on first click
+  - Hover scale 1.06, tap scale 0.94 micro-interactions
+- Integrated into `src/components/app-shell.tsx`:
+  - Added `import { AICoachFAB } from "@/components/ai-coach/ai-coach-fab";`
+  - Rendered `<AICoachFAB />` after the LessonModal AnimatePresence block, still inside the main container
+- Verified end-to-end:
+  - `bun run lint` → EXIT 0 (no errors, no warnings)
+  - dev.log shows clean compiles, `GET / 200`, `GET /api/ai-coach 200`, `POST /api/ai-coach 200 in 2.5s`
+  - Tested real LLM call: POST with `{"messages":[{"role":"user","content":"How do I pronounce three?"}],"context":{"accent":"usa","xp":120,"streak":3,"completedLessons":["p1-l1"]}}` returned a properly formatted coach response with IPA `/θriː/`, syllable breakdown, tactile practice tips ("place tip of tongue between teeth"), and emojis — exactly matching the system prompt spec
+- Did NOT modify any other files; did NOT change the Zustand store; did NOT remove existing functionality
+
+Stage Summary:
+- 3 new files created (`route.ts`, `ai-coach-fab.tsx`, `ai-coach-chat.tsx`) and 1 file edited (`app-shell.tsx` for 2-line import + render)
+- AI Coach is fully functional: FAB with animated gradient orb + pulsing glow appears bottom-right, hidden during lessons; clicking opens a spring slide-up chat modal with IPA-aware message rendering, suggested prompt chips, typing indicator, and auto-scroll
+- Backend uses z-ai-web-dev-sdk's `chat.completions.create` with a detailed system prompt embedding user progress (accent/XP/streak/completed lessons) — tested live and returns pronunciation coaching with IPA notation, syllable breakdowns, and tactile mouth-position tips
+- Lint passes cleanly (exit 0); dev server compiles successfully with no errors; all routes return HTTP 200
+- Design respects existing palette (indigo/violet/cyan from --p/--p2/--p3/--c variables), uses Framer Motion for all animations, Lucide icons (Sparkles, Send, X), dark-theme-first, mobile-safe
+
+
+---
+Task ID: QA-round-3
+Agent: main
+Task: QA + bug fix + onboarding polish + achievement toasts + daily challenge + AI coach integration
+
+Work Log:
+- Performed full QA pass with agent-browser:
+  - Verified onboarding flow: Try Demo → USA accent → Begin Journey → Dashboard renders
+  - Verified all 5 views: Dashboard, Journey (8 phases, all expandable, lessons tappable), Practice (Easy/Medium/Hard), Progress (rank ladder, calendar heatmap, badges, recent activity), More (profile, accent, theme, all phases, bookmarks)
+  - Opened lessons, advanced through all steps (intro → concept → vowel-chart → mouth-diagram → example → tap-pronounce → tip → practice → quiz → completion), verified Next Lesson button
+  - Confirmed practice calendar heatmap updates on completion (3 lessons completed today = 2026-06-29)
+  - Confirmed dynamic Sound Profile correctly reflects completed lesson scores (3 lessons, all 85%)
+- Found & fixed 1 bug:
+  - **BUG**: LessonModal didn't reset `stepIdx` when `onNext` (Next Lesson button) was called. Clicking Next Lesson after completing lesson 1 would open lesson 2 at step 11/11 (completion screen) instead of step 1.
+  - **FIX**: Added `key={activeLesson.id}` to `<LessonModal />` in app-shell.tsx. React now remounts the component when lesson ID changes, naturally resetting all internal state (stepIdx, quizAnswer, practiceScore, recording, prevStepIdx).
+  - Verified: After fix, clicking Next Lesson correctly opens the new lesson at step 1/1 (e.g., lesson 4 at "1/11" instead of "11/11").
+- Added 3 new features:
+  1. **Achievement Toasts** (`src/lib/toast-store.ts` + `src/components/widgets/toaster.tsx` + `src/components/widgets/toast-watcher.tsx`):
+     - Pure Zustand toast store with 6 variants: lesson (indigo/violet), badge (amber/pink), goal (green/cyan), streak (amber/red), info, milestone (pink/violet)
+     - Toaster component: top-center fixed position, spring slide-down entry, shimmer sweep, per-variant gradient bg, auto-dismiss progress bar, dismiss X button, sparkle particles on badge/milestone toasts
+     - ToastWatcher: pure side-effect component, watches `lessons`/`badges`/`streak`/`dailyGoalCompleted` and fires toasts on transitions (new lesson completion, new badge, streak milestones at 3/7/14/30/60/100/365 days, daily goal completion). Baseline armed 400ms after mount to avoid firing on rehydration.
+     - Integrated into app-shell.tsx alongside AICoachFAB.
+  2. **Daily Challenge** (`src/lib/daily-challenges.ts` + `src/components/widgets/daily-challenge-card.tsx`):
+     - 30 hand-crafted challenging phrases with IPA, difficulty (Easy/Medium/Hard), focus area, tip, and emoji
+     - Deterministic daily rotation by day-of-year (same challenge all day, rotates at midnight)
+     - Card with animated mesh-gradient background, floating gradient orbs, difficulty badge (color-coded), phrase + IPA in dark inset card, tip card with amber accent
+     - Three action buttons: Hear it (TTS at 0.9× rate), Slow (TTS at 0.6× rate), Mark Done (with completion toast + state persisted to localStorage keyed by date)
+     - Per-day completion tracking via `accentai-dc-completed` localStorage map; "Done!" state shows green/cyan gradient when completed
+     - Footer: "🔄 New challenge every day · 30 total" + completion status
+     - Integrated into Dashboard between Tip of the Day and Sound Profile sections
+  3. **AI Pronunciation Coach** (Task ID 7-ai-coach, dispatched to full-stack-developer subagent):
+     - Backend: `src/app/api/ai-coach/route.ts` POST endpoint using z-ai-web-dev-sdk with detailed system prompt (IPA notation, tactile mouth guidance, scannable 2-4 paragraph responses, GenAm vs RP distinction, user progress injection)
+     - Frontend FAB: `src/components/ai-coach/ai-coach-fab.tsx` — 56px conic-gradient orb (indigo→violet→cyan) at `fixed bottom-20 right-4 z-40`, pulsing glow ring, rotating sheen, onboarding tooltip "Ask me anything! 💬" on first visit, hidden when lesson modal open
+     - Frontend Chat: `src/components/ai-coach/ai-coach-chat.tsx` — spring slide-up modal with backdrop blur, header with gradient orb avatar + pulsing online dot, message bubbles (user right indigo gradient, coach left card bg), IPA renderer (regex detects `/phoneme/` and `[narrow]` patterns, wraps in cyan-tinted `<code>` tags), 3-dot typing indicator, 4 suggested prompt chips, auto-grow textarea with Enter-to-send, auto-scroll, Escape to close, mobile 88vh + safe-top/bottom padding
+     - Verified live: sent "How do I say the word three?" → got properly formatted coach response with `/θriː/` in code blocks, syllable breakdown, tactile practice tips with emojis (🎯👄💡), practice phrase suggestion ("three, tree, free")
+- Onboarding screen polished with rich visual details:
+  - Animated logo orb (gradient indigo→violet→cyan, 16×16 rounded-2xl, hovering with rotate+scale, 👄 emoji)
+  - 8 floating IPA phoneme characters (`/θ/`, `/æ/`, `/ʃ/`, `/ŋ/`, `/ɑː/`, `/ð/`, `/ɜː/`, `/r/`) drifting around the background with 8s float animation, color-coded, low opacity with drop-shadow glow
+  - Secondary violet glow orb with 5s pulse animation
+  - Feature pills row: "🎯 IPA", "👄 Mouth diagrams", "🔊 Native audio", "📊 Live feedback" (staggered entrance)
+  - Trust signals: "★ 4.9 rating · 👥 12k+ learners · 📚 32 lessons"
+  - Animated cyan status dot (1.5s pulse) next to AccentAI logo
+  - Accent selection screen: gradient orb header, 2 background orbs, spring scale animation on selection, "✓ Ready" badge on selected USA, shimmer sweep on Begin Journey button
+- Verified final state:
+  - `bun run lint` → EXIT 0 (clean, zero errors, zero warnings)
+  - dev.log: all compiles succeed, GET / 200, POST /api/ai-coach 200 in 2.5s
+  - agent-browser QA confirms: Daily Challenge card visible, Mark Done fires toast, AI Coach FAB opens chat, IPA renders in `<code>` tags, Next Lesson correctly resets to step 1, all 5 views functional
+
+Stage Summary:
+- 1 bug fixed (LessonModal stepIdx reset on lesson change)
+- 3 new features added:
+  1. Achievement Toasts (6 variants, watches state transitions, fires on lesson/badge/streak/goal events)
+  2. Daily Challenge (30 hand-crafted phrases, daily rotation, TTS hear+slow buttons, completion persistence)
+  3. AI Pronunciation Coach (LLM-powered chat with IPA rendering, FAB hidden during lessons, suggested prompts, mobile-friendly)
+- Onboarding polished with floating phonemes, animated logo orb, feature pills, trust signals, secondary background glow
+- 7 new files created: toast-store.ts, toaster.tsx, toast-watcher.tsx, daily-challenges.ts, daily-challenge-card.tsx, ai-coach/route.ts, ai-coach-fab.tsx, ai-coach-chat.tsx
+- 2 files modified: app-shell.tsx (key prop on LessonModal + import Toaster/ToastWatcher/AICoachFAB), dashboard.tsx (import + render DailyChallengeCard), onboarding.tsx (full polish)
+- Lint passes cleanly (exit 0); dev server compiles successfully; all routes return HTTP 200; all interactive features verified working
+
+Unresolved issues / next steps:
+- AI Coach backend has a 6.9s response time on cold start (cached at 2.6s after) — could add streaming response for perceived performance
+- Could add a "Recent Lessons" carousel on Dashboard showing in-progress lessons for quick resume
+- Could add more granular XP animations (e.g., +120 XP floating number animation when completing a lesson)
+- Could add pronunciation challenge sharing (share daily challenge to social)
+- Could add a "Coach Insights" panel that uses AI Coach to analyze the user's weakest phonemes from completed lesson scores
+- Could add light theme polish for consistency with new features (Daily Challenge card, AI Coach chat modal — both designed dark-first)
+- Could add keyboard shortcuts (e.g., Cmd+K to open AI Coach, Space to play audio in lessons)

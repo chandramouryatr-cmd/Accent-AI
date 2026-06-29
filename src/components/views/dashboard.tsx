@@ -8,6 +8,7 @@ import { ALL_LESSON_IDS, getLessonsForPhase, lessonIdFor } from "@/lib/lessons";
 import { ProgressRing } from "@/components/widgets/progress-ring";
 import { WaveformCanvas } from "@/components/widgets/waveform-canvas";
 import { TIPS, CATEGORY_COLORS } from "@/lib/tips";
+import { DailyChallengeCard } from "@/components/widgets/daily-challenge-card";
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -534,6 +535,12 @@ export function DashboardView() {
 
       {/* Tip of the Day */}
       <TipOfTheDay />
+
+      {/* Daily Challenge */}
+      <div>
+        <h2 className="font-d text-base font-bold mb-2">Daily Challenge</h2>
+        <DailyChallengeCard />
+      </div>
 
       {/* Weak sounds — dynamic, derived from completed lesson scores */}
       <div>
