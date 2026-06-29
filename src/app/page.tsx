@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { Onboarding } from "@/components/onboarding/onboarding";
 import { AppShell } from "@/components/app-shell";
-import { loadVoices } from "@/lib/tts";
+import { loadVoices, unlockTTS } from "@/lib/tts";
 
 export default function Home() {
   const onboarded = useAppStore((s) => s.onboarded);
@@ -14,9 +14,23 @@ export default function Home() {
   useEffect(() => {
     // loadVoices is async but we don't need to await
     loadVoices();
+
+    // Some browsers block speechSynthesis until a user gesture has occurred.
+    // Unlock the audio context on the first pointer/keyboard interaction so
+    // subsequent programmatic speak() calls work without delay.
+    const unlock = () => unlockTTS();
+    window.addEventListener("pointerdown", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
+    window.addEventListener("touchstart", unlock, { once: true });
+
     // small delay to let zustand persist hydrate
     const t = setTimeout(() => setHydrated(true), 50);
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+      window.removeEventListener("touchstart", unlock);
+    };
   }, []);
 
   if (!hydrated) {

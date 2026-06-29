@@ -25,8 +25,8 @@ export function ProgressRing({ pct, size = 62, stroke = 4, label, gradient = tru
       {gradient && (
         <defs>
           <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#6366f1" />
-            <stop offset="100%" stopColor="#22d3ee" />
+            <stop offset="0%" stopColor="var(--p)" />
+            <stop offset="100%" stopColor="var(--p3)" />
           </linearGradient>
         </defs>
       )}
@@ -35,7 +35,7 @@ export function ProgressRing({ pct, size = 62, stroke = 4, label, gradient = tru
         cy={size / 2}
         r={r}
         fill="none"
-        stroke="rgba(255,255,255,0.08)"
+        stroke="var(--border)"
         strokeWidth={stroke}
       />
       <motion.circle
@@ -43,7 +43,7 @@ export function ProgressRing({ pct, size = 62, stroke = 4, label, gradient = tru
         cy={size / 2}
         r={r}
         fill="none"
-        stroke={gradient ? `url(#${gradId})` : "#6366f1"}
+        stroke={gradient ? `url(#${gradId})` : "var(--p)"}
         strokeWidth={stroke}
         strokeLinecap="round"
         strokeDasharray={circ}

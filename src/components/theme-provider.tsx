@@ -11,13 +11,13 @@ type ThemeContextValue = {
 };
 
 const ThemeContext = React.createContext<ThemeContextValue>({
-  theme: "dark",
+  theme: "light",
   toggleTheme: () => {},
   setTheme: () => {},
 });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = React.useState<Theme>("dark");
+  const [theme, setThemeState] = React.useState<Theme>("light");
 
   React.useEffect(() => {
     const saved = typeof window !== "undefined" ? localStorage.getItem("accentai-theme") : null;

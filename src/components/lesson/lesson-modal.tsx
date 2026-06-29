@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, X, Check, RotateCcw, NotebookPen, Gauge } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, Check, RotateCcw, NotebookPen, Gauge, Volume2 } from "lucide-react";
 import type { Lesson, LessonStep } from "@/lib/types";
 import { useAppStore } from "@/lib/store";
-import { speak, stopSpeaking, loadVoices } from "@/lib/tts";
+import { speak, stopSpeaking, loadVoices, unlockTTS, isSpeaking, onSpeakingChange } from "@/lib/tts";
 import { WaveformCanvas } from "@/components/widgets/waveform-canvas";
 import { MouthDiagram } from "@/components/widgets/mouth-diagram";
 import { VowelChart } from "@/components/widgets/vowel-chart";
@@ -66,9 +66,9 @@ function getPrimaryAudioText(step: LessonStep | undefined): string | null {
  *  direction value (fixes stale-closure bug with inline objects). */
 const stepVariants = {
   enter: (direction: number) => ({
-    x: direction * 80,
+    x: direction * 30,
     opacity: 0,
-    scale: 0.97,
+    scale: 0.99,
   }),
   center: {
     x: 0,
@@ -76,9 +76,9 @@ const stepVariants = {
     scale: 1,
   },
   exit: (direction: number) => ({
-    x: direction * -80,
+    x: direction * -30,
     opacity: 0,
-    scale: 0.97,
+    scale: 0.99,
   }),
 };
 
@@ -124,40 +124,7 @@ const STEP_ICON: Record<string, string> = {
   tip: "💡", practice: "🎙", quiz: "❓", completion: "🏆"
 };
 
-/** Step type → category for background tint */
-type StepCategory = "intro" | "concept" | "visual" | "practice" | "completion";
-function getStepCategory(type: string): StepCategory {
-  switch (type) {
-    case "intro": return "intro";
-    case "concept": return "concept";
-    case "mouth-diagram": case "vowel-chart": case "stress-bars":
-    case "rhythm": case "linking": case "intonation":
-      return "visual";
-    case "example": case "compare": case "shadow":
-    case "tap-pronounce": case "tip": case "practice": case "quiz":
-      return "practice";
-    case "completion": return "completion";
-    default: return "practice";
-  }
-}
-
-/** Step category → background tint color (RGBA) */
-const CATEGORY_TINT: Record<StepCategory, string> = {
-  intro:     "rgba(99,102,241,0.06)",   // indigo
-  concept:   "rgba(139,92,246,0.06)",   // violet
-  visual:    "rgba(34,211,238,0.05)",   // cyan
-  practice:  "rgba(245,158,11,0.05)",   // amber
-  completion:"rgba(16,185,129,0.06)",   // green
-};
-
-/** Step category → accent glow color for current dot */
-const CATEGORY_GLOW: Record<StepCategory, string> = {
-  intro:     "rgba(99,102,241,0.6)",
-  concept:   "rgba(139,92,246,0.6)",
-  visual:    "rgba(34,211,238,0.6)",
-  practice:  "rgba(245,158,11,0.6)",
-  completion:"rgba(16,185,129,0.6)",
-};
+// (Category tint/glow system removed for minimal design — solid colors only)
 
 // Module-level map to persist timer state across modal mount/unmount cycles
 const lessonTimerAccumulated: Map<string, number> = new Map();
@@ -184,11 +151,18 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
   const [prevStepIdx, setPrevStepIdx] = useState(stepIdx);
   const [showNotesPanel, setShowNotesPanel] = useState(false);
   const [ttsSpeed, setTtsSpeed] = useState(1);
+  // Speaking state — drives the header indicator (Bug 3 fix)
+  const [speaking, setSpeaking] = useState(false);
 
   // ── Lesson Timer ──
   const [timerDisplay, setTimerDisplay] = useState("0:00");
   const timerStartRef = useRef<number>(Date.now());
   const timerAccumulatedRef = useRef<number>(lessonTimerAccumulated.get(lesson.id) ?? 0);
+
+  // Scroll container ref — reset to top on step change (Bug 1 fix)
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  // Root ref — for attaching one-time TTS unlock listener (Bug 3 fix)
+  const rootRef = useRef<HTMLDivElement>(null);
 
   const accent = useAppStore((s) => s.accent);
   const completeLesson = useAppStore((s) => s.completeLesson);
@@ -206,6 +180,38 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
   // Preload voices on mount
   useEffect(() => {
     loadVoices();
+  }, []);
+
+  // Reset scroll position to top whenever the step changes (Bug 1 fix).
+  // Without this, scrolling down on step N opens step N+1 already scrolled
+  // to the bottom.
+  useEffect(() => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0;
+    }
+  }, [stepIdx]);
+
+  // Unlock TTS on first user interaction with the modal (Bug 3 fix).
+  // Mobile Safari / Chrome Android block speechSynthesis.speak() until a
+  // user gesture has occurred. We attach a one-time pointerdown listener
+  // to the modal root that calls unlockTTS() and then removes itself.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const onFirstInteract = () => {
+      unlockTTS();
+      root.removeEventListener("pointerdown", onFirstInteract);
+    };
+    root.addEventListener("pointerdown", onFirstInteract);
+    return () => root.removeEventListener("pointerdown", onFirstInteract);
+  }, []);
+
+  // Subscribe to TTS speaking state so the header indicator stays in sync
+  // with actual audio playback (Bug 3 fix).
+  useEffect(() => {
+    const unsub = onSpeakingChange(() => setSpeaking(isSpeaking()));
+    setSpeaking(isSpeaking());
+    return unsub;
   }, []);
 
   // ── Timer tick effect ──
@@ -377,33 +383,20 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [goNext, goPrev, onClose, step, handleSpeak, showNotesPanel]);
 
-  const currentCategory = getStepCategory(step?.type ?? "");
-  const currentTint = CATEGORY_TINT[currentCategory];
-  const currentGlow = CATEGORY_GLOW[currentCategory];
-
   return (
     <motion.div
+      ref={rootRef}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[200] bg-[var(--bg)] flex flex-col relative overflow-hidden"
+      className="fixed inset-0 z-[200] bg-[var(--bg)] flex flex-col overflow-hidden"
     >
-      {/* Animated step-type background tint */}
-      <motion.div
-        key={currentCategory}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.6 }}
-        className="absolute inset-0 pointer-events-none z-0"
-        style={{ background: `radial-gradient(ellipse at 50% 0%, ${currentTint} 0%, transparent 70%)` }}
-      />
-      {/* Content sits above the tint */}
+      {/* Content */}
       <div className="relative z-10 flex flex-col flex-1 min-h-0">
       {showConfetti && <Confetti count={100} />}
 
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)] bg-[var(--bg2)]/80 backdrop-blur safe-top">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)] bg-[var(--bg)] safe-top">
         <button
           onClick={onClose}
           className="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-[var(--card-h)] transition"
@@ -441,8 +434,22 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
               )}
             </AnimatePresence>
           </motion.button>
+          {/* Speaking indicator (Bug 3 fix) — pulsing dot + icon while TTS is active */}
+          {speaking && (
+            <span
+              className="flex items-center gap-1 px-2 py-1 rounded-lg border border-[var(--border2)] text-[11px] font-mono text-[var(--t2)]"
+              aria-label="Audio playing"
+            >
+              <motion.span
+                animate={{ scale: [1, 1.5, 1], opacity: [1, 0.4, 1] }}
+                transition={{ duration: 0.9, repeat: Infinity, ease: "easeInOut" }}
+                className="w-1.5 h-1.5 rounded-full bg-[var(--p)]"
+              />
+              <Volume2 className="w-3 h-3" />
+            </span>
+          )}
           {/* Timer display */}
-          <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[var(--card)]/60 border border-[var(--border2)] text-[11px] font-mono text-[var(--t2)]">
+          <div className="flex items-center gap-1 px-2 py-1 rounded-lg border border-[var(--border2)] text-[11px] font-mono text-[var(--t2)]">
             <span className="text-[10px]">⏱</span>
             <span>{timerDisplay}</span>
           </div>
@@ -451,100 +458,56 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
         </div>
       </div>
 
-      {/* ── Enhanced animated step progress bar ── */}
-      <div className="px-3 py-2 bg-[var(--bg2)]/70 border-b border-[var(--border)]">
-        <div className="relative max-w-2xl mx-auto" style={{ height: 44 }}>
-          {/* Gradient connecting line (background track) */}
-          <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-[3px] rounded-full bg-[var(--border)]" />
+      {/* ── Minimal step progress bar ── */}
+      <div className="px-3 py-2 bg-[var(--bg)] border-b border-[var(--border)]">
+        <div className="relative max-w-2xl mx-auto" style={{ height: 32 }}>
+          {/* Thin gray track */}
+          <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-[2px] rounded-full bg-[var(--border)]" />
 
-          {/* Animated gradient fill line — draws from left to the current step */}
-          <motion.div
-            className="absolute top-1/2 -translate-y-1/2 h-[3px] rounded-full"
+          {/* Solid fill up to the current step */}
+          <div
+            className="absolute top-1/2 -translate-y-1/2 h-[2px] rounded-full bg-[var(--p)] transition-all duration-300 ease-out"
             style={{
               left: 0,
-              width: `calc(${(stepIdx / Math.max(totalSteps - 1, 1)) * 100}% + 0px)`,
-              background: "linear-gradient(90deg, var(--p), var(--p2))",
-              boxShadow: "0 0 8px rgba(99,102,241,0.4)",
+              width: `${(stepIdx / Math.max(totalSteps - 1, 1)) * 100}%`,
             }}
-            initial={{ scaleX: 0, transformOrigin: "left" }}
-            animate={{ scaleX: 1 }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
           />
 
-          {/* Shimmer sweep on the filled line */}
-          <motion.div
-            className="absolute top-1/2 -translate-y-1/2 h-[3px] rounded-full"
-            style={{
-              left: 0,
-              width: `calc(${(stepIdx / Math.max(totalSteps - 1, 1)) * 100}% + 0px)`,
-              background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent)",
-              backgroundSize: "200% 100%",
-            }}
-            animate={{ backgroundPosition: ["200% 0", "-200% 0"] }}
-            transition={{ duration: 2.5, repeat: Infinity, repeatDelay: 3, ease: "easeInOut" }}
-          />
-
-          {/* Step dots row */}
+          {/* Step dots — current = solid p, past = solid gray, upcoming = outline */}
           <div className="absolute inset-0 flex items-center justify-between">
             {lesson.steps.map((s, i) => {
               const isCurrent = i === stepIdx;
               const isPast = i < stepIdx;
               const isUpcoming = i > stepIdx;
-              const cat = getStepCategory(s.type);
-              const glow = CATEGORY_GLOW[cat];
               const icon = STEP_ICON[s.type] || "•";
               const stepTitle = s.title || s.type.replace(/-/g, " ");
 
               return (
-                <motion.button
+                <button
                   key={i}
                   onClick={() => { setDirection(i > stepIdx ? 1 : -1); setStepIdx(i); }}
-                  className="relative flex items-center justify-center rounded-full cursor-pointer group"
+                  className="relative flex items-center justify-center rounded-full cursor-pointer group transition-transform hover:scale-110 active:scale-95"
                   style={{
-                    width: isCurrent ? 32 : isPast ? 24 : 22,
-                    height: isCurrent ? 32 : isPast ? 24 : 22,
-                    fontSize: isCurrent ? 13 : isPast ? 10 : 9,
+                    width: isCurrent ? 26 : 20,
+                    height: isCurrent ? 26 : 20,
+                    fontSize: isCurrent ? 11 : 9,
                     background: isCurrent
-                      ? "linear-gradient(135deg, #6366f1, #8b5cf6)"
+                      ? "var(--p)"
                       : isPast
-                      ? "linear-gradient(135deg, rgba(99,102,241,0.25), rgba(139,92,246,0.25))"
-                      : "var(--card)",
-                    border: isUpcoming ? "1px solid var(--border)" : "none",
-                    color: isCurrent ? "#fff" : isPast ? "var(--p3)" : "var(--t3)",
-                    boxShadow: isCurrent
-                      ? `0 0 14px ${glow}, 0 0 4px ${glow}`
-                      : "none",
+                      ? "var(--t2)"
+                      : "var(--bg)",
+                    border: isUpcoming ? "1px solid var(--border2)" : "none",
+                    color: isCurrent ? "#fff" : isPast ? "var(--bg)" : "var(--t3)",
                   }}
-                  initial={false}
-                  animate={{
-                    scale: isCurrent ? 1 : 1,
-                    opacity: isUpcoming ? 0.45 : 1,
-                  }}
-                  transition={{ type: "spring", stiffness: 350, damping: 22 }}
-                  whileHover={{ scale: 1.18, opacity: 1 }}
-                  whileTap={{ scale: 0.88 }}
                   aria-label={`Step ${i + 1}: ${stepTitle}`}
                 >
-                  <span className="relative z-10 leading-none select-none">{icon}</span>
-
-                  {/* Pulsing glow ring for current step */}
-                  {isCurrent && (
-                    <motion.span
-                      className="absolute inset-[-4px] rounded-full"
-                      style={{ border: `2px solid ${glow.replace("0.6", "0.5")}` }}
-                      animate={{
-                        scale: [1, 1.25, 1],
-                        opacity: [0.6, 0, 0.6],
-                      }}
-                      transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                    />
-                  )}
+                  <span className="leading-none select-none">{icon}</span>
 
                   {/* Hover tooltip */}
-                  <span className="absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-md bg-[var(--bg3)] border border-[var(--border2)] text-[9px] text-[var(--t2)] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none font-mono z-20">
+                  <span className="absolute -top-7 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-[var(--bg3)] border border-[var(--border2)] text-[9px] text-[var(--t2)] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none font-mono z-20">
                     {stepTitle}
                   </span>
-                </motion.button>
+                </button>
               );
             })}
           </div>
@@ -552,7 +515,7 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
       </div>
 
       {/* Step content */}
-      <div className="flex-1 overflow-y-auto relative">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto relative">
         {/* Subtle fade overlay between steps */}
         <AnimatePresence>
           <StepTransitionOverlay key={stepIdx} />
@@ -575,7 +538,7 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
               transition={{ delay: 0.1, duration: 0.3 }}
               className="flex items-center justify-center gap-2 mb-4"
             >
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--card)] border border-[var(--border2)] text-[10px] uppercase tracking-wider font-mono text-[var(--t3)]">
+              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-mono text-[var(--t3)]">
                 <span className="text-sm leading-none">
                   {STEP_ICON[step?.type || ""] || "•"}
                 </span>
@@ -610,25 +573,24 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
       <AnimatePresence>
         {showSpaceHint && (
           <motion.div
-            initial={{ opacity: 0, y: 14, scale: 0.92 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 14, scale: 0.92 }}
-            transition={{ type: "spring", stiffness: 320, damping: 24 }}
-            className="absolute left-1/2 -translate-x-1/2 bottom-24 z-10 pointer-events-none"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.2 }}
+            className="absolute left-1/2 -translate-x-1/2 bottom-24 z-30 pointer-events-none"
           >
-            <div className="flex items-center gap-2 px-3.5 py-2 rounded-full bg-[var(--card)]/95 border border-[var(--border2)] backdrop-blur-md shadow-[0_6px_24px_rgba(0,0,0,0.45)]">
-              <span className="text-sm leading-none" aria-hidden="true">⌨</span>
-              <kbd className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-[var(--bg2)] border border-[var(--border2)] text-[var(--p3)] shadow-[0_1px_0_var(--border2)]">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--bg2)] border border-[var(--border)] text-xs text-[var(--t2)]">
+              <kbd className="font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[var(--bg3)] border border-[var(--border2)] text-[var(--t1)]">
                 Space
               </kbd>
-              <span className="text-xs text-[var(--t2)] font-medium">Press Space to play</span>
+              <span>Press Space to play</span>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Footer nav */}
-      <div className="border-t border-[var(--border)] bg-[var(--bg2)]/95 backdrop-blur px-4 py-3 flex items-center gap-3 safe-bottom">
+      {/* Footer nav — z-20 ensures it stays above content + transition overlay */}
+      <div className="relative z-20 border-t border-[var(--border)] bg-[var(--bg)] px-4 py-3 flex items-center gap-3 safe-bottom">
         <button
           onClick={goPrev}
           disabled={isFirst}
@@ -641,14 +603,14 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
           onNext ? (
             <button
               onClick={onNext}
-              className="px-5 py-2.5 rounded-xl bg-[var(--grad-btn)] text-white text-sm font-semibold flex items-center gap-1.5 hover:opacity-90 transition"
+              className="px-5 py-2.5 rounded-xl bg-[var(--p)] text-white text-sm font-semibold flex items-center gap-1.5 hover:opacity-90 transition"
             >
               Next Lesson <ChevronRight className="w-4 h-4" />
             </button>
           ) : (
             <button
               onClick={onClose}
-              className="px-5 py-2.5 rounded-xl bg-[var(--grad-btn)] text-white text-sm font-semibold flex items-center gap-1.5 hover:opacity-90 transition"
+              className="px-5 py-2.5 rounded-xl bg-[var(--p)] text-white text-sm font-semibold flex items-center gap-1.5 hover:opacity-90 transition"
             >
               <Check className="w-4 h-4" /> Finish
             </button>
@@ -656,7 +618,7 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
         ) : (
           <button
             onClick={goNext}
-            className="px-5 py-2.5 rounded-xl bg-[var(--grad-btn)] text-white text-sm font-semibold flex items-center gap-1.5 hover:opacity-90 transition"
+            className="px-5 py-2.5 rounded-xl bg-[var(--p)] text-white text-sm font-semibold flex items-center gap-1.5 hover:opacity-90 transition"
           >
             {isLast ? "Complete" : "Continue"} <ChevronRight className="w-4 h-4" />
           </button>
@@ -688,11 +650,11 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
               aria-label={`Notes panel for ${lesson.title}`}
             >
               {/* Panel header */}
-              <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)] bg-[var(--bg2)]/80 backdrop-blur">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)] bg-[var(--bg)]">
                 <div className="flex items-center gap-2">
                   <div
                     className="w-7 h-7 rounded-lg flex items-center justify-center text-white"
-                    style={{ background: "var(--grad-btn)" }}
+                    style={{ background: "var(--p)" }}
                   >
                     <NotebookPen style={{ width: 14, height: 14 }} />
                   </div>

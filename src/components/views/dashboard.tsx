@@ -4,10 +4,9 @@ import { useMemo, useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAppStore, usePhaseProgress, useOverallProgress } from "@/lib/store";
 import { PHASES } from "@/lib/types";
-import { ALL_LESSON_IDS, getLessonsForPhase, lessonIdFor } from "@/lib/lessons";
+import { ALL_LESSON_IDS, getLessonsForPhase } from "@/lib/lessons";
 import { ProgressRing } from "@/components/widgets/progress-ring";
-import { WaveformCanvas } from "@/components/widgets/waveform-canvas";
-import { TIPS, CATEGORY_COLORS } from "@/lib/tips";
+import { TIPS } from "@/lib/tips";
 import { DailyChallengeCard } from "@/components/widgets/daily-challenge-card";
 import { RecentLessonsCarousel } from "@/components/widgets/recent-lessons-carousel";
 import { CoachInsights } from "@/components/widgets/coach-insights";
@@ -72,103 +71,58 @@ function TipOfTheDay() {
   const [idx, setIdx] = useState(startIndex);
 
   const tip = TIPS[idx];
-  const color = CATEGORY_COLORS[tip.category];
 
   const handleNext = () => {
     setIdx((i) => (i + 1) % TIPS.length);
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="relative rounded-3xl p-5 overflow-hidden border"
-      style={{
-        background: `linear-gradient(135deg, ${color}26, ${color}11)`,
-        borderColor: `${color}55`,
-      }}
-    >
-      {/* Shimmer sweep on mount */}
-      <motion.div
-        className="absolute inset-y-0 w-1/3 pointer-events-none"
-        initial={{ x: "-150%" }}
-        animate={{ x: "260%" }}
-        transition={{ duration: 1.4, ease: "easeInOut" }}
-        style={{
-          background: `linear-gradient(90deg, transparent, ${color}40, transparent)`,
-        }}
-      />
+    <div className="rounded-xl p-5 bg-[var(--card)] border border-[var(--border)]">
+      {/* Top row: label + category badge */}
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-[10px] uppercase tracking-wider font-mono text-[var(--t3)]">
+          Tip of the Day
+        </span>
+        <span className="text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--t3)]">
+          {tip.category}
+        </span>
+      </div>
 
-      <div className="relative">
-        {/* Top row: label + category badge */}
-        <div className="flex items-center justify-between mb-3">
-          <span
-            className="text-[10px] uppercase tracking-wider font-mono"
-            style={{ color }}
-          >
-            💡 Tip of the Day
-          </span>
-          <span
-            className="text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full"
-            style={{
-              background: `${color}26`,
-              color: color,
-              border: `1px solid ${color}55`,
-            }}
-          >
-            {tip.category}
-          </span>
+      {/* Body: emoji + title/body */}
+      <div className="flex items-start gap-4">
+        <div className="text-3xl shrink-0 leading-none">
+          {tip.emoji}
         </div>
-
-        {/* Body: emoji + title/body */}
-        <div className="flex items-start gap-4">
-          <motion.div
-            initial={{ scale: 0.5, rotate: -15 }}
-            animate={{ scale: 1, rotate: 0 }}
-            transition={{ type: "spring", stiffness: 220, damping: 14 }}
-            className="text-4xl shrink-0 leading-none"
-            style={{ filter: `drop-shadow(0 0 12px ${color}66)` }}
-          >
-            {tip.emoji}
-          </motion.div>
-          <div className="flex-1 min-w-0">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={idx}
-                initial={{ opacity: 0, x: 30 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -30 }}
-                transition={{ duration: 0.3, ease: "easeOut" }}
-              >
-                <div className="font-d text-base font-bold text-[var(--t1)] mb-1">
-                  {tip.title}
-                </div>
-                <div className="text-sm text-[var(--t2)] leading-relaxed">
-                  {tip.body}
-                </div>
-              </motion.div>
-            </AnimatePresence>
-          </div>
-        </div>
-
-        {/* Next tip button */}
-        <div className="flex justify-end mt-3">
-          <motion.button
-            onClick={handleNext}
-            whileHover={{ scale: 1.04 }}
-            whileTap={{ scale: 0.96 }}
-            className="text-xs font-semibold px-3 py-1.5 rounded-full transition"
-            style={{
-              background: `${color}33`,
-              color: color,
-              border: `1px solid ${color}55`,
-            }}
-          >
-            Next tip →
-          </motion.button>
+        <div className="flex-1 min-w-0">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={idx}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <div className="font-d text-base font-bold text-[var(--t1)] mb-1">
+                {tip.title}
+              </div>
+              <div className="text-sm text-[var(--t2)] leading-relaxed">
+                {tip.body}
+              </div>
+            </motion.div>
+          </AnimatePresence>
         </div>
       </div>
-    </motion.div>
+
+      {/* Next tip button */}
+      <div className="flex justify-end mt-3">
+        <button
+          onClick={handleNext}
+          className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-[var(--border)] text-[var(--t2)] hover:bg-[var(--card-h)] hover:text-[var(--t1)] transition"
+        >
+          Next tip →
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -259,10 +213,10 @@ export function DashboardView() {
   }, [lessons]);
 
   const stats = [
-    { icon: "🔥", val: streak, lbl: "Day Streak", color: "#f59e0b", spark: sparklines.streak },
-    { icon: "🎙️", val: `${Math.round(speakingSecondsToday / 60)}m`, lbl: "Speaking Today", color: "#10b981", spark: sparklines.speaking },
-    { icon: "🎯", val: accuracy === null ? "—" : `${accuracy}%`, lbl: "Accuracy", color: "#22d3ee", spark: sparklines.accuracy },
-    { icon: "⚡", val: xp, lbl: "Total XP", color: "#6366f1", spark: sparklines.xp },
+    { icon: "🔥", val: streak, lbl: "Day Streak", spark: sparklines.streak },
+    { icon: "🎙️", val: `${Math.round(speakingSecondsToday / 60)}m`, lbl: "Speaking Today", spark: sparklines.speaking },
+    { icon: "🎯", val: accuracy === null ? "—" : `${accuracy}%`, lbl: "Accuracy", spark: sparklines.accuracy },
+    { icon: "⚡", val: xp, lbl: "Total XP", spark: sparklines.xp },
   ];
 
   // weekly chart data — deterministic, based on actual history
@@ -291,149 +245,39 @@ export function DashboardView() {
   };
 
   return (
-    <div className="space-y-5 relative">
-      {/* Floating gradient orbs */}
-      <div className="absolute top-20 -left-20 w-48 h-48 rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(99,102,241,0.12) 0%, transparent 70%)" }}>
-        <motion.div
-          className="w-full h-full rounded-full"
-          animate={{ x: [0, 15, 0], y: [0, -10, 0], scale: [1, 1.05, 1] }}
-          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-        />
-      </div>
-      <div className="absolute top-72 -right-16 w-56 h-56 rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(34,211,238,0.08) 0%, transparent 70%)" }}>
-        <motion.div
-          className="w-full h-full rounded-full"
-          animate={{ x: [0, -12, 0], y: [0, 12, 0], scale: [1, 1.08, 1] }}
-          transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-        />
-      </div>
-      <div className="absolute top-[500px] left-10 w-40 h-40 rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(139,92,246,0.08) 0%, transparent 70%)" }}>
-        <motion.div
-          className="w-full h-full rounded-full"
-          animate={{ x: [0, 10, 0], y: [0, 8, 0] }}
-          transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
-        />
-      </div>
-
-      {/* Greeting */}
-      <div className="relative">
-        {/* Floating particles behind greeting */}
-        <div className="absolute -top-2 right-0 w-32 h-20 pointer-events-none overflow-hidden">
-          {[0, 1, 2, 3, 4].map((i) => (
-            <motion.span
-              key={i}
-              className="absolute bottom-0 w-1 h-1 rounded-full"
-              style={{
-                left: `${15 + i * 18}%`,
-                background: i % 2 === 0 ? "rgba(99,102,241,0.6)" : "rgba(34,211,238,0.6)",
-                ["--drift-x" as string]: `${(i % 2 === 0 ? 1 : -1) * (8 + i * 4)}px`,
-              }}
-              animate={{
-                y: [0, -60 - i * 8],
-                opacity: [0, 0.8, 0],
-                scale: [1, 0.4],
-              }}
-              transition={{
-                duration: 3.5 + i * 0.4,
-                repeat: Infinity,
-                delay: i * 0.6,
-                ease: "easeOut",
-              }}
-            />
-          ))}
+    <div className="space-y-5">
+      {/* Greeting — clean, no gradients, no particles */}
+      <div>
+        <div className="text-[10px] uppercase tracking-wider text-[var(--t3)] font-mono mb-1.5">
+          {new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
         </div>
-        <motion.div
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="flex items-center gap-2 mb-1.5"
-        >
-          <span className="relative inline-flex">
-            <span className="inline-block w-2 h-2 rounded-full bg-[#10b981]" />
-            <span className="absolute inset-0 w-2 h-2 rounded-full bg-[#10b981] animate-ping opacity-75" />
-          </span>
-          <span className="text-[10px] uppercase tracking-wider text-[var(--t3)] font-mono">
-            AI Coach Active
-          </span>
-          <span className="text-[10px] text-[var(--t3)] font-mono">·</span>
-          <span className="text-[10px] uppercase tracking-wider text-[var(--t3)] font-mono">
-            {new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
-          </span>
-        </motion.div>
-        <motion.h1
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.05 }}
-          className="font-d text-2xl sm:text-3xl font-bold leading-tight"
-        >
-          <motion.span
-            className="animate-gradient-text"
-            style={{
-              backgroundImage: "linear-gradient(120deg, var(--p), var(--p2), var(--p3), var(--p), var(--p2))",
-            }}
-            animate={{ backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"] }}
-            transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-          >
-            {greeting}, {userName}
-          </motion.span>
-          <motion.span
-            className="inline-block ml-1"
-            animate={{ rotate: [0, 14, -8, 14, 0] }}
-            transition={{ duration: 1.6, repeat: Infinity, repeatDelay: 3, ease: "easeInOut" }}
-          >
-            👋
-          </motion.span>
-        </motion.h1>
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, delay: 0.15 }}
-          className="text-sm text-[var(--t2)] mt-0.5"
-        >
+        <h1 className="font-d text-2xl sm:text-3xl font-bold leading-tight text-[var(--t1)]">
+          {greeting}, {userName}
+        </h1>
+        <p className="text-sm text-[var(--t2)] mt-1">
           {overallProg.done === 0
-            ? "Start your first lesson to begin your journey!"
+            ? "Start your first lesson to begin your journey."
             : overallProg.done === ALL_LESSON_IDS.length
-            ? "🎉 You've completed every lesson! Keep practicing."
-            : `You've completed ${overallProg.done} of ${overallProg.total} lessons. Keep going!`}
-        </motion.p>
+            ? "You've completed every lesson. Keep practicing!"
+            : `You've completed ${overallProg.done} of ${overallProg.total} lessons. Keep going.`}
+        </p>
       </div>
 
       {/* Recent / Recommended lessons carousel */}
       <RecentLessonsCarousel />
 
-      {/* Daily Goal */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.05 }}
-        className={`relative rounded-3xl p-5 overflow-hidden border transition-all duration-500 ${
-          goalComplete
-            ? "border-[rgba(16,185,129,0.5)]"
-            : "border-[var(--border)]"
-        }`}
-        style={{
-          background: goalComplete
-            ? "linear-gradient(135deg, rgba(16,185,129,0.15), rgba(34,211,238,0.08))"
-            : "var(--card)",
-        }}
+      {/* Daily Goal — clean card, no glow */}
+      <div
+        className="relative rounded-xl p-5 bg-[var(--card)] border border-[var(--border)] cursor-pointer hover:border-[var(--border2)] transition"
         onClick={() => setShowGoalPicker(true)}
       >
-        {goalComplete && (
-          <div
-            className="absolute inset-0 pointer-events-none"
-            style={{
-              background: "radial-gradient(circle at 50% 50%, rgba(16,185,129,0.15), transparent 70%)",
-              animation: "pulse 2s ease-in-out infinite",
-            }}
-          />
-        )}
-        <div className="relative flex items-center gap-4 cursor-pointer">
+        <div className="flex items-center gap-4">
           <ProgressRing
             pct={goalPct}
             size={72}
             stroke={5}
             label={`${resolvedDailyGoalCompleted}/${dailyGoal}`}
-            gradient={!goalComplete}
+            gradient={false}
           />
           <div className="flex-1 min-w-0">
             <div className="text-[10px] uppercase tracking-wider text-[var(--t3)] font-mono mb-1">
@@ -441,8 +285,8 @@ export function DashboardView() {
             </div>
             <div className="font-d text-base font-bold text-[var(--t1)]">
               {goalComplete
-                ? "🎉 Goal complete! You're on fire!"
-                : `${remaining} more lesson${remaining !== 1 ? "s" : ""} to hit your goal!`}
+                ? "Goal complete"
+                : `${remaining} more lesson${remaining !== 1 ? "s" : ""} to hit your goal`}
             </div>
             <div className="text-xs text-[var(--t3)] mt-0.5">
               Tap to change your daily goal
@@ -457,7 +301,7 @@ export function DashboardView() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="absolute inset-0 z-10 bg-[var(--bg)]/95 backdrop-blur-sm rounded-3xl flex flex-col items-center justify-center p-6"
+              className="absolute inset-0 z-10 bg-[var(--bg)]/95 backdrop-blur-sm rounded-xl flex flex-col items-center justify-center p-6"
               onClick={(e) => {
                 e.stopPropagation();
                 setShowGoalPicker(false);
@@ -475,7 +319,7 @@ export function DashboardView() {
                     e.stopPropagation();
                     setDailyGoal(dailyGoal - 1);
                   }}
-                  className="w-10 h-10 rounded-full bg-[var(--card)] border border-[var(--border)] flex items-center justify-center text-lg font-bold text-[var(--t1)] hover:bg-[var(--card-h)] transition"
+                  className="w-10 h-10 rounded-lg bg-[var(--card)] border border-[var(--border)] flex items-center justify-center text-lg font-bold text-[var(--t1)] hover:bg-[var(--card-h)] transition"
                 >
                   −
                 </button>
@@ -487,10 +331,10 @@ export function DashboardView() {
                         e.stopPropagation();
                         setDailyGoal(n);
                       }}
-                      className={`w-6 h-6 rounded-full text-[10px] font-bold transition ${
+                      className={`w-6 h-6 rounded-md text-[10px] font-bold transition ${
                         n === dailyGoal
-                          ? "bg-[var(--grad-btn)] text-white"
-                          : "bg-[var(--card)] border border-[var(--border)] text-[var(--t3)] hover:border-[var(--p3)]"
+                          ? "bg-[var(--p)] text-[var(--primary-foreground)]"
+                          : "bg-[var(--card)] border border-[var(--border)] text-[var(--t3)] hover:border-[var(--border2)]"
                       }`}
                     >
                       {n}
@@ -502,7 +346,7 @@ export function DashboardView() {
                     e.stopPropagation();
                     setDailyGoal(dailyGoal + 1);
                   }}
-                  className="w-10 h-10 rounded-full bg-[var(--card)] border border-[var(--border)] flex items-center justify-center text-lg font-bold text-[var(--t1)] hover:bg-[var(--card-h)] transition"
+                  className="w-10 h-10 rounded-lg bg-[var(--card)] border border-[var(--border)] flex items-center justify-center text-lg font-bold text-[var(--t1)] hover:bg-[var(--card-h)] transition"
                 >
                   +
                 </button>
@@ -512,44 +356,34 @@ export function DashboardView() {
                   e.stopPropagation();
                   setShowGoalPicker(false);
                 }}
-                className="px-6 py-2 rounded-xl bg-[var(--grad-btn)] text-white text-sm font-semibold"
+                className="px-6 py-2 rounded-xl bg-[var(--p)] text-[var(--primary-foreground)] text-sm font-semibold hover:opacity-80 transition"
               >
                 Done
               </button>
             </motion.div>
           )}
         </AnimatePresence>
-      </motion.div>
+      </div>
 
-      {/* Stats row */}
+      {/* Stats row — clean cards, no colored borders, grayscale sparklines */}
       <div className="grid grid-cols-4 gap-2">
         {stats.map((s, i) => {
           const max = Math.max(...s.spark, 1);
           const total = s.spark.reduce((a: number, b: number) => a + b, 0);
           return (
-            <motion.div
+            <div
               key={s.lbl}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
-              whileHover={{ y: -2, boxShadow: "0 4px 20px rgba(0,0,0,0.3)" }}
-              className="rounded-2xl p-3 bg-[var(--card)] border border-[var(--border)] text-center relative overflow-hidden"
-              style={{ borderLeft: `4px solid ${s.color}` }}
+              className="rounded-xl p-3 bg-[var(--card)] border border-[var(--border)] text-center hover:border-[var(--border2)] transition"
             >
-              {/* Background subtle gradient tint */}
-              <div
-                className="absolute inset-0 opacity-[0.06] pointer-events-none"
-                style={{ background: `linear-gradient(135deg, ${s.color}, transparent)` }}
-              />
-              <div className="relative text-lg mb-0.5">{s.icon}</div>
-              <div className="relative font-d text-base font-bold" style={{ color: s.color }}>
+              <div className="text-lg mb-0.5">{s.icon}</div>
+              <div className="font-d text-base font-bold text-[var(--t1)]">
                 {s.val === "—" ? "—" : <AnimatedStatValue value={s.val} />}
               </div>
-              <div className="relative text-[9px] text-[var(--t3)] uppercase tracking-wider mb-1">
+              <div className="text-[9px] text-[var(--t3)] uppercase tracking-wider mb-1">
                 {s.lbl}
               </div>
-              {/* Mini 7-day sparkline */}
-              <div className="relative flex items-end justify-between gap-px h-3 mt-1">
+              {/* Mini 7-day sparkline — grayscale */}
+              <div className="flex items-end justify-between gap-px h-3 mt-1">
                 {s.spark.map((v: number, si: number) => {
                   const h = total === 0 ? 2 : Math.max(2, (v / max) * 12);
                   const isToday = si === s.spark.length - 1;
@@ -558,9 +392,8 @@ export function DashboardView() {
                       key={si}
                       className="flex-1 rounded-sm"
                       style={{
-                        background: v > 0 ? s.color : "var(--overlay-border-1)",
-                        opacity: v > 0 ? (isToday ? 1 : 0.7) : 1,
-                        boxShadow: isToday && v > 0 ? `0 0 4px ${s.color}88` : "none",
+                        background: v > 0 ? "var(--t1)" : "var(--border)",
+                        opacity: v > 0 ? (isToday ? 1 : 0.4) : 1,
                       }}
                       initial={{ height: 0 }}
                       animate={{ height: h }}
@@ -569,92 +402,63 @@ export function DashboardView() {
                   );
                 })}
               </div>
-            </motion.div>
+            </div>
           );
         })}
       </div>
 
-      {/* Current phase card */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="relative rounded-3xl p-5 overflow-hidden shimmer-sweep"
-        style={{
-          background:
-            "linear-gradient(135deg, rgba(99,102,241,0.18), rgba(139,92,246,0.12), rgba(34,211,238,0.06))",
-          border: "1px solid rgba(99,102,241,0.3)",
-        }}
-      >
-        <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-[radial-gradient(circle,rgba(99,102,241,0.2),transparent_70%)] pointer-events-none" />
-        {/* Shimmer sweep overlay */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-3xl">
-          <motion.div
-            className="absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-white/[0.04] to-transparent"
-            animate={{ x: ["-100%", "300%"] }}
-            transition={{ duration: 3, repeat: Infinity, ease: "easeInOut", repeatDelay: 2 }}
-          />
+      {/* Current phase card — clean, no gradient, no shimmer */}
+      <div className="rounded-xl p-5 bg-[var(--card)] border border-[var(--border)]">
+        <div className="text-[10px] uppercase tracking-wider text-[var(--t3)] font-mono mb-1">
+          Phase {currentPhase + 1} of {PHASES.length}
         </div>
-        <div className="relative">
-          <div className="text-[10px] uppercase tracking-wider text-[var(--t3)] font-mono mb-1">
-            📍 Phase {currentPhase + 1} of {PHASES.length}
-          </div>
-          <div className="font-d text-xl font-bold mb-0.5 flex items-center gap-2">
-            <span>{phase.emoji}</span>
-            <span>{phase.name}</span>
-          </div>
-          <div className="text-sm text-[var(--t2)] mb-4">{phase.desc}</div>
+        <div className="font-d text-xl font-bold mb-0.5 flex items-center gap-2 text-[var(--t1)]">
+          <span>{phase.emoji}</span>
+          <span>{phase.name}</span>
+        </div>
+        <div className="text-sm text-[var(--t2)] mb-4">{phase.desc}</div>
 
-          <div className="flex items-center gap-4">
-            <div className="flex-1">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs text-[var(--t3)]">Progress</span>
-                <span className="text-xs font-mono font-bold text-[var(--t1)]">{phaseProg.pct}%</span>
-              </div>
-              <div className="h-2 rounded-full bg-[var(--overlay-border-1)] overflow-hidden">
-                <motion.div
-                  className="h-full rounded-full bg-[var(--grad-btn)]"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${phaseProg.pct}%` }}
-                  transition={{ duration: 1, ease: "easeOut" }}
-                />
-              </div>
-              <div className="text-[10px] text-[var(--t3)] mt-1.5">
-                {phaseProg.done} of {phaseProg.total} lessons complete
-              </div>
+        <div className="flex items-center gap-4">
+          <div className="flex-1">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs text-[var(--t3)]">Progress</span>
+              <span className="text-xs font-mono font-bold text-[var(--t1)]">{phaseProg.pct}%</span>
             </div>
-            <div className="animate-pulse-glow rounded-full">
-              <ProgressRing pct={phaseProg.pct} size={62} stroke={4} label={`${phaseProg.pct}%`} />
+            <div className="h-1.5 rounded-full bg-[var(--border)] overflow-hidden">
+              <motion.div
+                className="h-full rounded-full bg-[var(--p)]"
+                initial={{ width: 0 }}
+                animate={{ width: `${phaseProg.pct}%` }}
+                transition={{ duration: 1, ease: "easeOut" }}
+              />
+            </div>
+            <div className="text-[10px] text-[var(--t3)] mt-1.5">
+              {phaseProg.done} of {phaseProg.total} lessons complete
             </div>
           </div>
-
-          <button
-            onClick={handleContinue}
-            className="mt-4 w-full py-3 rounded-xl bg-[var(--grad-btn)] text-white font-semibold text-sm flex items-center justify-center gap-2 hover:opacity-90 transition"
-          >
-            {phaseProg.done === 0 ? "Start Phase" : "Continue"}
-            <motion.span
-              animate={{ x: [0, 5, 0] }}
-              transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
-              className="inline-block"
-            >
-              →
-            </motion.span>
-          </button>
+          <ProgressRing pct={phaseProg.pct} size={62} stroke={4} label={`${phaseProg.pct}%`} gradient={false} />
         </div>
-      </motion.div>
 
-      {/* Weekly progress chart */}
+        <button
+          onClick={handleContinue}
+          className="mt-4 w-full py-3 rounded-xl bg-[var(--p)] text-[var(--primary-foreground)] font-semibold text-sm flex items-center justify-center gap-2 hover:opacity-80 transition"
+        >
+          {phaseProg.done === 0 ? "Start Phase" : "Continue"} →
+        </button>
+      </div>
+
+      {/* Weekly progress chart — solid bars, no gradients */}
       <div>
-        <h2 className="font-d text-base font-bold mb-2 flex items-center justify-between">
+        <h2 className="font-d text-base font-bold mb-2 flex items-center justify-between text-[var(--t1)]">
           <span>This Week</span>
-          <span className="text-[10px] text-[#10b981] font-mono font-normal">↑ {overallProg.pct}% overall</span>
+          <span className="text-[10px] text-[var(--t3)] font-mono font-normal">↑ {overallProg.pct}% overall</span>
         </h2>
-        <div className="rounded-2xl p-4 bg-[var(--card)] border border-[var(--border)] relative overflow-hidden">
+        <div className="rounded-xl p-4 bg-[var(--card)] border border-[var(--border)] relative overflow-hidden">
           {/* Background grid lines */}
           <div className="absolute inset-4 pointer-events-none flex flex-col justify-between">
-            <div className="h-px bg-[var(--overlay-border-1)]" />
-            <div className="h-px bg-[var(--overlay-border-1)]" />
-            <div className="h-px bg-[var(--overlay-border-1)]" />
+            <div className="h-px bg-[var(--border)]" />
+            <div className="h-px bg-[var(--border)]" />
+            <div className="h-px bg-[var(--border)]" />
           </div>
           <div className="flex items-end justify-between gap-2 h-28 mb-2 relative">
             {weekData.map((d, i) => (
@@ -667,20 +471,13 @@ export function DashboardView() {
                     className="w-full rounded-t-md relative"
                     style={{
                       background: d.isToday
-                        ? "linear-gradient(180deg, #6366f1, #8b5cf6, #22d3ee)"
+                        ? "var(--p)"
                         : d.score > 0
-                        ? "linear-gradient(180deg, rgba(99,102,241,0.6), rgba(139,92,246,0.3), rgba(99,102,241,0.15))"
-                        : "var(--overlay-1)",
+                        ? "var(--t3)"
+                        : "var(--border)",
                       minHeight: d.score > 0 ? 8 : 2,
                     }}
                   >
-                    {d.isToday && d.score > 0 && (
-                      <motion.div
-                        className="absolute inset-0 rounded-t-md"
-                        animate={{ boxShadow: ["0 0 8px rgba(99,102,241,0.3)", "0 0 18px rgba(99,102,241,0.6), 0 0 30px rgba(139,92,246,0.3)", "0 0 8px rgba(99,102,241,0.3)"] }}
-                        transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                      />
-                    )}
                     {d.score > 0 && (
                       <motion.span
                         initial={{ opacity: 0, y: 5 }}
@@ -693,13 +490,13 @@ export function DashboardView() {
                     )}
                   </motion.div>
                 </div>
-                <span className={`text-[10px] ${d.isToday ? "text-[var(--p3)] font-bold" : "text-[var(--t3)]"}`}>
+                <span className={`text-[10px] ${d.isToday ? "text-[var(--t1)] font-bold" : "text-[var(--t3)]"}`}>
                   {d.day}
                 </span>
               </div>
             ))}
           </div>
-          {/* Average line indicator */}
+          {/* Average line indicator — subtle dashed */}
           {(() => {
             const scores = weekData.filter((d) => d.score > 0).map((d) => d.score);
             if (scores.length === 0) return null;
@@ -708,8 +505,8 @@ export function DashboardView() {
             return (
               <div className="absolute left-4 right-4 pointer-events-none" style={{ bottom: `calc(2rem + ${avgPct}% * 0.78)` }}>
                 <div className="flex items-center gap-2">
-                  <div className="flex-1 border-t border-dashed border-[rgba(245,158,11,0.4)]" />
-                  <span className="text-[8px] font-mono text-[#f59e0b] font-bold bg-[var(--bg)] px-1 rounded">
+                  <div className="flex-1 border-t border-dashed border-[var(--border2)]" />
+                  <span className="text-[8px] font-mono text-[var(--t3)] font-bold bg-[var(--card)] px-1 rounded">
                     avg {avg}
                   </span>
                 </div>
@@ -719,30 +516,27 @@ export function DashboardView() {
         </div>
       </div>
 
-      {/* AI Recommendations */}
+      {/* AI Recommendations — clean card, no colored accents */}
       <div>
-        <h2 className="font-d text-base font-bold mb-2">AI Recommendations</h2>
-        <div className="rounded-2xl p-4 bg-[var(--card)] border border-[var(--border)] space-y-3">
+        <h2 className="font-d text-base font-bold mb-2 text-[var(--t1)]">AI Recommendations</h2>
+        <div className="rounded-xl p-4 bg-[var(--card)] border border-[var(--border)] space-y-3">
           {[
             { icon: "🔊", title: "Practice \"th\" sound", sub: "Foundational for native flow" },
             { icon: "📝", title: "Word stress in multi-syllable words", sub: "Focus on: to-MOR-row, im-POR-tant" },
             { icon: "⚡", title: "Connected speech practice", sub: "Try linking \"want to\" → \"wanna\"" },
           ].map((r, i) => (
-            <motion.div
+            <div
               key={i}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.1 + i * 0.1, duration: 0.3 }}
-              className="flex items-start gap-3 pl-3 border-l-2 border-[rgba(99,102,241,0.4)]"
+              className="flex items-start gap-3"
             >
-              <div className="w-9 h-9 rounded-xl bg-[rgba(99,102,241,0.12)] flex items-center justify-center text-lg shrink-0">
+              <div className="w-9 h-9 rounded-lg bg-[var(--card-h)] flex items-center justify-center text-lg shrink-0">
                 {r.icon}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium text-[var(--t1)]">{r.title}</div>
                 <div className="text-xs text-[var(--t3)]">{r.sub}</div>
               </div>
-            </motion.div>
+            </div>
           ))}
         </div>
       </div>
@@ -752,13 +546,13 @@ export function DashboardView() {
 
       {/* Daily Challenge */}
       <div>
-        <h2 className="font-d text-base font-bold mb-2">Daily Challenge</h2>
+        <h2 className="font-d text-base font-bold mb-2 text-[var(--t1)]">Daily Challenge</h2>
         <DailyChallengeCard />
       </div>
 
       {/* Weak sounds — dynamic, derived from completed lesson scores */}
       <div>
-        <h2 className="font-d text-base font-bold mb-2 flex items-center justify-between">
+        <h2 className="font-d text-base font-bold mb-2 flex items-center justify-between text-[var(--t1)]">
           <span>Your Sound Profile</span>
           {overallProg.done > 0 && (
             <span className="text-[10px] text-[var(--t3)] font-mono font-normal">
@@ -766,7 +560,7 @@ export function DashboardView() {
             </span>
           )}
         </h2>
-        <div className="rounded-2xl p-4 bg-[var(--card)] border border-[var(--border)]">
+        <div className="rounded-xl p-4 bg-[var(--card)] border border-[var(--border)]">
           {(() => {
             // Map each phoneme to the lesson IDs that train it
             const phonemeLessons: Record<string, string[]> = {
@@ -790,17 +584,12 @@ export function DashboardView() {
               const lvl = avg >= 85 ? "green" : avg >= 70 ? "yellow" : "red";
               return { ph, lvl: lvl as "red" | "yellow" | "green", avg, count: relevant.length };
             });
-            const colors = {
-              red: "rgba(239,68,68,0.15)",
-              yellow: "rgba(245,158,11,0.15)",
-              green: "rgba(16,185,129,0.15)",
-              unknown: "var(--overlay-1)",
-            };
+            // Minimal status dot colors (semantic only)
             const dotColors = {
-              red: "#ef4444",
-              yellow: "#f59e0b",
-              green: "#10b981",
-              unknown: "var(--overlay-border-2)",
+              red: "var(--rd)",
+              yellow: "var(--yl)",
+              green: "var(--gr)",
+              unknown: "var(--border2)",
             };
             const labels = {
               red: "Needs work",
@@ -812,22 +601,20 @@ export function DashboardView() {
               <>
                 <div className="grid grid-cols-4 gap-2">
                   {phonemeData.map((s) => (
-                    <motion.div
+                    <div
                       key={s.ph}
-                      whileHover={{ scale: 1.08, boxShadow: "0 0 16px " + dotColors[s.lvl] + "33" }}
-                      className="rounded-xl p-3 text-center cursor-default transition-shadow"
-                      style={{ background: colors[s.lvl] }}
+                      className="rounded-lg p-3 text-center cursor-default border border-[var(--border)] hover:border-[var(--border2)] transition"
                       title={s.avg !== null ? `${s.ph} — ${labels[s.lvl]} (avg ${s.avg}%, ${s.count} lesson${s.count !== 1 ? "s" : ""})` : `${s.ph} — Not started yet`}
                     >
                       <div className={`font-mono text-xl font-bold ${s.lvl === "unknown" ? "text-[var(--t3)]" : "text-[var(--t1)]"}`}>{s.ph}</div>
                       <div
                         className="inline-block w-1.5 h-1.5 rounded-full mt-1"
-                        style={{ background: dotColors[s.lvl], boxShadow: s.lvl !== "unknown" ? `0 0 6px ${dotColors[s.lvl]}66` : "none" }}
+                        style={{ background: dotColors[s.lvl] }}
                       />
                       {s.avg !== null && (
                         <div className="text-[9px] text-[var(--t3)] mt-1 font-mono">{s.avg}%</div>
                       )}
-                    </motion.div>
+                    </div>
                   ))}
                 </div>
                 {overallProg.done === 0 && (
@@ -844,25 +631,23 @@ export function DashboardView() {
       {/* Coach Insights — AI-powered personalized practice plan */}
       <CoachInsights />
 
-      {/* Quick actions */}
+      {/* Quick actions — clean ghost buttons */}
       <div>
-        <h2 className="font-d text-base font-bold mb-2">Quick Actions</h2>
+        <h2 className="font-d text-base font-bold mb-2 text-[var(--t1)]">Quick Actions</h2>
         <div className="grid grid-cols-3 gap-2">
           {[
             { icon: "📚", lbl: "Continue", tab: "journey" as const },
             { icon: "🎙️", lbl: "Practice", tab: "practice" as const },
             { icon: "📈", lbl: "Progress", tab: "progress" as const },
           ].map((a) => (
-            <motion.button
+            <button
               key={a.lbl}
               onClick={() => setActiveTab(a.tab)}
-              whileHover={{ scale: 1.02, boxShadow: "0 0 20px rgba(99,102,241,0.15)" }}
-              whileTap={{ scale: 0.98 }}
-              className="rounded-2xl p-4 bg-[var(--card)] border border-[var(--border)] hover:border-[var(--p3)] hover:bg-[var(--card-h)] transition text-center"
+              className="rounded-xl p-4 bg-[var(--card)] border border-[var(--border)] hover:border-[var(--border2)] hover:bg-[var(--card-h)] transition text-center"
             >
               <div className="text-2xl mb-1">{a.icon}</div>
               <div className="text-xs font-medium text-[var(--t2)]">{a.lbl}</div>
-            </motion.button>
+            </button>
           ))}
         </div>
       </div>

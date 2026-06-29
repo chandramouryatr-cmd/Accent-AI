@@ -4,104 +4,137 @@
 @custom-variant light (&:is(.light *));
 @custom-variant dark (&:is(.dark *));
 
-/* ─── AccentAI Design Tokens ─── */
+/* ─── AccentAI Design Tokens — WHITE/BLACK MINIMAL ───
+   Default (:root) = LIGHT theme — pure white surfaces, near-black text/buttons.
+   `.dark` = optional DARK theme — black surfaces, white text/buttons.
+   No neon glows. Subtle shadows. Clean lines. Occasional muted accent colors. */
+
 :root {
-  --bg: #07070f;
-  --bg2: #0c0c1a;
-  --bg3: #111128;
-  --card: rgba(255, 255, 255, 0.04);
-  --card-h: rgba(255, 255, 255, 0.07);
-  --border: rgba(255, 255, 255, 0.08);
-  --border2: rgba(255, 255, 255, 0.14);
-  --t1: #f0efff;
-  --t2: rgba(240, 239, 255, 0.62);
-  --t3: rgba(240, 239, 255, 0.32);
-  --p: #6366f1;
-  --p2: #8b5cf6;
-  --p3: #a78bfa;
-  --c: #22d3ee;
-  --c2: #67e8f9;
-  --gr: #10b981;
-  --yl: #f59e0b;
-  --rd: #ef4444;
-  --og: #f97316;
-  --grad: linear-gradient(135deg, #6366f1, #8b5cf6 50%, #22d3ee);
-  --grad-btn: linear-gradient(135deg, #6366f1, #8b5cf6);
-  --shadow: 0 4px 32px rgba(0, 0, 0, 0.6);
-  --glow: 0 0 60px rgba(99, 102, 241, 0.18);
-  --r: 20px;
-  --r2: 14px;
-  --r3: 10px;
+  /* ── Surfaces ── */
+  --bg: #ffffff;        /* pure white */
+  --bg2: #fafafa;       /* off-white secondary */
+  --bg3: #f4f4f5;       /* light gray tertiary */
+  --card: #ffffff;      /* white cards */
+  --card-h: #f4f4f5;    /* card hover */
+  --border: #e5e5e5;    /* light gray borders */
+  --border2: #d4d4d4;   /* slightly darker */
 
-  /* shadcn compat */
+  /* ── Text ── */
+  --t1: #0a0a0a;        /* near-black primary */
+  --t2: #525252;        /* medium gray secondary */
+  --t3: #a3a3a3;        /* light gray tertiary */
+
+  /* ── Primary (black — for CTAs / accents) ── */
+  --p: #18181b;         /* PRIMARY near-black */
+  --p2: #27272a;
+  --p3: #3f3f46;
+
+  /* ── Muted accent colors (used only when necessary) ── */
+  --c: #0891b2;         /* muted cyan */
+  --c2: #06b6d4;
+  --gr: #059669;        /* muted green */
+  --yl: #d97706;        /* muted amber */
+  --rd: #dc2626;        /* muted red */
+  --og: #ea580c;        /* muted orange */
+
+  /* ── Gradients & effects (minimal) ── */
+  --grad: linear-gradient(135deg, #18181b, #3f3f46);
+  --grad-btn: #18181b;  /* solid black button — no gradient */
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --glow: none;         /* no glow — minimalism */
+
+  /* ── Radii (slightly tighter for cleaner look) ── */
+  --r: 16px;
+  --r2: 12px;
+  --r3: 8px;
+
+  /* ── shadcn compat ── */
   --radius: 0.75rem;
-  --background: #07070f;
-  --foreground: #f0efff;
-  --card-bg: #0c0c1a;
-  --card-fg: #f0efff;
-  --popover: #0c0c1a;
-  --popover-foreground: #f0efff;
-  --primary: #6366f1;
+  --background: #ffffff;
+  --foreground: #0a0a0a;
+  --card-bg: #ffffff;
+  --card-fg: #0a0a0a;
+  --popover: #ffffff;
+  --popover-foreground: #0a0a0a;
+  --primary: #18181b;
   --primary-foreground: #ffffff;
-  --secondary: #111128;
-  --secondary-foreground: #f0efff;
-  --muted: #111128;
-  --muted-foreground: rgba(240, 239, 255, 0.55);
-  --accent: #6366f1;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #18181b;
+  --muted: #f4f4f5;
+  --muted-foreground: #525252;
+  --accent: #18181b;
   --accent-foreground: #ffffff;
-  --destructive: #ef4444;
+  --destructive: #dc2626;
   --destructive-foreground: #ffffff;
-  --border-c: rgba(255, 255, 255, 0.08);
-  --input: rgba(255, 255, 255, 0.08);
-  --ring: #6366f1;
+  --border-c: #e5e5e5;
+  --input: #e5e5e5;
+  --ring: #18181b;
 
-  /* Dark-theme-adaptive overlays (same as original hardcoded values) */
-  --overlay-1: rgba(255, 255, 255, 0.04);
-  --overlay-2: rgba(255, 255, 255, 0.07);
-  --overlay-3: rgba(255, 255, 255, 0.10);
-  --overlay-border-1: rgba(255, 255, 255, 0.08);
-  --overlay-border-2: rgba(255, 255, 255, 0.14);
-  --shadow-color: rgba(0, 0, 0, 0.6);
+  /* ── Overlays (light — subtle dark tints) ── */
+  --overlay-1: rgba(0, 0, 0, 0.02);
+  --overlay-2: rgba(0, 0, 0, 0.04);
+  --overlay-3: rgba(0, 0, 0, 0.06);
+  --overlay-border-1: #e5e5e5;
+  --overlay-border-2: #d4d4d4;
+  --shadow-color: rgba(0, 0, 0, 0.08);
 }
 
-.light {
-  --bg: #f4f4fc;
-  --bg2: #eceef8;
-  --bg3: #e2e4f0;
-  --card: rgba(99, 102, 241, 0.04);
-  --card-h: rgba(99, 102, 241, 0.08);
-  --border: rgba(99, 102, 241, 0.14);
-  --border2: rgba(99, 102, 241, 0.22);
-  --t1: #1a1a2e;
-  --t2: rgba(26, 26, 46, 0.65);
-  --t3: rgba(26, 26, 46, 0.42);
-  --shadow: 0 4px 24px rgba(99, 102, 241, 0.08);
-  --glow: 0 0 60px rgba(99, 102, 241, 0.12);
+/* ── DARK theme (alternative — pure black & white, monochrome) ── */
+.dark {
+  --bg: #0a0a0a;
+  --bg2: #141414;
+  --bg3: #1c1c1c;
+  --card: #141414;
+  --card-h: #1c1c1c;
+  --border: #262626;
+  --border2: #333333;
 
-  --background: #f4f4fc;
-  --foreground: #1a1a2e;
-  --card-bg: #ffffff;
-  --card-fg: #1a1a2e;
-  --popover: #ffffff;
-  --popover-foreground: #1a1a2e;
-  --primary: #6366f1;
-  --primary-foreground: #ffffff;
-  --secondary: #eceef8;
-  --secondary-foreground: #1a1a2e;
-  --muted: #eceef8;
-  --muted-foreground: rgba(26, 26, 46, 0.55);
-  --accent: #6366f1;
-  --accent-foreground: #ffffff;
-  --border-c: rgba(99, 102, 241, 0.14);
-  --input: rgba(99, 102, 241, 0.14);
+  --t1: #fafafa;
+  --t2: #a3a3a3;
+  --t3: #737373;
 
-  /* Light-theme-adaptive overlays (replace hardcoded rgba(255,255,255,...)) */
-  --overlay-1: rgba(99, 102, 241, 0.06);   /* replaces rgba(255,255,255,0.04) */
-  --overlay-2: rgba(99, 102, 241, 0.10);   /* replaces rgba(255,255,255,0.07) */
-  --overlay-3: rgba(99, 102, 241, 0.14);   /* replaces rgba(255,255,255,0.10) */
-  --overlay-border-1: rgba(99, 102, 241, 0.10);  /* replaces rgba(255,255,255,0.08) */
-  --overlay-border-2: rgba(99, 102, 241, 0.18);  /* replaces rgba(255,255,255,0.14) */
-  --shadow-color: rgba(99, 102, 241, 0.10);
+  --p: #fafafa;         /* white as primary in dark mode */
+  --p2: #e5e5e5;
+  --p3: #d4d4d4;
+
+  --c: #22d3ee;
+  --c2: #67e8f9;
+  --gr: #34d399;
+  --yl: #fbbf24;
+  --rd: #f87171;
+  --og: #fb923c;
+
+  --grad: linear-gradient(135deg, #fafafa, #a3a3a3);
+  --grad-btn: #fafafa;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --glow: none;
+
+  --background: #0a0a0a;
+  --foreground: #fafafa;
+  --card-bg: #141414;
+  --card-fg: #fafafa;
+  --popover: #141414;
+  --popover-foreground: #fafafa;
+  --primary: #fafafa;
+  --primary-foreground: #0a0a0a;
+  --secondary: #1c1c1c;
+  --secondary-foreground: #fafafa;
+  --muted: #1c1c1c;
+  --muted-foreground: #a3a3a3;
+  --accent: #fafafa;
+  --accent-foreground: #0a0a0a;
+  --destructive: #f87171;
+  --destructive-foreground: #0a0a0a;
+  --border-c: #262626;
+  --input: #262626;
+  --ring: #fafafa;
+
+  --overlay-1: rgba(255, 255, 255, 0.04);
+  --overlay-2: rgba(255, 255, 255, 0.06);
+  --overlay-3: rgba(255, 255, 255, 0.08);
+  --overlay-border-1: #262626;
+  --overlay-border-2: #404040;
+  --shadow-color: rgba(0, 0, 0, 0.5);
 }
 
 @theme inline {
@@ -168,6 +201,8 @@
 }
 
 /* ─── Utility classes ─── */
+
+/* Gradient text — subtle dark gradient on light, light gradient on dark */
 .grad-text {
   background: var(--grad);
   -webkit-background-clip: text;
@@ -176,11 +211,10 @@
   color: transparent;
 }
 
+/* Glass — simplified: solid card bg + border, no heavy blur */
 .glass {
   background: var(--card);
   border: 1px solid var(--border);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
 }
 
 .no-scrollbar::-webkit-scrollbar {
@@ -191,30 +225,33 @@
   scrollbar-width: none;
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar — minimal, gray */
 *::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 *::-webkit-scrollbar-track {
   background: transparent;
 }
 *::-webkit-scrollbar-thumb {
-  background: rgba(99, 102, 241, 0.3);
+  background: var(--border2);
   border-radius: 4px;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: rgba(99, 102, 241, 0.5);
+  background: var(--t3);
 }
 
-/* ─── Animations ─── */
+/* ─── Animations ───
+   Kept subtle: float-slow, shimmer, confetti-fall, scale-bounce, slide-up,
+                ring-fill, pulse-ring, mouth-open, wave-bar, fade-in.
+   Neutralized: pulse-glow, red-pulse-glow, border-pulse-cyan, node-glow,
+                gold-glow, pill-glow-*, gradient-ring-spin, pulse-glow-ring.
+                (Keyframe names retained so component className refs still work,
+                 but effects are now subtle border/shadow changes — no neon.) */
+
 @keyframes float-slow {
   0%, 100% { transform: translateY(0) rotate(0deg); }
   50% { transform: translateY(-12px) rotate(2deg); }
-}
-@keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 20px rgba(99, 102, 241, 0.3); }
-  50% { box-shadow: 0 0 40px rgba(99, 102, 241, 0.6); }
 }
 @keyframes shimmer {
   0% { background-position: -200% 0; }
@@ -238,9 +275,9 @@
   to { stroke-dashoffset: var(--to, 0); }
 }
 @keyframes pulse-ring {
-  0% { transform: scale(0.95); opacity: 0.7; }
-  50% { transform: scale(1.05); opacity: 0.3; }
-  100% { transform: scale(0.95); opacity: 0.7; }
+  0% { transform: scale(0.95); opacity: 0.5; }
+  50% { transform: scale(1.05); opacity: 0.2; }
+  100% { transform: scale(0.95); opacity: 0.5; }
 }
 @keyframes mouth-open {
   0%, 100% { transform: scaleY(0.4); }
@@ -255,59 +292,47 @@
   to { opacity: 1; }
 }
 
-.animate-float-slow { animation: float-slow 6s ease-in-out infinite; }
-.animate-pulse-glow { animation: pulse-glow 2.5s ease-in-out infinite; }
-.animate-scale-bounce { animation: scale-bounce 0.4s cubic-bezier(.34,1.56,.64,1); }
-.animate-slide-up { animation: slide-up 0.5s cubic-bezier(.4,0,.2,1); }
-.animate-fade-in { animation: fade-in 0.4s ease-out; }
-.animate-pulse-ring { animation: pulse-ring 2s ease-in-out infinite; }
-
-.shimmer-bg {
-  background: linear-gradient(90deg, transparent, rgba(99,102,241,0.15), transparent);
-  background-size: 200% 100%;
-  animation: shimmer 2s linear infinite;
-}
-
-/* ─── Additional AccentAI Animations ─── */
-@keyframes draw-line {
-  from { height: 0; }
-  to { height: 100%; }
-}
-@keyframes golden-shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+/* ── Neutralized glow animations (kept for className compatibility) ── */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: var(--shadow); }
+  50% { box-shadow: var(--shadow), 0 0 0 1px var(--border2); }
 }
 @keyframes red-pulse-glow {
-  0%, 100% { box-shadow: 0 0 15px rgba(239, 68, 68, 0.4); }
-  50% { box-shadow: 0 0 35px rgba(239, 68, 68, 0.7), 0 0 60px rgba(239, 68, 68, 0.3); }
+  0%, 100% { box-shadow: var(--shadow); }
+  50% { box-shadow: var(--shadow), 0 0 0 1px var(--rd); }
 }
 @keyframes border-pulse-cyan {
-  0%, 100% { border-color: rgba(34, 211, 238, 0.3); box-shadow: 0 0 10px rgba(34, 211, 238, 0.1); }
-  50% { border-color: rgba(34, 211, 238, 0.7); box-shadow: 0 0 25px rgba(34, 211, 238, 0.25); }
+  0%, 100% { border-color: var(--border); }
+  50% { border-color: var(--border2); }
 }
-@keyframes float-badge {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
+@keyframes node-glow {
+  0%, 100% { box-shadow: var(--shadow); }
+  50% { box-shadow: var(--shadow), 0 0 0 1px var(--border2); }
+}
+@keyframes gold-glow {
+  0%, 100% { box-shadow: var(--shadow); }
+  50% { box-shadow: var(--shadow), 0 0 0 1px var(--yl); }
+}
+@keyframes pill-glow-amber {
+  0%, 100% { box-shadow: none; }
+  50% { box-shadow: 0 0 0 1px rgba(217, 119, 6, 0.25); }
+}
+@keyframes pill-glow-violet {
+  0%, 100% { box-shadow: none; }
+  50% { box-shadow: 0 0 0 1px var(--border2); }
 }
 @keyframes gradient-ring-spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
-@keyframes node-glow {
-  0%, 100% { box-shadow: 0 0 8px rgba(99, 102, 241, 0.4); }
-  50% { box-shadow: 0 0 18px rgba(99, 102, 241, 0.7), 0 0 30px rgba(34, 211, 238, 0.3); }
+@keyframes pulse-glow-ring {
+  0%, 100% { box-shadow: var(--shadow); }
+  50% { box-shadow: var(--shadow), 0 0 0 1px var(--border2); }
 }
-@keyframes gold-glow {
-  0%, 100% { box-shadow: 0 0 8px rgba(245, 158, 11, 0.3); }
-  50% { box-shadow: 0 0 20px rgba(245, 158, 11, 0.6), 0 0 35px rgba(245, 158, 11, 0.2); }
-}
-@keyframes pill-glow-amber {
-  0%, 100% { box-shadow: 0 0 8px rgba(245, 158, 11, 0.15); }
-  50% { box-shadow: 0 0 16px rgba(245, 158, 11, 0.35); }
-}
-@keyframes pill-glow-violet {
-  0%, 100% { box-shadow: 0 0 8px rgba(167, 139, 250, 0.15); }
-  50% { box-shadow: 0 0 16px rgba(167, 139, 250, 0.35); }
+
+@keyframes float-badge {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
 }
 @keyframes celebrate-bounce {
   0% { transform: scale(0.5); opacity: 0; }
@@ -318,6 +343,28 @@
 @keyframes shimmer-sweep {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(200%); }
+}
+@keyframes draw-line {
+  from { height: 0; }
+  to { height: 100%; }
+}
+@keyframes golden-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* ── Animation utility classes ── */
+.animate-float-slow { animation: float-slow 6s ease-in-out infinite; }
+.animate-pulse-glow { animation: pulse-glow 2.5s ease-in-out infinite; }
+.animate-scale-bounce { animation: scale-bounce 0.4s cubic-bezier(.34,1.56,.64,1); }
+.animate-slide-up { animation: slide-up 0.5s cubic-bezier(.4,0,.2,1); }
+.animate-fade-in { animation: fade-in 0.4s ease-out; }
+.animate-pulse-ring { animation: pulse-ring 2s ease-in-out infinite; }
+
+.shimmer-bg {
+  background: linear-gradient(90deg, transparent, var(--overlay-2), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 2s linear infinite;
 }
 
 .animate-draw-line { animation: draw-line 1.2s ease-out forwards; }
@@ -332,7 +379,7 @@
 .animate-celebrate { animation: celebrate-bounce 0.5s cubic-bezier(.34,1.56,.64,1); }
 
 .golden-shimmer-bg {
-  background: linear-gradient(90deg, transparent, rgba(245,158,11,0.25), transparent);
+  background: linear-gradient(90deg, transparent, rgba(217, 119, 6, 0.12), transparent);
   background-size: 200% 100%;
   animation: golden-shimmer 2.5s linear infinite;
 }
@@ -341,7 +388,7 @@
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+  background: linear-gradient(90deg, transparent, var(--overlay-2), transparent);
   animation: shimmer-sweep 3s ease-in-out infinite;
   pointer-events: none;
   border-radius: inherit;
@@ -362,28 +409,11 @@
 .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
 .scrollbar-none::-webkit-scrollbar { display: none; }
 
-/* Glass card effect */
+/* Glass card effect — simplified to solid bg + border (no blur) */
 .glass-card {
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--card);
+  border: 1px solid var(--border);
 }
-
-/* Gradient text */
-.grad-text {
-  background: var(--grad);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-/* Pulse glow ring */
-@keyframes pulse-glow-ring {
-  0%, 100% { box-shadow: 0 0 8px rgba(99, 102, 241, 0.3); }
-  50% { box-shadow: 0 0 20px rgba(99, 102, 241, 0.6), 0 0 40px rgba(139, 92, 246, 0.2); }
-}
-.animate-pulse-glow { animation: pulse-glow-ring 2s ease-in-out infinite; }
 
 /* Floating animation */
 @keyframes gentle-float {
@@ -392,9 +422,9 @@
 }
 .animate-gentle-float { animation: gentle-float 3s ease-in-out infinite; }
 
-/* ─── Round 8: New styling polish animations ─── */
+/* ─── Polish animations ─── */
 
-/* Animated gradient text — shifts hue + position slowly */
+/* Animated gradient text — subtle shift */
 @keyframes gradient-text-flow {
   0% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }
@@ -412,7 +442,7 @@
 /* Soft floating particle — drifts upward + fades */
 @keyframes particle-drift-up {
   0% { transform: translateY(0) translateX(0) scale(1); opacity: 0; }
-  20% { opacity: 0.6; }
+  20% { opacity: 0.4; }
   100% { transform: translateY(-80px) translateX(var(--drift-x, 12px)) scale(0.4); opacity: 0; }
 }
 .animate-particle-drift { animation: particle-drift-up 4s ease-out infinite; }
@@ -425,11 +455,11 @@
 }
 .animate-step-pop { animation: step-pop-in 0.4s cubic-bezier(.34,1.4,.64,1) both; }
 
-/* Achievement glow burst — radial pulse on unlock */
+/* Achievement burst — subtle ring expand */
 @keyframes achievement-burst {
-  0% { transform: scale(0.6); opacity: 0; box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.8); }
-  40% { transform: scale(1.05); opacity: 1; box-shadow: 0 0 0 16px rgba(251, 191, 36, 0); }
-  100% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 0 rgba(251, 191, 36, 0); }
+  0% { transform: scale(0.6); opacity: 0; box-shadow: 0 0 0 0 rgba(217, 119, 6, 0.4); }
+  40% { transform: scale(1.05); opacity: 1; box-shadow: 0 0 0 8px rgba(217, 119, 6, 0); }
+  100% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 0 rgba(217, 119, 6, 0); }
 }
 .animate-achievement-burst { animation: achievement-burst 0.8s cubic-bezier(.34,1.56,.64,1) both; }
 
@@ -443,10 +473,10 @@
 }
 .animate-wiggle { animation: wiggle-attention 0.6s ease-in-out; }
 
-/* Glow border breathe — slow inhale/exhale */
+/* Glow border breathe — subtle, no neon (uses --border) */
 @keyframes glow-breathe {
-  0%, 100% { box-shadow: 0 0 0 1px var(--border), 0 0 20px -8px var(--p); }
-  50% { box-shadow: 0 0 0 1px var(--p), 0 0 30px -4px var(--p); }
+  0%, 100% { box-shadow: 0 0 0 1px var(--border); }
+  50% { box-shadow: 0 0 0 1px var(--border2), var(--shadow); }
 }
 .animate-glow-breathe { animation: glow-breathe 3s ease-in-out infinite; }
 
@@ -459,7 +489,7 @@
 
 /* Sound wave ripple — radiating circles */
 @keyframes sound-ripple {
-  0% { transform: scale(0.8); opacity: 0.8; }
+  0% { transform: scale(0.8); opacity: 0.5; }
   100% { transform: scale(2.4); opacity: 0; }
 }
 .animate-sound-ripple { animation: sound-ripple 1.6s ease-out infinite; }
