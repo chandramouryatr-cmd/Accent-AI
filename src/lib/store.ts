@@ -36,6 +36,9 @@ export interface AppState {
   // bookmarks
   bookmarkedLessons: string[]; // array of lesson IDs
 
+  // practice calendar (date string -> lesson completions that day)
+  practiceCalendar: Record<string, number>;
+
   // ui
   activeTab: "dashboard" | "journey" | "practice" | "progress" | "more";
   activeLessonId: string | null;
@@ -83,6 +86,7 @@ export const useAppStore = create<AppState>()(
       dailyGoalDate: todayStr(),
 
       bookmarkedLessons: [],
+      practiceCalendar: {},
 
       activeTab: "dashboard",
       activeLessonId: null,
@@ -132,6 +136,12 @@ export const useAppStore = create<AppState>()(
           goalCompleted = state.dailyGoalCompleted + 1;
         }
 
+        // practice calendar — increment today's count on first-time completion
+        const nextPracticeCalendar = { ...state.practiceCalendar };
+        if (isFirstTime) {
+          nextPracticeCalendar[today] = (nextPracticeCalendar[today] || 0) + 1;
+        }
+
         set({
           lessons: {
             ...state.lessons,
@@ -153,6 +163,7 @@ export const useAppStore = create<AppState>()(
           ].slice(0, 50),
           dailyGoalDate: goalDate,
           dailyGoalCompleted: goalCompleted,
+          practiceCalendar: nextPracticeCalendar,
         });
       },
 
@@ -226,6 +237,7 @@ export const useAppStore = create<AppState>()(
           dailyGoalCompleted: 0,
           dailyGoalDate: todayStr(),
           bookmarkedLessons: [],
+          practiceCalendar: {},
           activeLessonId: null,
           expandedPhase: null,
           activeTab: "dashboard",
@@ -250,6 +262,7 @@ export const useAppStore = create<AppState>()(
         dailyGoalCompleted: s.dailyGoalCompleted,
         dailyGoalDate: s.dailyGoalDate,
         bookmarkedLessons: s.bookmarkedLessons,
+        practiceCalendar: s.practiceCalendar,
       }),
     }
   )

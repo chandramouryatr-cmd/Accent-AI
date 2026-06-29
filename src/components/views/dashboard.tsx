@@ -7,9 +7,125 @@ import { PHASES } from "@/lib/types";
 import { ALL_LESSON_IDS, getLessonsForPhase, lessonIdFor } from "@/lib/lessons";
 import { ProgressRing } from "@/components/widgets/progress-ring";
 import { WaveformCanvas } from "@/components/widgets/waveform-canvas";
+import { TIPS, CATEGORY_COLORS } from "@/lib/tips";
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
+}
+
+// ─── Tip of the Day ───────────────────────────────────────────────────────
+function dayOfYearTipIndex(): number {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 0);
+  const dayOfYear = Math.floor(
+    (now.getTime() - start.getTime()) / 86400000
+  );
+  return dayOfYear % TIPS.length;
+}
+
+function TipOfTheDay() {
+  const startIndex = useMemo(() => dayOfYearTipIndex(), []);
+  const [idx, setIdx] = useState(startIndex);
+
+  const tip = TIPS[idx];
+  const color = CATEGORY_COLORS[tip.category];
+
+  const handleNext = () => {
+    setIdx((i) => (i + 1) % TIPS.length);
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="relative rounded-3xl p-5 overflow-hidden border"
+      style={{
+        background: `linear-gradient(135deg, ${color}26, ${color}11)`,
+        borderColor: `${color}55`,
+      }}
+    >
+      {/* Shimmer sweep on mount */}
+      <motion.div
+        className="absolute inset-y-0 w-1/3 pointer-events-none"
+        initial={{ x: "-150%" }}
+        animate={{ x: "260%" }}
+        transition={{ duration: 1.4, ease: "easeInOut" }}
+        style={{
+          background: `linear-gradient(90deg, transparent, ${color}40, transparent)`,
+        }}
+      />
+
+      <div className="relative">
+        {/* Top row: label + category badge */}
+        <div className="flex items-center justify-between mb-3">
+          <span
+            className="text-[10px] uppercase tracking-wider font-mono"
+            style={{ color }}
+          >
+            💡 Tip of the Day
+          </span>
+          <span
+            className="text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full"
+            style={{
+              background: `${color}26`,
+              color: color,
+              border: `1px solid ${color}55`,
+            }}
+          >
+            {tip.category}
+          </span>
+        </div>
+
+        {/* Body: emoji + title/body */}
+        <div className="flex items-start gap-4">
+          <motion.div
+            initial={{ scale: 0.5, rotate: -15 }}
+            animate={{ scale: 1, rotate: 0 }}
+            transition={{ type: "spring", stiffness: 220, damping: 14 }}
+            className="text-4xl shrink-0 leading-none"
+            style={{ filter: `drop-shadow(0 0 12px ${color}66)` }}
+          >
+            {tip.emoji}
+          </motion.div>
+          <div className="flex-1 min-w-0">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={idx}
+                initial={{ opacity: 0, x: 30 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -30 }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
+              >
+                <div className="font-d text-base font-bold text-[var(--t1)] mb-1">
+                  {tip.title}
+                </div>
+                <div className="text-sm text-[var(--t2)] leading-relaxed">
+                  {tip.body}
+                </div>
+              </motion.div>
+            </AnimatePresence>
+          </div>
+        </div>
+
+        {/* Next tip button */}
+        <div className="flex justify-end mt-3">
+          <motion.button
+            onClick={handleNext}
+            whileHover={{ scale: 1.04 }}
+            whileTap={{ scale: 0.96 }}
+            className="text-xs font-semibold px-3 py-1.5 rounded-full transition"
+            style={{
+              background: `${color}33`,
+              color: color,
+              border: `1px solid ${color}55`,
+            }}
+          >
+            Next tip →
+          </motion.button>
+        </div>
+      </div>
+    </motion.div>
+  );
 }
 
 export function DashboardView() {
@@ -416,47 +532,91 @@ export function DashboardView() {
         </div>
       </div>
 
-      {/* Weak sounds */}
+      {/* Tip of the Day */}
+      <TipOfTheDay />
+
+      {/* Weak sounds — dynamic, derived from completed lesson scores */}
       <div>
-        <h2 className="font-d text-base font-bold mb-2">Your Sound Profile</h2>
+        <h2 className="font-d text-base font-bold mb-2 flex items-center justify-between">
+          <span>Your Sound Profile</span>
+          {overallProg.done > 0 && (
+            <span className="text-[10px] text-[var(--t3)] font-mono font-normal">
+              Based on {overallProg.done} lesson{overallProg.done !== 1 ? "s" : ""}
+            </span>
+          )}
+        </h2>
         <div className="rounded-2xl p-4 bg-[var(--card)] border border-[var(--border)]">
-          <div className="grid grid-cols-4 gap-2">
-            {[
-              { ph: "ð", lvl: "red" },
-              { ph: "θ", lvl: "red" },
-              { ph: "æ", lvl: "yellow" },
-              { ph: "ŋ", lvl: "yellow" },
-              { ph: "ɪ", lvl: "green" },
-              { ph: "ʊ", lvl: "yellow" },
-              { ph: "ɜː", lvl: "green" },
-              { ph: "ʒ", lvl: "red" },
-            ].map((s) => {
-              const colors = {
-                red: "rgba(239,68,68,0.15)",
-                yellow: "rgba(245,158,11,0.15)",
-                green: "rgba(16,185,129,0.15)",
-              };
-              const dotColors = {
-                red: "#ef4444",
-                yellow: "#f59e0b",
-                green: "#10b981",
-              };
-              return (
-                <motion.div
-                  key={s.ph}
-                  whileHover={{ scale: 1.08, boxShadow: "0 0 16px " + dotColors[s.lvl as keyof typeof dotColors] + "33" }}
-                  className="rounded-xl p-3 text-center cursor-default transition-shadow"
-                  style={{ background: colors[s.lvl as keyof typeof colors] }}
-                >
-                  <div className="font-mono text-xl font-bold text-[var(--t1)]">{s.ph}</div>
-                  <div
-                    className="inline-block w-1.5 h-1.5 rounded-full mt-1"
-                    style={{ background: dotColors[s.lvl as keyof typeof dotColors], boxShadow: `0 0 6px ${dotColors[s.lvl as keyof typeof dotColors]}66` }}
-                  />
-                </motion.div>
-              );
-            })}
-          </div>
+          {(() => {
+            // Map each phoneme to the lesson IDs that train it
+            const phonemeLessons: Record<string, string[]> = {
+              "ð": ["p1l2", "p1l3", "p1l4"],   // voiced th — consonant clusters, mouth positioning, listening
+              "θ": ["p1l2", "p1l3", "p1l4"],   // voiceless th
+              "æ": ["p1l1", "p1l4", "p2l1"],   // trap vowel — vowel sounds, listening, core words
+              "ŋ": ["p1l2", "p2l1", "p2l3"],   // ng — consonants, core words, silent letters
+              "ɪ": ["p1l1", "p2l1", "p2l4"],   // short i — vowels, core words, drills
+              "ʊ": ["p1l1", "p2l1", "p2l4"],   // short u
+              "ɜː": ["p1l1", "p2l1", "p5l2"],  // er sound — vowels, core words, reduced vowels
+              "ʒ": ["p1l2", "p2l1", "p5l3"],   // zh — consonants, core words, elision
+            };
+            const phonemeData = Object.entries(phonemeLessons).map(([ph, lessonIds]) => {
+              const relevant = lessonIds
+                .map((id) => lessons[id])
+                .filter((l) => l?.completed);
+              if (relevant.length === 0) {
+                return { ph, lvl: "unknown" as const, avg: null, count: 0 };
+              }
+              const avg = Math.round(relevant.reduce((s, l) => s + l.score, 0) / relevant.length);
+              const lvl = avg >= 85 ? "green" : avg >= 70 ? "yellow" : "red";
+              return { ph, lvl: lvl as "red" | "yellow" | "green", avg, count: relevant.length };
+            });
+            const colors = {
+              red: "rgba(239,68,68,0.15)",
+              yellow: "rgba(245,158,11,0.15)",
+              green: "rgba(16,185,129,0.15)",
+              unknown: "rgba(255,255,255,0.03)",
+            };
+            const dotColors = {
+              red: "#ef4444",
+              yellow: "#f59e0b",
+              green: "#10b981",
+              unknown: "rgba(255,255,255,0.2)",
+            };
+            const labels = {
+              red: "Needs work",
+              yellow: "Progressing",
+              green: "Mastered",
+              unknown: "Not started",
+            };
+            return (
+              <>
+                <div className="grid grid-cols-4 gap-2">
+                  {phonemeData.map((s) => (
+                    <motion.div
+                      key={s.ph}
+                      whileHover={{ scale: 1.08, boxShadow: "0 0 16px " + dotColors[s.lvl] + "33" }}
+                      className="rounded-xl p-3 text-center cursor-default transition-shadow"
+                      style={{ background: colors[s.lvl] }}
+                      title={s.avg !== null ? `${s.ph} — ${labels[s.lvl]} (avg ${s.avg}%, ${s.count} lesson${s.count !== 1 ? "s" : ""})` : `${s.ph} — Not started yet`}
+                    >
+                      <div className={`font-mono text-xl font-bold ${s.lvl === "unknown" ? "text-[var(--t3)]" : "text-[var(--t1)]"}`}>{s.ph}</div>
+                      <div
+                        className="inline-block w-1.5 h-1.5 rounded-full mt-1"
+                        style={{ background: dotColors[s.lvl], boxShadow: s.lvl !== "unknown" ? `0 0 6px ${dotColors[s.lvl]}66` : "none" }}
+                      />
+                      {s.avg !== null && (
+                        <div className="text-[9px] text-[var(--t3)] mt-1 font-mono">{s.avg}%</div>
+                      )}
+                    </motion.div>
+                  ))}
+                </div>
+                {overallProg.done === 0 && (
+                  <p className="text-center text-xs text-[var(--t3)] mt-3">
+                    Complete lessons to see your phoneme mastery levels
+                  </p>
+                )}
+              </>
+            );
+          })()}
         </div>
       </div>
 

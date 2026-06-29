@@ -22,6 +22,221 @@ const ALL_BADGES = [
   { id: "1000-xp", emoji: "💎", name: "XP Hunter", desc: "Earn 1000 XP" },
 ];
 
+// ─── Practice Calendar Heatmap ─────────────────────────────────────────────
+const WEEKS = 12;
+const DAYS_PER_WEEK = 7;
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function dateKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function heatColor(count: number): string {
+  if (count <= 0) return "rgba(99,102,241,0.06)"; // dim
+  if (count <= 2) return "rgba(99,102,241,0.35)"; // light
+  if (count <= 4) return "rgba(99,102,241,0.65)"; // medium
+  return "rgba(139,92,246,0.95)"; // bright (violet)
+}
+
+function PracticeCalendarHeatmap() {
+  const practiceCalendar = useAppStore((s) => s.practiceCalendar);
+
+  const { grid, monthLabels, todayKey, hasAny } = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    // Sunday of the current week
+    const currentSun = new Date(today);
+    currentSun.setDate(currentSun.getDate() - today.getDay());
+    // Start = 11 weeks before current week's Sunday
+    const startSun = new Date(currentSun);
+    startSun.setDate(startSun.getDate() - (WEEKS - 1) * 7);
+
+    const tKey = dateKey(today);
+    const cells: { date: string; count: number; isToday: boolean; isFuture: boolean }[] = [];
+    for (let w = 0; w < WEEKS; w++) {
+      for (let d = 0; d < DAYS_PER_WEEK; d++) {
+        const cellDate = new Date(startSun);
+        cellDate.setDate(startSun.getDate() + w * 7 + d);
+        const key = dateKey(cellDate);
+        cells.push({
+          date: key,
+          count: practiceCalendar[key] || 0,
+          isToday: key === tKey,
+          isFuture: cellDate.getTime() > today.getTime(),
+        });
+      }
+    }
+
+    // Month labels — for each week column, show month name when first day of month appears in column
+    const labels: (string | null)[] = [];
+    let lastMonth = -1;
+    for (let w = 0; w < WEEKS; w++) {
+      const weekDates: Date[] = [];
+      for (let d = 0; d < DAYS_PER_WEEK; d++) {
+        const cellDate = new Date(startSun);
+        cellDate.setDate(startSun.getDate() + w * 7 + d);
+        weekDates.push(cellDate);
+      }
+      // Use the first day of the week that starts a new month, or the first day of the week
+      const firstOfMonth = weekDates.find((d) => d.getDate() === 1);
+      const refDate = firstOfMonth ?? weekDates[0];
+      const m = refDate.getMonth();
+      if (m !== lastMonth) {
+        labels.push(MONTH_NAMES[m]);
+        lastMonth = m;
+      } else {
+        labels.push(null);
+      }
+    }
+
+    const any = Object.values(practiceCalendar).some((v) => v > 0);
+    return { grid: cells, monthLabels: labels, todayKey: tKey, hasAny: any };
+  }, [practiceCalendar]);
+
+  if (!hasAny) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="rounded-2xl p-6 bg-[var(--card)] border border-[var(--border)] text-center"
+      >
+        <div className="text-3xl mb-2">🔥</div>
+        <div className="font-d text-sm font-semibold text-[var(--t1)] mb-1">
+          Practice Calendar
+        </div>
+        <div className="text-xs text-[var(--t3)]">
+          Start practicing to fill your calendar! 🔥
+        </div>
+      </motion.div>
+    );
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="rounded-2xl p-4 bg-[var(--card)] border border-[var(--border)]"
+    >
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="font-d text-base font-bold">Practice Calendar</h2>
+        <span className="text-[10px] text-[var(--t3)] font-mono uppercase tracking-wider">
+          Last {WEEKS} weeks
+        </span>
+      </div>
+
+      <div className="overflow-x-auto -mx-1 px-1 pb-1">
+        <div className="inline-flex flex-col gap-1 w-max">
+          {/* Month labels row */}
+          <div className="flex gap-1 pl-5">
+            {monthLabels.map((m, i) => (
+              <div
+                key={i}
+                className="w-3 text-[9px] text-[var(--t3)] font-mono leading-none overflow-visible whitespace-nowrap"
+              >
+                {m || ""}
+              </div>
+            ))}
+          </div>
+
+          {/* Grid: day labels + cells */}
+          <div className="flex gap-1">
+            {/* Day labels */}
+            <div className="flex flex-col gap-1 w-4 shrink-0">
+              {[0, 1, 2, 3, 4, 5, 6].map((d) => (
+                <div
+                  key={d}
+                  className="h-3 text-[9px] text-[var(--t3)] font-mono leading-[0.75rem] text-right pr-0.5"
+                >
+                  {d === 1 ? "M" : d === 3 ? "W" : d === 5 ? "F" : ""}
+                </div>
+              ))}
+            </div>
+
+            {/* Cells: 12 columns */}
+            {Array.from({ length: WEEKS }).map((_, weekIdx) => (
+              <div key={weekIdx} className="flex flex-col gap-1">
+                {Array.from({ length: DAYS_PER_WEEK }).map((_, dayIdx) => {
+                  const cell = grid[weekIdx * DAYS_PER_WEEK + dayIdx];
+                  const bg = cell.isFuture ? "transparent" : heatColor(cell.count);
+                  const border = cell.isToday
+                    ? "1.5px solid rgba(99,102,241,0.9)"
+                    : "1px solid rgba(255,255,255,0.04)";
+                  return (
+                    <motion.div
+                      key={dayIdx}
+                      initial={{ opacity: 0, scale: 0.4 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{
+                        delay: (weekIdx * DAYS_PER_WEEK + dayIdx) * 0.004,
+                        duration: 0.25,
+                        ease: "easeOut",
+                      }}
+                      title={
+                        cell.isFuture
+                          ? `${cell.date}`
+                          : `${cell.date} — ${cell.count} lesson${cell.count === 1 ? "" : "s"}`
+                      }
+                      className="h-3 w-3 rounded-[3px] cursor-default"
+                      style={{
+                        background: bg,
+                        border: border,
+                        boxShadow: cell.isToday
+                          ? "0 0 6px rgba(99,102,241,0.6)"
+                          : "none",
+                        animation: cell.isToday
+                          ? "pulse 1.8s ease-in-out infinite"
+                          : "none",
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+
+          {/* Legend */}
+          <div className="flex items-center justify-end gap-1.5 mt-2 pl-5">
+            <span className="text-[9px] text-[var(--t3)] font-mono uppercase tracking-wider">
+              Less
+            </span>
+            <div
+              className="h-3 w-3 rounded-[3px]"
+              style={{ background: heatColor(0), border: "1px solid rgba(255,255,255,0.04)" }}
+              title="0 lessons"
+            />
+            <div
+              className="h-3 w-3 rounded-[3px]"
+              style={{ background: heatColor(1), border: "1px solid rgba(255,255,255,0.04)" }}
+              title="1-2 lessons"
+            />
+            <div
+              className="h-3 w-3 rounded-[3px]"
+              style={{ background: heatColor(3), border: "1px solid rgba(255,255,255,0.04)" }}
+              title="3-4 lessons"
+            />
+            <div
+              className="h-3 w-3 rounded-[3px]"
+              style={{ background: heatColor(5), border: "1px solid rgba(255,255,255,0.04)" }}
+              title="5+ lessons"
+            />
+            <span className="text-[9px] text-[var(--t3)] font-mono uppercase tracking-wider">
+              More
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Today marker label */}
+      <div className="text-[10px] text-[var(--t3)] mt-2 text-center">
+        Today: <span className="text-[var(--p3)] font-semibold">{todayKey}</span>
+      </div>
+    </motion.div>
+  );
+}
+
 export function ProgressView() {
   const lessons = useAppStore((s) => s.lessons);
   const xp = useAppStore((s) => s.xp);
@@ -150,6 +365,9 @@ export function ProgressView() {
           </div>
         ))}
       </div>
+
+      {/* Practice Calendar Heatmap */}
+      <PracticeCalendarHeatmap />
 
       {/* Stats summary */}
       <div className="grid grid-cols-3 gap-2">
