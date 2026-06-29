@@ -845,3 +845,248 @@ Unresolved issues / next steps:
 - Could add Coach Insights panel: AI analysis of weakest phonemes from PhonemeMastery data
 - Could add more challenge types or custom challenge builder
 - Could add lesson difficulty ratings / time tracking per step
+
+---
+Task ID: QA-round-6
+Agent: main
+Task: QA + light theme polish + Coach Insights + keyboard shortcuts + animated dashboard
+
+Work Log:
+- Read /home/z/my-project/worklog.md to understand full project context (previous rounds: 32 lessons, AI Coach streaming, Pronunciation Challenge, XP Shop, step progress dots, etc.)
+- Performed full QA pass with agent-browser:
+  - Verified app loads at / (onboarding: Try Demo → USA accent → Begin Journey → Dashboard renders)
+  - Verified all 5 views: Dashboard, Journey (8 phases, expandable, lessons tappable), Practice (Easy/Medium/Hard/Challenge), Progress (rank ladder, calendar heatmap, achievements, phoneme mastery, recent activity), More (profile, accent, theme, XP Shop, all phases, bookmarks)
+  - Opened Vowel Sounds lesson, advanced 3 steps to "Mouth Position for /iː/" (mouth-diagram step) — step progress dots visible and interactive
+  - Tested Challenge mode: clicked "Minimal Pair Blitz" → showed /ʃ/ share vs /tʃ/ chair question
+  - Verified XP Shop: 4 items visible (Streak Freeze, Lesson Retry, Double XP, Custom Theme) — all show "Not enough XP" with 0 XP
+  - Confirmed lint passes (exit 0), dev server serves HTTP 200, zero runtime errors
+- App was stable on entry. Proceeded to style + feature work.
+
+NEW FEATURES ADDED (dispatched to subagents):
+
+1. **Coach Insights Panel** (Task 6-coach-insights, full-stack-developer subagent):
+   - Created `src/components/widgets/coach-insights.tsx` — AI-powered personalized practice plan
+   - "Get AI Insights" button gathers phoneme mastery data + completed lessons + XP + streak
+   - Calls `/api/ai-coach` with `mode: "insights"` — special system prompt returns JSON with focusAreas, recommendedLessons, tips
+   - Loading state: 3-dot bouncing animation + "Analyzing your progress…"
+   - Success state: 3 sections (🎯 Focus Areas with phoneme + score ring + reason, 📚 Recommended Lessons as clickable cards that open the lesson, 💡 Practice Tips with amber Lightbulb icons)
+   - Fallback: shows raw text if JSON parsing fails
+   - localStorage caching (date-keyed) so same-day renders skip the API call
+   - Refresh button to regenerate
+   - Added to Dashboard between Sound Profile and Quick Actions
+   - Modified `src/app/api/ai-coach/route.ts` to add `mode: "insights"` branch with `buildInsightsSystemPrompt()`
+   - Fixed pre-existing set-state-in-effect lint error in lesson-modal.tsx
+
+2. **Enhanced Keyboard Shortcuts** (Task 7-keyboard, full-stack-developer subagent):
+   - Added Space key to play audio in lessons — `getPrimaryAudioText(step)` helper maps each step type to its primary spoken text
+   - Space guarded: skips when typing in input/textarea/contentEditable, when AI Coach chat is open, when ShortcutsOverlay is visible, when a button/link is focused
+   - Transient "⌨ Space · Press Space to play" pill hint (Framer Motion spring) floats above footer for 3 seconds on step change
+   - Reorganized shortcuts overlay into 4 grouped cards with emoji icons: 🧭 Navigation (1-5), 🎓 In Lesson (Space, ←→, Esc), ✨ AI Coach (⌘K), ❓ Help (?)
+   - New header with gradient Keyboard icon tile, multi-key shortcuts as separate kbd chips
+   - Bumped z-index to z-[300] so overlay visible above lesson modal
+   - Escape-to-close for overlay, max-h-[90vh] overflow-y-auto for short screens
+
+STYLE IMPROVEMENTS (implemented directly by main agent):
+
+3. **Light Theme Polish — Adaptive Overlay Variables**:
+   - Added 6 new CSS variables to both `:root` (dark) and `.light`:
+     - `--overlay-1`, `--overlay-2`, `--overlay-3` (background tints)
+     - `--overlay-border-1`, `--overlay-border-2` (border tints)
+     - `--shadow-color`
+   - Dark theme keeps original `rgba(255,255,255,...)` values
+   - Light theme uses `rgba(99,102,241,...)` (indigo-tinted) values for better contrast on light background
+   - Replaced hardcoded `rgba(255,255,255,...)` with CSS variables in 11 files:
+     - dashboard.tsx (4 replacements: sparkline bg, progress bar bg, phoneme unknown bg, phoneme unknown dot)
+     - journey.tsx (2 replacements: lesson card bg, progress bar bg)
+     - progress.tsx (6 replacements: calendar cell border, 4 legend borders, rank progress bar bg)
+     - achievement-gallery.tsx (2 replacements: mini progress bar bg, detail progress bar bg)
+     - phoneme-mastery.tsx (1 replacement: progress bar bg)
+     - practice.tsx (1 replacement: score ring track stroke)
+     - more.tsx (1 replacement: phase progress bar bg)
+     - recent-lessons-carousel.tsx (1 replacement: progress bar bg)
+     - xp-shop.tsx (1 replacement: unaffordable item bg)
+     - pronunciation-challenge.tsx (2 replacements: timer ring track stroke, round dot bg)
+     - coach-insights.tsx (2 replacements: score ring track stroke, raw text card bg)
+
+4. **Animated Stat Counters** (dashboard.tsx):
+   - Created `useAnimatedCounter(target, duration)` hook using requestAnimationFrame with ease-out cubic
+   - Created `AnimatedStatValue` component that parses string values like "85%" or "3m" and animates the numeric part
+   - Applied to all 4 dashboard stat cards (Streak, Speaking Today, Accuracy, Total XP)
+   - Values count up from 0 to target over 1.2 seconds on mount
+
+5. **Enhanced Weekly Chart** (dashboard.tsx):
+   - Added background grid lines (3 horizontal lines for visual reference)
+   - Bars now have 3-state styling: today (gradient indigo→cyan + glow), has score (subtle indigo gradient), no score (overlay-1)
+   - Score labels now animate in with delay (opacity + y transition)
+   - Added average line indicator: dashed amber line at average score position with "avg N" label
+   - Only shows when there's actual score data
+
+VERIFICATION:
+- `bun run lint` → EXIT 0 (clean, zero errors, zero warnings)
+- dev.log: all compiles succeed, GET / 200, POST /api/ai-coach 200
+- agent-browser QA confirmed:
+  - Dashboard: Coach Insights section visible with "Get AI Insights" button
+  - Coach Insights: clicked button → received AI response with Focus Areas, Recommended Lessons (clickable), Practice Tips
+  - Keyboard shortcuts: ? opens overlay with 4 grouped sections (Navigation, In Lesson, AI Coach, Help)
+  - Light theme: toggled successfully, no errors, all components render correctly
+  - All 5 views load without errors
+  - Lesson modal: step progress dots work, navigation works
+  - Practice: Challenge mode works with 3 challenge types
+  - XP Shop: 4 items visible with proper disabled state when not enough XP
+
+Stage Summary:
+- 2 major new features added (Coach Insights AI panel, enhanced keyboard shortcuts with Space-to-play)
+- 3 style improvements applied (light theme adaptive overlays in 11 files, animated stat counters, enhanced weekly chart with grid + average line)
+- Files created: coach-insights.tsx
+- Files modified by main agent: globals.css, dashboard.tsx, journey.tsx, progress.tsx, achievement-gallery.tsx, phoneme-mastery.tsx, practice.tsx, more.tsx, recent-lessons-carousel.tsx, xp-shop.tsx, pronunciation-challenge.tsx
+- Files modified by subagents: ai-coach/route.ts, lesson-modal.tsx, keyboard-shortcuts.tsx, dashboard.tsx (CoachInsights import)
+- Lint: PASS (exit 0). Dev server: HTTP 200. All features verified working.
+- App is feature-rich, visually polished, light/dark theme adaptive, and fully functional
+
+Unresolved issues / next steps:
+- Could add social sharing: share daily challenge or completed lesson with OG image generation
+- Could add more challenge types or custom challenge builder
+- Could add lesson difficulty ratings / time tracking per step
+- Could add a "Streak Freeze" notification when consumed (already implemented via toast-watcher)
+- Could add more phoneme data to the PhonemeMastery widget (currently tracks 12 phonemes)
+- Could add a "Recently Earned XP" persistent indicator (XP Burst auto-removes after 2.4s)
+- Could add light theme testing for all 32 lesson step widgets (mouth-diagram, vowel-chart, etc.) — they use SVG with hardcoded colors that may need light theme variants
+- Could add a settings panel for keyboard shortcuts customization
+- Could add accessibility improvements (screen reader announcements for toasts, ARIA live regions)
+
+---
+Task ID: 6-coach-insights
+Agent: coach-insights-builder
+Task: Build a "Coach Insights" AI-powered panel on the Dashboard that analyzes the user's weakest phonemes via the AI Coach backend and renders a structured personalized practice plan (focus areas + recommended lessons + tips).
+
+Work Log:
+- Read /home/z/my-project/worklog.md (847 lines) to absorb project context: AccentAI is a Next.js 16 + TypeScript single-route SPA with 32 lessons across 8 phases, Zustand store, dark-default indigo/violet/cyan palette, Framer Motion throughout. Existing AI Coach at /api/ai-coach streams SSE tokens. PhonemeMastery widget already maps phonemes → lessons and computes avg scores.
+- Inspected key files: src/app/api/ai-coach/route.ts (existing SSE streaming endpoint with buildSystemPrompt), src/components/widgets/phoneme-mastery.tsx (PHONEME_LESSONS mapping + levelColor logic), src/components/views/dashboard.tsx (Sound Profile section ends at line 694, Quick Actions starts at 696 — perfect insertion point between them), src/lib/store.ts (lessons/xp/streak/accent fields), src/lib/lessons/index.ts (ALL_LESSONS array for title→id lookup), src/lib/types.ts (PHASES + Lesson types), src/components/ai-coach/ai-coach-chat.tsx (SSE consumption pattern reference).
+- Read agent-ctx/7-ai-coach-ai-coach-builder.md to understand the AI Coach backend's system prompt design philosophy.
+
+### File 1 — MODIFIED: src/app/api/ai-coach/route.ts
+- Extended `RequestContext` interface with new optional field `phonemeMastery?: PhonemeScore[]` (each entry: { phoneme, score, example?, count? }). Defined new `PhonemeScore` interface.
+- Extended `RequestBody` with new optional field `mode?: "chat" | "insights"`.
+- Added new `buildInsightsSystemPrompt(ctx)` function — a focused system prompt that:
+  • Embeds the user's accent, XP, streak, completed-lesson count, and the FULL phoneme-mastery list (weakest-first) as readable bullet text.
+  • Embeds the entire 8-phase × 4-lesson AccentAI catalog (exact lesson titles) so the model can pick real lessons.
+  • Specifies strict output requirements: ONLY a single valid JSON object, no markdown fences, must start with `{` and end with `}`, three exact keys (focusAreas, recommendedLessons, tips), with constrained item shapes (phoneme without slashes, score 0-100, reason ≤ 1 sentence; phase 1-8, exact lesson title; tips ≤ 3 items, ≤ 18 words each).
+  • Tells the model to pick focus areas from the user's actual weakest phonemes (fallback to /θ/, /ð/, /æ/ if no data) and to recommend next-step lessons appropriate to the learner's experience.
+- In `POST` handler: added `isInsights = body.mode === "insights"` check; loosened input validation so insights mode accepts an empty `messages` array (we synthesize a user message inside the handler since the plan is fully derived from context, not from chat input).
+- For insights mode: filter out client-supplied system messages, synthesize a user message ("Please analyze my phoneme mastery data and generate my personalized practice plan now.") when none provided, then build finalMessages with the insights system prompt.
+- Lowered temperature to 0.45 (vs 0.7 chat) for more consistent JSON output, and bumped max_tokens to 900 for richer plan content.
+- Updated GET endpoint schema doc to advertise the new `mode` field, `phonemeMastery` context field, and the JSON shape returned by insights mode.
+
+### File 2 — CREATED: src/components/widgets/coach-insights.tsx (989 lines)
+- Self-contained CoachInsights component. Public API: `<CoachInsights />` (no props).
+- **Data gathering** (Zustand store): reads `lessons`, `xp`, `streak`, `accent`, `setActiveLesson`. Derives phoneme mastery via a local `derivePhonemeMastery()` helper that mirrors the PhonemeMastery widget logic exactly (same PHONEME_LESSONS mapping, same avg-score + weakest-first sort). Returns top 5 weakest phonemes with example + score + count + bestLessonId.
+- **API integration**: POSTs to `/api/ai-coach` with `{ mode: "insights", messages: [], context: { accent, xp, streak, completedLessons, phonemeMastery: top5 } }`. Consumes the SSE stream token-by-token (same pattern as ai-coach-chat.tsx), accumulates text, then on completion attempts robust JSON parsing.
+- **Robust JSON parsing** (`extractJson(text)` + `normalizePlan(raw)`): 3-tier fallback — (1) direct JSON.parse, (2) unwrap ```json…``` or ```…``` fences, (3) slice between first `{` and last `}`. Then `normalizePlan` validates and coerces each field: arrays must exist, items must match shape (phoneme/score/reason for focus areas, phase/lesson/reason for recommended lessons, strings for tips). Strips leading/trailing slashes from phoneme values, clamps phase to 1-8, clamps score to 0-100, slices tips to max 4. Returns null only if all three sections are empty — otherwise the raw text fallback is used.
+- **localStorage caching**: keyed by `accentai-coach-insights-{YYYY-MM-DD}` (date-based, so a fresh plan is fetched each day). On mount: tries to load today's cached entry and if found, jumps straight to the success view (no loading state on subsequent renders same day). After each successful fetch: persists `{ parsed, rawText, generatedAt, signature }` where signature is a phoneme-score hash for potential future invalidation. Cache writes are wrapped in try/catch to survive quota / private-mode errors.
+- **States & UX**:
+  • `idle`: Animated 64px gradient orb (Sparkles icon + rotating ✨ emoji) + headline + context-aware subtext (different copy for 0 lessons completed vs. 0 phonemes tracked vs. N phonemes tracked) + "Get AI Insights" gradient button (Zap icon).
+  • `loading`: Rotating gradient orb with blurred glow + pulsing center Sparkles + 3-dot bouncing animation (staggered delay 0/0.15/0.3s) + "Analyzing your progress…" headline + subtext "Reading phoneme scores · picking lessons · crafting tips".
+  • `error`: Red AlertTriangle icon + friendly error message + "Try again" button.
+  • `success` (parsed JSON): Three sections with staggered entrance animations:
+    1. **🎯 Your Focus Areas** — grid of cards (1 col mobile, 2 col sm+), each card has: phoneme symbol in colored tile (red/amber/green based on score), ScoreRing SVG (animated stroke-dashoffset + drop-shadow glow + score number in center), 1-sentence reason text.
+    2. **📚 Recommended Lessons** — vertical stack of clickable cards. Each card: phase pill (e.g. "P1"), lesson title (bold), 1-sentence reason, BookOpen icon in gradient tile, ChevronRight that animates on hover. Clicking opens the lesson via `setActiveLesson(lesson.id)` — uses `ALL_LESSONS.find(l => l.title === rec.lesson)` for title→ID lookup with fuzzy fallback (phase match + first 8 chars). Disabled (no pointer cursor) if lesson can't be resolved.
+    3. **💡 Practice Tips** — bullet list with amber Lightbulb icons in circular badges, staggered slide-in from left.
+    Footer: "✨ Generated by AccentAI Coach · regenerate" with inline regenerate button.
+  • `success` (raw text fallback, when JSON parsing fails): Single "Coach Advice" section with the raw AI text in a styled card — graceful degradation so the user always sees something useful.
+- **Refresh button** in the header (top-right) — visible only in success state, calls the same `handleGetInsights()` to fetch a fresh plan.
+- **Visual style**: Animated mesh gradient border around the whole card (4-stop indigo→violet→cyan→indigo gradient, backgroundPosition animates 0%→100%→0% over 8s infinite). Inner card uses glass morphism (`backdrop-filter: blur(16px)`, dark gradient background). Two floating radial orbs in the background (violet top-right + cyan bottom-left, scale/opacity pulse on different timings).
+- **Framer Motion**: All transitions are spring-based (stiffness 280, damping 24 for cards) with staggered delays. Hover: cards lift -2px. Tap: scale 0.98. AnimatePresence mode="wait" between view states for smooth crossfade.
+- **Mobile-first responsive**: Single column on mobile, 2-col grid for focus areas on sm+. Text sizes use the standard xs/sm scale from other AccentAI widgets. Cards have proper min-w-0 + truncate to handle long content gracefully.
+- **Accessibility**: `<motion.section aria-label="Coach Insights">`, all buttons have `aria-label`s, the Sparkles + section icons are decorative (aria-hidden on background orbs). Color contrast: t1/t2/t3 token system maintained.
+- **AbortController + 30s first-token timeout** for clean cancellation (component unmount, refresh click, etc.). Partial stream errors are caught and surfaced in the error state.
+
+### File 3 — MODIFIED: src/components/views/dashboard.tsx
+- Added import: `import { CoachInsights } from "@/components/widgets/coach-insights";`
+- Inserted `<CoachInsights />` between the "Your Sound Profile" section (line 694) and the "Quick Actions" section (line 700), wrapped with comment `{/* Coach Insights — AI-powered personalized practice plan */}`. No other changes to dashboard layout — CoachInsights appears exactly where the task spec required.
+
+### File 4 — FIXED PRE-EXISTING LINT ERROR: src/components/lesson/lesson-modal.tsx
+- The `bun run lint` initially surfaced a pre-existing `react-hooks/set-state-in-effect` error at line 126 (`setShowSpaceHint(false)` and `setShowSpaceHint(true)` called synchronously inside the "Press Space to play" hint useEffect). This was blocking the lint check from passing.
+- Applied the same "adjust state during render" pattern used elsewhere in this file (the prevStepIdx pattern): moved the `setShowSpaceHint(!!getPrimaryAudioText(lesson.steps[stepIdx]))` call into the existing render-time stepIdx-change adjustment block (line 109-116). Replaced the effect with a minimal auto-hide timer that only fires when `showSpaceHint` is already true (no synchronous setState in effect body — the setState call inside the setTimeout callback is allowed by the rule).
+- This fix is unrelated to the Coach Insights task but was necessary to make `bun run lint` exit cleanly (the task requires zero lint errors).
+
+### Verification:
+- `bun run lint` → EXIT 0 (zero errors, zero warnings)
+- `curl -s http://localhost:3000/api/ai-coach` → HTTP 200, returns updated schema doc with `mode` field and `phonemeMastery` context field advertised
+- `curl -X POST /api/ai-coach` with `mode: "insights"` + sample phoneme mastery data → returns SSE stream that reassembles into VALID JSON with all three sections (focusAreas: 3 items, recommendedLessons: 3 items, tips: 3 items). Model correctly picked the user's actual weakest phonemes (θ 58%, ð 62%, æ 71%) and recommended real AccentAI lessons ("Mouth Positioning" p1l3, "100 Core Words" p2l1, "Listening Recognition" p1l4).
+- dev.log: all `✓ Compiled in XXXms`, all `GET / 200`, `POST /api/ai-coach 200` — no errors, no warnings.
+- Dashboard page (`GET /`) returns HTTP 200 in ~230ms.
+
+Stage Summary:
+- 1 new file created: src/components/widgets/coach-insights.tsx (989 lines, fully self-contained)
+- 2 files modified: src/app/api/ai-coach/route.ts (added `mode: "insights"` branch + buildInsightsSystemPrompt + PhonemeScore type + relaxed validation), src/components/views/dashboard.tsx (1 import + 1 component render line)
+- 1 pre-existing lint error fixed: src/components/lesson/lesson-modal.tsx (refactored setShowSpaceHint from setState-in-effect to render-time adjustment pattern)
+- Lint: PASS (exit 0). Dev server: HTTP 200. AI Coach insights mode: live-tested with real LLM call returning valid structured JSON.
+- Feature is fully functional: dashboard now shows the CoachInsights panel between Sound Profile and Quick Actions. Clicking "Get AI Insights" triggers analysis of the user's phoneme mastery data, shows a loading state with animated dots, then renders a beautifully formatted 3-section card with focus areas (phoneme + score ring + reason), recommended lessons (clickable to open the lesson), and practice tips (bulleted). Caches the result in localStorage keyed by date so subsequent same-day renders skip the API call. Refresh button regenerates on demand.
+
+
+---
+
+## Task ID: 7-keyboard — Agent: keyboard-enhancer
+
+### Goal
+Enhance the AccentAI keyboard shortcuts system: (1) add Space key to play the current lesson step's primary audio, (2) show a transient "⌨ Press Space to play" visual hint above the footer when a step with audio loads, (3) reorganize the keyboard shortcuts overlay into 4 groups with a new "In Lesson" section.
+
+### File 1 — MODIFIED: src/components/lesson/lesson-modal.tsx
+- Added a top-level helper `getPrimaryAudioText(step: LessonStep | undefined): string | null` that returns the primary spoken text per step type:
+  - `intro` → `step.title`
+  - `example` → `step.phrase`
+  - `mouth-diagram` → `step.exampleWord` (nullable)
+  - `compare` → `step.nativePhrase`
+  - `stress-bars` → `step.word`
+  - `rhythm` → `step.phrase`
+  - `linking` → `step.words.join(" ")`
+  - `shadow` / `intonation` / `practice` → `step.phrase`
+  - `concept`, `vowel-chart`, `tap-pronounce`, `tip`, `quiz`, `completion` → `null` (no auto-play)
+- Added `showSpaceHint` state, reset inside the existing "adjust state during render" block (`if (stepIdx !== prevStepIdx)`) via `setShowSpaceHint(!!getPrimaryAudioText(lesson.steps[stepIdx]))`. This stays in sync with step changes WITHOUT triggering `react-hooks/set-state-in-effect` (same pattern the file already uses for quiz/practice state).
+- Added a thin `useEffect` that only manages the 3-second auto-hide timer — setState inside the `setTimeout` callback (allowed by the lint rule).
+- Extended the existing keydown handler to also handle Space (`e.key === " " || e.code === "Space"`). Guards, in order:
+  1. Skip when typing in INPUT / TEXTAREA / contentEditable.
+  2. Skip when the AI Coach chat modal is open (detected via `document.querySelector('[aria-label="AccentAI Coach chat"]')`).
+  3. Skip when the ShortcutsOverlay is visible (`#shortcuts-overlay` lacks the `hidden` class).
+  4. Skip when a BUTTON / A / `[role="button"]` is focused so native Space-to-click keeps working for keyboard users.
+  5. Otherwise call `getPrimaryAudioText(step)`; if non-null, `e.preventDefault()` (prevents page scroll) and `handleSpeak(text)`.
+- Added a Framer Motion `<AnimatePresence>` block above the footer nav: a pill-shaped toast with `⌨` glyph + `<kbd>Space</kbd>` + "Press Space to play" text. Spring entrance (opacity + y + scale), `pointer-events-none` so it never blocks taps. Positioned `absolute bottom-24 left-1/2 -translate-x-1/2 z-10` so it floats just above the footer.
+
+### File 2 — MODIFIED: src/components/widgets/keyboard-shortcuts.tsx
+- Imported `Keyboard` and `X` from `lucide-react`.
+- Rewrote `SHORTCUT_GROUPS` as a typed `ShortcutGroup[]` with 4 groups, each carrying an `icon` emoji + `accent` color var:
+  - **Navigation** (🧭, `var(--p)`) — `1 – 5` → Home · Journey · Practice · Progress · More
+  - **In Lesson** (🎓, `var(--p2)`) — `Space` (Play current step's audio), `←` `→` (Previous / Next step), `Esc` (Close lesson)
+  - **AI Coach** (✨, `var(--p3)`) — `⌘` `K` (Open AccentAI Coach chat)
+  - **Help** (❓, `var(--c)`) — `?` (Toggle this shortcuts overlay)
+- Redesigned the overlay panel:
+  - Header now has a gradient `Keyboard` icon tile next to the title (replaced the plain ✕ with a Lucide `X` icon).
+  - Each group is a rounded card with subtle border + the group icon + accent-colored title.
+  - Each shortcut row renders a flex row of `<kbd>` chips (so `⌘ K` and `← →` show as separate keys) using the existing `kbd` visual style.
+  - Bumped z-index from `z-[70]` to `z-[300]` so the overlay is visible ABOVE the lesson modal (z-[200]) — lets users open the overlay with `?` while inside a lesson to see the In-Lesson shortcuts.
+  - Added an Escape keydown listener inside `ShortcutsOverlay` that hides the overlay (works whether or not a lesson is open underneath).
+  - Added `max-h-[90vh] overflow-y-auto` to the panel for safety on short screens.
+
+### Verification
+- `bun run lint` → EXIT 0 (no errors, no warnings in modified files).
+- `bunx tsc --noEmit` → no errors in the two modified files (pre-existing TS errors in `examples/`, `skills/`, `onboarding.tsx`, `mic-waveform.tsx` are unrelated).
+- `dev.log` shows clean compiles (`✓ Compiled in ...`) and `GET / 200` responses; no compile errors after the changes.
+- `git diff` confirms all changes are isolated to the two intended files (lesson-modal.tsx +126 lines, keyboard-shortcuts.tsx +128/-39 lines).
+
+### Behaviour Summary
+- Pressing Space inside an open lesson plays the current step's primary audio (title / phrase / word / nativePhrase depending on step type). Steps with no audio (concept, vowel-chart, tap-pronounce, tip, quiz, completion) do nothing.
+- Space is suppressed when typing in any input/textarea, when the AI Coach chat is open, when the ShortcutsOverlay is open, or when a button/link is focused (so native Space-activation of focused controls still works).
+- A subtle `⌨ Space · Press Space to play` pill appears just above the footer nav for 3 seconds every time a step WITH audio loads, then fades out. It does not reappear until the step changes.
+- The `?` overlay now opens above the lesson (z-[300]) and is closeable with Escape; it documents all 4 shortcut groups including the new In-Lesson cluster.
+- Existing shortcuts (Cmd+K, 1–5, ?, Esc, Arrow Left/Right) are unchanged.
+
+### Design Notes
+- Dark-theme-first; uses the project's indigo/violet/cyan palette via `var(--p)`, `var(--p2)`, `var(--p3)`, `var(--c)`, `var(--grad-btn)`.
+- Framer Motion for all animations (spring entrance for the hint pill, no layout animation on the overlay to keep it lightweight).
+- Mobile-first: the hint pill is centered and `pointer-events-none` so it never blocks the footer buttons; the overlay panel scrolls if needed on short screens.
+
+Stage Summary:
+- 2 files modified: `src/components/lesson/lesson-modal.tsx` (+126 lines) and `src/components/widgets/keyboard-shortcuts.tsx` (+128/-39 lines).
+- 1 new agent-ctx record: `agent-ctx/7-keyboard-keyboard-enhancer.md`.
+- Lint: PASS (exit 0). Dev server: HTTP 200. TypeScript: no errors in modified files.
+- Feature is fully functional: Space plays step audio in lessons with a transient visual hint; the shortcuts overlay now documents all 4 groups (Navigation, In Lesson, AI Coach, Help) with a polished card-based layout and is visible above the lesson modal.

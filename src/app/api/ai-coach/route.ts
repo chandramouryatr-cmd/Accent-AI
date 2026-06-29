@@ -11,16 +11,27 @@ interface IncomingMessage {
   content: string;
 }
 
+interface PhonemeScore {
+  phoneme: string;
+  example?: string;
+  score: number;
+  count?: number;
+}
+
 interface RequestContext {
   accent?: string;
   xp?: number;
   streak?: number;
   completedLessons?: string[];
+  /** Only sent in insights mode — the user's weakest phonemes with scores */
+  phonemeMastery?: PhonemeScore[];
 }
 
 interface RequestBody {
   messages: IncomingMessage[];
   context?: RequestContext;
+  /** "insights" switches to a JSON-practice-plan system prompt */
+  mode?: "chat" | "insights";
 }
 
 function buildSystemPrompt(ctx: RequestContext | undefined): string {
@@ -64,6 +75,68 @@ const WELCOME_FALLBACK =
   "Hi there! 👄 I'm your AccentAI Coach. Ask me about any English sound, word, or pronunciation challenge and I'll break it down with IPA and concrete practice tips. 🎯";
 
 /**
+ * Builds a special system prompt for "insights" mode — asking the model to
+ * output a strict JSON practice plan based on the user's phoneme mastery data.
+ */
+function buildInsightsSystemPrompt(ctx: RequestContext | undefined): string {
+  const accentLabel =
+    ctx?.accent === "uk" ? "British English (RP)" : ctx?.accent === "usa" ? "American English (GenAm)" : "English";
+  const xp = typeof ctx?.xp === "number" ? ctx.xp : 0;
+  const streak = typeof ctx?.streak === "number" ? ctx.streak : 0;
+  const completed = Array.isArray(ctx?.completedLessons) ? ctx.completedLessons : [];
+  const completedCount = completed.length;
+  const phonemes = Array.isArray(ctx?.phonemeMastery) ? ctx.phonemeMastery : [];
+
+  // Format phoneme data as readable text for the model
+  const phonemeLines = phonemes.length
+    ? phonemes.map((p) => {
+        const ex = p.example ? ` (e.g. ${p.example})` : "";
+        const ct = typeof p.count === "number" ? ` — ${p.count} lesson(s)` : "";
+        return `  • /${p.phoneme}/ — avg score ${p.score}%${ex}${ct}`;
+      }).join("\n")
+    : "  • (no phoneme mastery data yet — the user hasn't completed enough lessons)";
+
+  return [
+    "You are AccentAI Coach analyzing a learner's progress. Based on their phoneme mastery data,",
+    "provide a concise personalized practice plan. Format your response as JSON with:",
+    "- focusAreas: array of {phoneme, score, reason} (top 3 weakest)",
+    "- recommendedLessons: array of {phase, lesson, reason} (2-3 lessons to take next)",
+    "- tips: array of strings (3 actionable practice tips)",
+    "Keep it encouraging and specific.",
+    "",
+    "USER CONTEXT:",
+    `- Target accent: ${accentLabel}`,
+    `- Total XP earned: ${xp}`,
+    `- Current daily streak: ${streak} day(s)`,
+    `- Lessons completed so far: ${completedCount}`,
+    "",
+    "PHONEME MASTERY DATA (weakest first):",
+    phonemeLines,
+    "",
+    "LESSON CATALOG (8 phases × 4 lessons = 32 total):",
+    "  Phase 1 — Basic Sound Awareness: Vowel Sounds A–E, Consonant Clusters, Mouth Positioning, Listening Recognition",
+    "  Phase 2 — Word Pronunciation: 100 Core Words, Syllable Stress Rules, Silent Letters, Slow Repetition Drills",
+    "  Phase 3 — Sentence Rhythm: Linking Words, Sentence Melody, Rhythm Patterns, Chunking Speech",
+    "  Phase 4 — Conversational Patterns: Casual Greetings, Expressing Emotions, Questions & Answers, Small Talk Mastery",
+    "  Phase 5 — Native Compression: Gonna & Wanna, Reduced Vowels, Elision & Assimilation, Fast Speech Decoding",
+    "  Phase 6 — Accent Mimicking: Shadowing Technique, Prosody Copying, Tone Matching, Character Voices",
+    "  Phase 7 — Real-World Scenarios: Job Interview English, Presentation Skills, Phone Communication, Public Speaking",
+    "  Phase 8 — Advanced Native Fluency: Tone Adaptation, Humor & Irony, Regional Variants, Master Performance",
+    "",
+    "STRICT OUTPUT REQUIREMENTS:",
+    "1. Output ONLY a single valid JSON object — no markdown fences, no commentary before or after.",
+    "2. Start with { and end with }.",
+    "3. All keys MUST be exactly: focusAreas, recommendedLessons, tips.",
+    "4. focusAreas items: { phoneme: string (without slashes), score: number, reason: string (1 sentence, tactile & specific) }",
+    "5. recommendedLessons items: { phase: number (1-8), lesson: string (exact lesson title from catalog), reason: string (1 sentence) }",
+    "6. tips items: strings, 3 items max, each a concrete actionable practice tip (≤ 18 words).",
+    "7. Pick focus areas from the user's actual weakest phonemes listed above. If no data, suggest foundational ones (/θ/, /ð/, /æ/).",
+    "8. Recommended lessons should be the user's NEXT step — prefer phase 1-3 lessons for new learners, advance for experienced.",
+    "9. Keep tone warm and motivating in reasons/tips. Use IPA symbols directly without slashes inside the JSON values.",
+  ].join("\n");
+}
+
+/**
  * Fallback: get the full non-streaming response, then simulate streaming
  * by emitting word-by-word with short delays.
  */
@@ -95,7 +168,18 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (!body || !Array.isArray(body.messages) || body.messages.length === 0) {
+  const isInsights = body.mode === "insights";
+
+  if (!body || !Array.isArray(body.messages)) {
+    return NextResponse.json(
+      { error: "Missing 'messages' array." },
+      { status: 400 }
+    );
+  }
+
+  // In insights mode we synthesize a user message if none was provided, so an
+  // empty array is allowed. Otherwise require at least one message.
+  if (!isInsights && body.messages.length === 0) {
     return NextResponse.json(
       { error: "Missing 'messages' array." },
       { status: 400 }
@@ -113,30 +197,52 @@ export async function POST(req: NextRequest) {
     )
     .map((m) => ({ role: m.role, content: String(m.content).slice(0, 4000) }));
 
-  if (sanitized.length === 0) {
+  if (!isInsights && sanitized.length === 0) {
     return NextResponse.json(
       { error: "No valid messages provided." },
       { status: 400 }
     );
   }
 
-  const systemPrompt = buildSystemPrompt(body.context);
+  const systemPrompt = isInsights
+    ? buildInsightsSystemPrompt(body.context)
+    : buildSystemPrompt(body.context);
+
+  // For insights mode, synthesize the user "message" if none was provided —
+  // the practice plan is fully derived from the context, not from chat input.
+  let finalSanitized = sanitized;
+  if (isInsights) {
+    // Filter out any system messages from the client (we use our own)
+    const nonSystem = sanitized.filter((m) => m.role !== "system");
+    if (nonSystem.length === 0) {
+      finalSanitized = [
+        {
+          role: "user" as ChatRole,
+          content:
+            "Please analyze my phoneme mastery data and generate my personalized practice plan now.",
+        },
+      ];
+    } else {
+      finalSanitized = nonSystem;
+    }
+  }
 
   // Build the final message list: system prompt first, then any user-supplied
   // system messages get merged into our prompt to avoid multiple system roles.
   const finalMessages: { role: ChatRole; content: string }[] = [
     { role: "system", content: systemPrompt },
-    ...sanitized.filter((m) => m.role !== "system"),
+    ...finalSanitized.filter((m) => m.role !== "system"),
   ];
 
   try {
     const zai = await ZAI.create();
 
     // Attempt native streaming from the SDK
+    // Insights mode uses lower temperature for more consistent JSON output.
     const completion = await zai.chat.completions.create({
       messages: finalMessages,
-      temperature: 0.7,
-      max_tokens: 800,
+      temperature: isInsights ? 0.45 : 0.7,
+      max_tokens: isInsights ? 900 : 800,
       stream: true,
     } as unknown as Parameters<typeof zai.chat.completions.create>[0]);
 
@@ -283,8 +389,14 @@ export async function GET() {
     streaming: true,
     schema: {
       messages: "{ role: 'user'|'assistant'|'system', content: string }[]",
-      context: "{ accent?, xp?, streak?, completedLessons?: string[] }",
+      context: "{ accent?, xp?, streak?, completedLessons?: string[], phonemeMastery?: { phoneme, score, example?, count? }[] }",
+      mode: "'chat' (default) | 'insights' (returns JSON practice plan)",
     },
     streamFormat: "SSE — data: { token: string } | [DONE]",
+    modes: {
+      chat: "Conversational coach with IPA-rich advice (default).",
+      insights:
+        "Returns a JSON practice plan: { focusAreas: [{phoneme, score, reason}], recommendedLessons: [{phase, lesson, reason}], tips: string[] }. Pass user's weakest phonemes via context.phonemeMastery.",
+    },
   });
 }

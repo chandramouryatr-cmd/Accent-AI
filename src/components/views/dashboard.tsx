@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAppStore, usePhaseProgress, useOverallProgress } from "@/lib/store";
 import { PHASES } from "@/lib/types";
@@ -10,6 +10,48 @@ import { WaveformCanvas } from "@/components/widgets/waveform-canvas";
 import { TIPS, CATEGORY_COLORS } from "@/lib/tips";
 import { DailyChallengeCard } from "@/components/widgets/daily-challenge-card";
 import { RecentLessonsCarousel } from "@/components/widgets/recent-lessons-carousel";
+import { CoachInsights } from "@/components/widgets/coach-insights";
+
+// ─── Animated Counter Hook ─────────────────────────────────────────────────
+function useAnimatedCounter(target: number, duration = 1200): number {
+  const [display, setDisplay] = useState(0);
+  const prevRef = useRef(0);
+  useEffect(() => {
+    if (typeof target !== "number" || isNaN(target)) return;
+    const start = prevRef.current;
+    const diff = target - start;
+    if (diff === 0) return;
+    const startTime = performance.now();
+    let raf: number;
+    const tick = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(1, elapsed / duration);
+      // ease-out cubic
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const current = Math.round(start + diff * eased);
+      setDisplay(current);
+      if (progress < 1) {
+        raf = requestAnimationFrame(tick);
+      } else {
+        prevRef.current = target;
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration]);
+  return display;
+}
+
+function AnimatedStatValue({ value }: { value: number | string }) {
+  // If value is a string like "85%" or "3m", animate the numeric part
+  const str = String(value);
+  const match = str.match(/^(\d+(?:\.\d+)?)(.*)$/);
+  const num = match ? parseFloat(match[1]) : 0;
+  const suffix = match ? match[2] : "";
+  const animated = useAnimatedCounter(num);
+  if (!match) return <>{str}</>;
+  return <>{animated}{suffix}</>;
+}
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -438,7 +480,7 @@ export function DashboardView() {
               />
               <div className="relative text-lg mb-0.5">{s.icon}</div>
               <div className="relative font-d text-base font-bold" style={{ color: s.color }}>
-                {s.val}
+                {s.val === "—" ? "—" : <AnimatedStatValue value={s.val} />}
               </div>
               <div className="relative text-[9px] text-[var(--t3)] uppercase tracking-wider mb-1">
                 {s.lbl}
@@ -453,7 +495,7 @@ export function DashboardView() {
                       key={si}
                       className="flex-1 rounded-sm"
                       style={{
-                        background: v > 0 ? s.color : "rgba(255,255,255,0.08)",
+                        background: v > 0 ? s.color : "var(--overlay-border-1)",
                         opacity: v > 0 ? (isToday ? 1 : 0.7) : 1,
                         boxShadow: isToday && v > 0 ? `0 0 4px ${s.color}88` : "none",
                       }}
@@ -505,7 +547,7 @@ export function DashboardView() {
                 <span className="text-xs text-[var(--t3)]">Progress</span>
                 <span className="text-xs font-mono font-bold text-[var(--t1)]">{phaseProg.pct}%</span>
               </div>
-              <div className="h-2 rounded-full bg-[rgba(255,255,255,0.08)] overflow-hidden">
+              <div className="h-2 rounded-full bg-[var(--overlay-border-1)] overflow-hidden">
                 <motion.div
                   className="h-full rounded-full bg-[var(--grad-btn)]"
                   initial={{ width: 0 }}
@@ -537,11 +579,17 @@ export function DashboardView() {
           <span>This Week</span>
           <span className="text-[10px] text-[#10b981] font-mono font-normal">↑ {overallProg.pct}% overall</span>
         </h2>
-        <div className="rounded-2xl p-4 bg-[var(--card)] border border-[var(--border)]">
-          <div className="flex items-end justify-between gap-2 h-28 mb-2">
+        <div className="rounded-2xl p-4 bg-[var(--card)] border border-[var(--border)] relative overflow-hidden">
+          {/* Background grid lines */}
+          <div className="absolute inset-4 pointer-events-none flex flex-col justify-between">
+            <div className="h-px bg-[var(--overlay-border-1)]" />
+            <div className="h-px bg-[var(--overlay-border-1)]" />
+            <div className="h-px bg-[var(--overlay-border-1)]" />
+          </div>
+          <div className="flex items-end justify-between gap-2 h-28 mb-2 relative">
             {weekData.map((d, i) => (
               <div key={i} className="flex-1 flex flex-col items-center gap-1.5">
-                <div className="flex-1 w-full flex items-end">
+                <div className="flex-1 w-full flex items-end relative">
                   <motion.div
                     initial={{ height: 0 }}
                     animate={{ height: `${(d.score / maxScore) * 100}%` }}
@@ -550,15 +598,22 @@ export function DashboardView() {
                     style={{
                       background: d.isToday
                         ? "linear-gradient(180deg, #6366f1, #22d3ee)"
-                        : "linear-gradient(180deg, rgba(99,102,241,0.4), rgba(99,102,241,0.2))",
+                        : d.score > 0
+                        ? "linear-gradient(180deg, rgba(99,102,241,0.5), rgba(99,102,241,0.2))"
+                        : "var(--overlay-1)",
                       minHeight: d.score > 0 ? 8 : 2,
                       boxShadow: d.isToday ? "0 0 12px rgba(99,102,241,0.4)" : "none",
                     }}
                   >
                     {d.score > 0 && (
-                      <span className="absolute -top-4 left-1/2 -translate-x-1/2 text-[9px] font-mono text-[var(--t2)]">
+                      <motion.span
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.05 + 0.4 }}
+                        className="absolute -top-4 left-1/2 -translate-x-1/2 text-[9px] font-mono text-[var(--t2)] font-bold"
+                      >
                         {d.score}
-                      </span>
+                      </motion.span>
                     )}
                   </motion.div>
                 </div>
@@ -568,6 +623,23 @@ export function DashboardView() {
               </div>
             ))}
           </div>
+          {/* Average line indicator */}
+          {(() => {
+            const scores = weekData.filter((d) => d.score > 0).map((d) => d.score);
+            if (scores.length === 0) return null;
+            const avg = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+            const avgPct = (avg / maxScore) * 100;
+            return (
+              <div className="absolute left-4 right-4 pointer-events-none" style={{ bottom: `calc(2rem + ${avgPct}% * 0.78)` }}>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 border-t border-dashed border-[rgba(245,158,11,0.4)]" />
+                  <span className="text-[8px] font-mono text-[#f59e0b] font-bold bg-[var(--bg)] px-1 rounded">
+                    avg {avg}
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
 
@@ -646,13 +718,13 @@ export function DashboardView() {
               red: "rgba(239,68,68,0.15)",
               yellow: "rgba(245,158,11,0.15)",
               green: "rgba(16,185,129,0.15)",
-              unknown: "rgba(255,255,255,0.03)",
+              unknown: "var(--overlay-1)",
             };
             const dotColors = {
               red: "#ef4444",
               yellow: "#f59e0b",
               green: "#10b981",
-              unknown: "rgba(255,255,255,0.2)",
+              unknown: "var(--overlay-border-2)",
             };
             const labels = {
               red: "Needs work",
@@ -692,6 +764,9 @@ export function DashboardView() {
           })()}
         </div>
       </div>
+
+      {/* Coach Insights — AI-powered personalized practice plan */}
+      <CoachInsights />
 
       {/* Quick actions */}
       <div>

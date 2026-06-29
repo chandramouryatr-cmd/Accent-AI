@@ -183,7 +183,7 @@ export function PhonemeMastery() {
                     {s.avg}%
                   </span>
                 </div>
-                <div className="h-1.5 rounded-full bg-[rgba(255,255,255,0.05)] overflow-hidden">
+                <div className="h-1.5 rounded-full bg-[var(--overlay-1)] overflow-hidden">
                   <motion.div
                     className="h-full rounded-full"
                     style={{ background: c.bar, boxShadow: `0 0 6px ${c.bar}55` }}

@@ -214,7 +214,7 @@ export function MoreView() {
                   <div className="text-sm font-semibold text-[var(--t1)] truncate">
                     Phase {p.id + 1}: {p.name}
                   </div>
-                  <div className="mt-1 h-1 rounded-full bg-[rgba(255,255,255,0.08)] overflow-hidden">
+                  <div className="mt-1 h-1 rounded-full bg-[var(--overlay-border-1)] overflow-hidden">
                     <motion.div
                       className="h-full bg-[var(--grad-btn)]"
                       initial={{ width: 0 }}

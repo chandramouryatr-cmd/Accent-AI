@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { Keyboard, X } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 
 /**
@@ -77,21 +78,47 @@ export function useKeyboardShortcuts() {
   }, [setActiveTab, setActiveLesson, activeLessonId]);
 }
 
-const SHORTCUT_GROUPS: Array<{ group: string; items: Array<{ keys: string; desc: string }> }> = [
+type ShortcutItem = { keys: string[]; desc: string };
+
+interface ShortcutGroup {
+  group: string;
+  /** Emoji glyph shown next to the group title. */
+  icon: string;
+  /** CSS color (var(--…) or hex) for the group title accent. */
+  accent: string;
+  items: ShortcutItem[];
+}
+
+const SHORTCUT_GROUPS: ShortcutGroup[] = [
   {
     group: "Navigation",
+    icon: "🧭",
+    accent: "var(--p)",
     items: [
-      { keys: "1-5", desc: "Jump to Home / Journey / Practice / Progress / More" },
-      { keys: "Esc", desc: "Close lesson or dialog" },
+      { keys: ["1", "–", "5"], desc: "Home · Journey · Practice · Progress · More" },
+    ],
+  },
+  {
+    group: "In Lesson",
+    icon: "🎓",
+    accent: "var(--p2)",
+    items: [
+      { keys: ["Space"], desc: "Play current step's audio" },
+      { keys: ["←", "→"], desc: "Previous / Next step" },
+      { keys: ["Esc"], desc: "Close lesson" },
     ],
   },
   {
     group: "AI Coach",
-    items: [{ keys: "⌘K", desc: "Open AccentAI Coach chat" }],
+    icon: "✨",
+    accent: "var(--p3)",
+    items: [{ keys: ["⌘", "K"], desc: "Open AccentAI Coach chat" }],
   },
   {
     group: "Help",
-    items: [{ keys: "?", desc: "Toggle this shortcuts overlay" }],
+    icon: "❓",
+    accent: "var(--c)",
+    items: [{ keys: ["?"], desc: "Toggle this shortcuts overlay" }],
   },
 ];
 
@@ -109,6 +136,19 @@ export function ShortcutsOverlay() {
     return () => window.removeEventListener("accentai:toggle-shortcuts", toggle);
   }, []);
 
+  // Escape closes the overlay (works whether or not a lesson is open underneath).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const el = document.getElementById("shortcuts-overlay");
+      if (el && !el.classList.contains("hidden")) {
+        el.classList.add("hidden");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const close = () => {
     const el = document.getElementById("shortcuts-overlay");
     if (el) el.classList.add("hidden");
@@ -117,7 +157,7 @@ export function ShortcutsOverlay() {
   return (
     <div
       id="shortcuts-overlay"
-      className="hidden fixed inset-0 z-[70] flex items-center justify-center p-4"
+      className="hidden fixed inset-0 z-[300] flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
       aria-label="Keyboard shortcuts"
@@ -126,48 +166,82 @@ export function ShortcutsOverlay() {
         className="absolute inset-0 bg-black/70 backdrop-blur-sm"
         onClick={close}
       />
-      <div className="relative w-full max-w-md rounded-3xl p-6 bg-[var(--bg2)] border border-[var(--border2)] shadow-[0_8px_60px_rgba(99,102,241,0.3)]">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <div className="text-[10px] uppercase tracking-wider text-[var(--t3)] font-mono">
-              Productivity
+      <div className="relative w-full max-w-md rounded-3xl p-6 bg-[var(--bg2)] border border-[var(--border2)] shadow-[0_8px_60px_rgba(99,102,241,0.3)] max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-[var(--grad-btn)] text-white shadow-[0_0_20px_rgba(99,102,241,0.4)] shrink-0">
+              <Keyboard className="w-5 h-5" />
             </div>
-            <h2 className="font-d text-lg font-bold text-[var(--t1)]">
-              Keyboard Shortcuts
-            </h2>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-[var(--t3)] font-mono">
+                Productivity
+              </div>
+              <h2 className="font-d text-lg font-bold text-[var(--t1)]">
+                Keyboard Shortcuts
+              </h2>
+            </div>
           </div>
           <button
             onClick={close}
-            className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[var(--card-h)] transition text-[var(--t2)]"
+            className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[var(--card-h)] transition text-[var(--t2)] hover:text-[var(--t1)]"
             aria-label="Close shortcuts"
           >
-            ✕
+            <X className="w-4 h-4" />
           </button>
         </div>
-        <div className="space-y-4">
+
+        {/* Grouped shortcut cards */}
+        <div className="space-y-3">
           {SHORTCUT_GROUPS.map((g) => (
-            <div key={g.group}>
-              <div className="text-[10px] uppercase tracking-wider text-[var(--p3)] font-mono mb-2">
-                {g.group}
+            <div
+              key={g.group}
+              className="rounded-2xl p-3.5 bg-[var(--card)]/60 border border-[var(--border)]"
+            >
+              <div className="flex items-center gap-2 mb-2.5">
+                <span className="text-base leading-none" aria-hidden="true">
+                  {g.icon}
+                </span>
+                <span
+                  className="text-[10px] uppercase tracking-wider font-mono font-bold"
+                  style={{ color: g.accent }}
+                >
+                  {g.group}
+                </span>
               </div>
               <div className="space-y-2">
-                {g.items.map((it) => (
+                {g.items.map((it, i) => (
                   <div
-                    key={it.keys}
+                    key={i}
                     className="flex items-center justify-between gap-3"
                   >
-                    <span className="text-sm text-[var(--t2)]">{it.desc}</span>
-                    <kbd className="font-mono text-[11px] font-bold px-2 py-1 rounded-md bg-[var(--card)] border border-[var(--border2)] text-[var(--t1)] shadow-[0_2px_0_var(--border2)] min-w-[2.5rem] text-center">
-                      {it.keys}
-                    </kbd>
+                    <span className="text-sm text-[var(--t2)] leading-tight">
+                      {it.desc}
+                    </span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {it.keys.map((k, j) => (
+                        <kbd
+                          key={j}
+                          className="font-mono text-[11px] font-bold px-2 py-1 rounded-md bg-[var(--bg2)] border border-[var(--border2)] text-[var(--t1)] shadow-[0_2px_0_var(--border2)] min-w-[2rem] text-center leading-none"
+                        >
+                          {k}
+                        </kbd>
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
           ))}
         </div>
+
+        {/* Footer hint */}
         <div className="mt-5 text-[10px] text-[var(--t3)] text-center font-mono">
-          Press <kbd className="px-1 py-0.5 rounded bg-[var(--card)] border border-[var(--border)]">?</kbd> anytime to open this
+          Press{" "}
+          <kbd className="px-1.5 py-0.5 rounded bg-[var(--card)] border border-[var(--border)]">
+            ?
+          </kbd>{" "}
+          anytime to open this
         </div>
       </div>
     </div>

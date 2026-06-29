@@ -180,7 +180,7 @@ export function AchievementGallery() {
                 </div>
                 {/* Mini progress bar (only when not earned) */}
                 {!b.earned && (
-                  <div className="mt-1.5 h-0.5 rounded-full bg-[rgba(255,255,255,0.06)] overflow-hidden">
+                  <div className="mt-1.5 h-0.5 rounded-full bg-[var(--overlay-1)] overflow-hidden">
                     <motion.div
                       className="h-full rounded-full"
                       style={{ background: color }}
@@ -236,7 +236,7 @@ export function AchievementGallery() {
                         {b.current} / {b.target}
                       </span>
                     </div>
-                    <div className="mt-1 h-1 rounded-full bg-[rgba(255,255,255,0.06)] overflow-hidden">
+                    <div className="mt-1 h-1 rounded-full bg-[var(--overlay-1)] overflow-hidden">
                       <div
                         className="h-full rounded-full"
                         style={{ width: `${b.pct}%`, background: color }}

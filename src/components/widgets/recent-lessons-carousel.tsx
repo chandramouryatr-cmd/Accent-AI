@@ -145,7 +145,7 @@ export function RecentLessonsCarousel() {
 
               {/* Progress bar (only for in-progress) */}
               {isInProgress && prog.stepsViewed > 0 && (
-                <div className="relative mt-2 h-1 rounded-full bg-[rgba(255,255,255,0.06)] overflow-hidden">
+                <div className="relative mt-2 h-1 rounded-full bg-[var(--overlay-1)] overflow-hidden">
                   <motion.div
                     className="h-full bg-gradient-to-r from-[var(--p)] to-[var(--p3)]"
                     initial={{ width: 0 }}

@@ -150,7 +150,7 @@ function PracticeCalendarHeatmap() {
                   const bg = cell.isFuture ? "transparent" : heatColor(cell.count);
                   const border = cell.isToday
                     ? "1.5px solid rgba(99,102,241,0.9)"
-                    : "1px solid rgba(255,255,255,0.04)";
+                    : "1px solid var(--overlay-1)";
                   return (
                     <motion.div
                       key={dayIdx}
@@ -191,22 +191,22 @@ function PracticeCalendarHeatmap() {
             </span>
             <div
               className="h-3 w-3 rounded-[3px]"
-              style={{ background: heatColor(0), border: "1px solid rgba(255,255,255,0.04)" }}
+              style={{ background: heatColor(0), border: "1px solid var(--overlay-1)" }}
               title="0 lessons"
             />
             <div
               className="h-3 w-3 rounded-[3px]"
-              style={{ background: heatColor(1), border: "1px solid rgba(255,255,255,0.04)" }}
+              style={{ background: heatColor(1), border: "1px solid var(--overlay-1)" }}
               title="1-2 lessons"
             />
             <div
               className="h-3 w-3 rounded-[3px]"
-              style={{ background: heatColor(3), border: "1px solid rgba(255,255,255,0.04)" }}
+              style={{ background: heatColor(3), border: "1px solid var(--overlay-1)" }}
               title="3-4 lessons"
             />
             <div
               className="h-3 w-3 rounded-[3px]"
-              style={{ background: heatColor(5), border: "1px solid rgba(255,255,255,0.04)" }}
+              style={{ background: heatColor(5), border: "1px solid var(--overlay-1)" }}
               title="5+ lessons"
             />
             <span className="text-[9px] text-[var(--t3)] font-mono uppercase tracking-wider">
@@ -300,7 +300,7 @@ export function ProgressView() {
           <div className="font-d text-lg font-bold text-[var(--t1)]">{rank.name}</div>
           {rank.next && (
             <>
-              <div className="mt-2 h-1.5 rounded-full bg-[rgba(255,255,255,0.08)] overflow-hidden">
+              <div className="mt-2 h-1.5 rounded-full bg-[var(--overlay-border-1)] overflow-hidden">
                 <motion.div
                   className="h-full bg-[var(--grad-btn)]"
                   initial={{ width: 0 }}

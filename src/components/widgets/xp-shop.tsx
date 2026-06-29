@@ -196,7 +196,7 @@ export function XPShop() {
                   ? "bg-[rgba(16,185,129,0.08)] border border-[rgba(16,185,129,0.3)]"
                   : canAfford
                     ? "bg-[rgba(245,158,11,0.04)] border border-[rgba(245,158,11,0.2)] hover:border-[rgba(245,158,11,0.4)]"
-                    : "bg-[rgba(255,255,255,0.02)] border border-[var(--border)] opacity-60"
+                    : "bg-[var(--overlay-1)] border border-[var(--border)] opacity-60"
               }`}
               style={{
                 backdropFilter: "blur(12px)",

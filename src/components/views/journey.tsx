@@ -280,7 +280,7 @@ export function JourneyView() {
                     className={`rounded-2xl border overflow-hidden transition ${
                       isCurrent
                         ? "bg-[rgba(99,102,241,0.06)] border-[rgba(99,102,241,0.3)]"
-                        : "bg-[rgba(255,255,255,0.02)] border-[var(--border)]"
+                        : "bg-[var(--overlay-1)] border-[var(--border)]"
                     } ${!isUnlocked ? "opacity-60" : ""}`}
                     style={{ backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}
                   >
@@ -314,7 +314,7 @@ export function JourneyView() {
                         <p className="text-xs text-[var(--t2)]">{phase.desc}</p>
 
                         <div className="mt-2 flex items-center gap-2">
-                          <div className="flex-1 h-1.5 rounded-full bg-[rgba(255,255,255,0.08)] overflow-hidden">
+                          <div className="flex-1 h-1.5 rounded-full bg-[var(--overlay-border-1)] overflow-hidden">
                             <motion.div
                               className="h-full bg-[var(--grad-btn)]"
                               initial={{ width: 0 }}

@@ -24,6 +24,40 @@ interface Props {
   onNext?: () => void;
 }
 
+/**
+ * Returns the "primary audio" text for a lesson step — the text that should
+ * be spoken when the user presses Space (or wants a quick replay).
+ * Returns `null` for step types that have no meaningful auto-play audio.
+ */
+function getPrimaryAudioText(step: LessonStep | undefined): string | null {
+  if (!step) return null;
+  switch (step.type) {
+    case "intro":
+      return step.title;
+    case "example":
+      return step.phrase;
+    case "mouth-diagram":
+      return step.exampleWord || null;
+    case "compare":
+      return step.nativePhrase;
+    case "stress-bars":
+      return step.word;
+    case "rhythm":
+      return step.phrase;
+    case "linking":
+      return step.words.join(" ");
+    case "shadow":
+      return step.phrase;
+    case "intonation":
+      return step.phrase;
+    case "practice":
+      return step.phrase;
+    // No primary audio: concept, vowel-chart, tap-pronounce, tip, quiz, completion
+    default:
+      return null;
+  }
+}
+
 const VISUAL_EMOJI: Record<string, string> = {
   wave: "🌊",
   mouth: "👄",
@@ -46,6 +80,8 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
   const [practiceScore, setPracticeScore] = useState<number | null>(null);
   const [recording, setRecording] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
+  // Briefly shows a "⌨ Press Space to play" hint when a step with audio loads.
+  const [showSpaceHint, setShowSpaceHint] = useState(false);
   // Track the previous stepIdx so we can reset per-step interactive state
   // when the step changes — using the official "adjust state during render"
   // pattern instead of setState-in-effect (react-hooks/set-state-in-effect).
@@ -75,12 +111,23 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
     setQuizAnswer(null);
     setPracticeScore(null);
     setRecording(false);
+    // Reset the Space-to-play hint based on whether the new step has audio.
+    setShowSpaceHint(!!getPrimaryAudioText(lesson.steps[stepIdx]));
   }
 
   // Stop TTS on unmount or step change
   useEffect(() => {
     return () => stopSpeaking();
   }, [stepIdx]);
+
+  // Auto-hide the "Press Space to play" hint after 3s when it's showing.
+  // The hint itself is shown/hidden via the render-time adjustment above
+  // (avoids setState-in-effect cascades).
+  useEffect(() => {
+    if (!showSpaceHint) return;
+    const t = setTimeout(() => setShowSpaceHint(false), 3000);
+    return () => clearTimeout(t);
+  }, [showSpaceHint]);
 
   const handleSpeak = useCallback(
     (text: string) => {
@@ -133,16 +180,63 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
     return () => clearTimeout(id);
   }, [step, alreadyCompleted, handleComplete]);
 
-  // ESC to close
+  // ESC to close, Arrows to navigate, Space to play step audio
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-      else if (e.key === "ArrowRight") goNext();
-      else if (e.key === "ArrowLeft") goPrev();
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key === "ArrowRight") {
+        goNext();
+        return;
+      }
+      if (e.key === "ArrowLeft") {
+        goPrev();
+        return;
+      }
+      // Space → play the current step's primary audio
+      if (e.key === " " || e.code === "Space") {
+        const target = e.target as HTMLElement | null;
+        const isTyping =
+          target &&
+          (target.tagName === "INPUT" ||
+            target.tagName === "TEXTAREA" ||
+            target.isContentEditable);
+        if (isTyping) return;
+
+        // Don't capture Space when another overlay is open that needs it
+        // (AI Coach chat input, or this very shortcuts overlay).
+        const coachOpen = document.querySelector(
+          '[aria-label="AccentAI Coach chat"]'
+        );
+        if (coachOpen) return;
+        const overlay = document.getElementById("shortcuts-overlay");
+        if (overlay && !overlay.classList.contains("hidden")) return;
+
+        // If an interactive element (button / link) is focused, let the
+        // browser's native Space-to-click behaviour win so users who tab
+        // through the UI can still activate controls with Space.
+        const active = document.activeElement as HTMLElement | null;
+        if (
+          active &&
+          (active.tagName === "BUTTON" ||
+            active.tagName === "A" ||
+            active.getAttribute("role") === "button")
+        ) {
+          return;
+        }
+
+        const text = getPrimaryAudioText(step);
+        if (text) {
+          e.preventDefault();
+          handleSpeak(text);
+        }
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [goNext, goPrev, onClose]);
+  }, [goNext, goPrev, onClose, step, handleSpeak]);
 
   return (
     <motion.div
@@ -262,6 +356,28 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
           </motion.div>
         </AnimatePresence>
       </div>
+
+      {/* "Press Space to play" hint — appears briefly above the footer when a
+          step with audio loads. pointer-events-none so it never blocks taps. */}
+      <AnimatePresence>
+        {showSpaceHint && (
+          <motion.div
+            initial={{ opacity: 0, y: 14, scale: 0.92 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 14, scale: 0.92 }}
+            transition={{ type: "spring", stiffness: 320, damping: 24 }}
+            className="absolute left-1/2 -translate-x-1/2 bottom-24 z-10 pointer-events-none"
+          >
+            <div className="flex items-center gap-2 px-3.5 py-2 rounded-full bg-[var(--card)]/95 border border-[var(--border2)] backdrop-blur-md shadow-[0_6px_24px_rgba(0,0,0,0.45)]">
+              <span className="text-sm leading-none" aria-hidden="true">⌨</span>
+              <kbd className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-[var(--bg2)] border border-[var(--border2)] text-[var(--p3)] shadow-[0_1px_0_var(--border2)]">
+                Space
+              </kbd>
+              <span className="text-xs text-[var(--t2)] font-medium">Press Space to play</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Footer nav */}
       <div className="border-t border-[var(--border)] bg-[var(--bg2)]/95 backdrop-blur px-4 py-3 flex items-center gap-3 safe-bottom">

@@ -66,7 +66,7 @@ function TimerRing({ timeLeft, maxTime }: { timeLeft: number; maxTime: number })
           cy="48"
           r={radius}
           fill="none"
-          stroke="rgba(255,255,255,0.06)"
+          stroke="var(--overlay-1)"
           strokeWidth="5"
         />
         {/* Progress ring */}
@@ -1054,7 +1054,7 @@ export function PronunciationChallenge() {
                           ? "var(--p3)"
                           : isPast
                           ? "rgba(16,185,129,0.5)"
-                          : "rgba(255,255,255,0.1)",
+                          : "var(--overlay-3)",
                       }}
                       animate={
                         isCurrent

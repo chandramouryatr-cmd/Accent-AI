@@ -602,7 +602,7 @@ function PracticeContentWithDiff({ diff: initialDiff }: { diff: Difficulty }) {
             <div className="flex items-center justify-center mb-3">
               <div className="relative w-24 h-24">
                 <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-                  <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="6" />
+                  <circle cx="50" cy="50" r="42" fill="none" stroke="var(--overlay-1)" strokeWidth="6" />
                   <motion.circle
                     cx="50" cy="50" r="42" fill="none"
                     stroke={score >= 80 ? "#10b981" : score >= 70 ? "#f59e0b" : "#ef4444"}

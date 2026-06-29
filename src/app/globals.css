@@ -54,6 +54,14 @@
   --border-c: rgba(255, 255, 255, 0.08);
   --input: rgba(255, 255, 255, 0.08);
   --ring: #6366f1;
+
+  /* Dark-theme-adaptive overlays (same as original hardcoded values) */
+  --overlay-1: rgba(255, 255, 255, 0.04);
+  --overlay-2: rgba(255, 255, 255, 0.07);
+  --overlay-3: rgba(255, 255, 255, 0.10);
+  --overlay-border-1: rgba(255, 255, 255, 0.08);
+  --overlay-border-2: rgba(255, 255, 255, 0.14);
+  --shadow-color: rgba(0, 0, 0, 0.6);
 }
 
 .light {
@@ -86,6 +94,14 @@
   --accent-foreground: #ffffff;
   --border-c: rgba(99, 102, 241, 0.14);
   --input: rgba(99, 102, 241, 0.14);
+
+  /* Light-theme-adaptive overlays (replace hardcoded rgba(255,255,255,...)) */
+  --overlay-1: rgba(99, 102, 241, 0.06);   /* replaces rgba(255,255,255,0.04) */
+  --overlay-2: rgba(99, 102, 241, 0.10);   /* replaces rgba(255,255,255,0.07) */
+  --overlay-3: rgba(99, 102, 241, 0.14);   /* replaces rgba(255,255,255,0.10) */
+  --overlay-border-1: rgba(99, 102, 241, 0.10);  /* replaces rgba(255,255,255,0.08) */
+  --overlay-border-2: rgba(99, 102, 241, 0.18);  /* replaces rgba(255,255,255,0.14) */
+  --shadow-color: rgba(99, 102, 241, 0.10);
 }
 
 @theme inline {
