@@ -1678,3 +1678,289 @@ AccentAI is a feature-rich English accent learning Next.js 16 SPA with:
 6. **LOW**: Add light theme polish for all new components
 7. **LOW**: Add social sharing features (share progress, leaderboard)
 8. **LOW**: Add more granular XP animations (e.g., floating "+120 XP" animation on lesson complete)
+
+---
+Task ID: 5-f
+Agent: history-and-difficulty-builder
+Task: Practice history sparkline chart + lesson difficulty badges
+
+Work Log:
+- Read worklog.md, src/lib/store.ts (history field), src/lib/types.ts (Lesson interface), src/components/views/progress.tsx (Progress view layout), src/components/views/journey.tsx (lesson card layout), src/components/lesson/lesson-modal.tsx (IntroStepView), and phase1 lesson files l1-l4.ts to understand lesson structure (phaseId 0-indexed, lessonIndex 0-3).
+- Feature 1 — Practice History Sparkline:
+  - Created src/components/widgets/practice-history.tsx — a `PracticeHistory` widget that reads `history` from the Zustand store (newest-first, capped at 50), reverses to oldest→newest, and plots the last 20 sessions as an SVG sparkline (viewBox 320×130).
+  - Built `buildSmoothPath()` helper that uses quadratic bezier segments between consecutive midpoints — each data point acts as a control handle, producing a natural smooth curve (no straight-line segments).
+  - Two SVG `<defs>` gradients: `practice-history-fill` (indigo 38% → 12% → 0% vertical) for the area beneath the line, and `practice-history-stroke` (violet→indigo horizontal) for the line itself.
+  - Animated draw via Framer Motion `motion.path` with `initial={{ pathLength: 0 }} animate={{ pathLength: 1 }}` over 1.2s easeInOut. Area fill fades in after a 0.35s delay.
+  - Per-point hover dots: invisible r=11 hit circles + visible white-filled, color-stroked circles that scale from r=3 → r=5 on hover with a soft glow halo. HTML tooltip overlay (absolutely positioned, percentage-based) shows "Session N · date", score (color-coded), and truncated lesson title. Touch support via `onTouchStart`.
+  - Stats row: Min (red), Max (green), Avg (violet) StatBoxes plus a Trend box. Trend computed by comparing the avg of the first quarter of sessions to the last quarter (needs ≥4 sessions); thresholds ±5 pts map to ↑ Improving (green) / ↓ Declining (red) / → Stable (violet). Uses Lucide TrendingUp/TrendingDown/Minus icons plus arrow glyphs.
+  - X-axis: 3 labels (first/middle/last) shown as short dates (e.g., "Jan 5"); switches to session indices ("1", "12", "20") when n > 12 to avoid clutter. Y-axis: 0/100 hints + dashed gridlines at 25/50/75.
+  - Empty state card: "📈 Score Trend — No practice history yet — complete a lesson to see your trend!".
+  - Header: "Score Trend" with Activity (sparkline-style) icon and "Last N sessions" subtitle.
+  - Integrated into Progress view (src/components/views/progress.tsx) — placed between Phoneme Mastery and Recent Activity; imported `PracticeHistory` and rendered `<PracticeHistory />`.
+- Feature 2 — Lesson Difficulty Badges:
+  - Extended the `Lesson` interface in src/lib/types.ts with `difficulty?: "easy" | "medium" | "hard"` (optional, so existing 32 lesson files require zero edits).
+  - Added `LessonDifficulty` type + `getLessonDifficulty(lesson)` helper. Rules (phaseId 0-indexed): Phase 1–2 → easy (Phase 2 lessons 2–3 bumped to medium); Phase 3–4 → medium (Phase 4 lessons 2–3 bumped to hard); Phase 5–6 → medium for lessons 0–1, hard for lessons 2–3; Phase 7–8 → hard. Within a phase, lessons 2–3 are treated as the harder half. Honors explicit `lesson.difficulty` override if present.
+  - Created src/components/widgets/difficulty-badge.tsx — `DifficultyBadge` component with three size variants (xs/sm/md), colored pill (Easy=green #10b981, Medium=amber #f59e0b, Hard=red #ef4444) with matching bg/border/dot, optional spring-in animation (disableable via `animate={false}` for use inside already-animated lists). Reads difficulty via `lesson.difficulty ?? getLessonDifficulty(lesson)`.
+  - Added the badge to the Journey view in both layouts:
+    - Flat search/filter results list (near "Phase N · ⏱ duration · ⚡ XP" line) — `size="xs" animate={false}`.
+    - Phase-grouped expanded lesson list (near "⏱ duration · ⚡ XP" line) — `size="xs" animate={false}`.
+    - Both lines wrapped with `flex-wrap` so the badge never overflows on narrow screens.
+  - Added the badge to the LessonModal intro step:
+    - Imported `DifficultyBadge` in lesson-modal.tsx.
+    - Added `lesson: Lesson` to `StepRendererProps` interface and passed `lesson={lesson}` from `<StepRenderer>`.
+    - Threaded `lesson` through `StepRenderer` → `IntroStepView`.
+    - Updated IntroStepView signature to accept `lesson` and rendered `<DifficultyBadge lesson={lesson} size="sm" />` inline next to the "Lesson Introduction" eyebrow label, above the lesson title.
+- Verification:
+  - `bun run lint` → exit 0, 0 errors (only one pre-existing unused eslint-disable warning in compare-wave.tsx, untouched).
+  - Dev server compiles cleanly across all changes (no errors in dev.log).
+  - All 32 lesson files continue to type-check (optional `difficulty` field, derived via helper).
+
+Stage Summary:
+- Feature 1 (Practice History Sparkline): New `PracticeHistory` widget renders an SVG sparkline of the user's last ≤20 practice scores with smooth quadratic-bezier curve, animated draw-on-mount via Framer Motion pathLength, indigo→transparent gradient fill, interactive hover dots with HTML tooltips (session #, date, score, lesson title), min/max/avg stat boxes, and a trend indicator (↑↓→ with color). Integrated into the Progress view between Phoneme Mastery and Recent Activity under a "Score Trend" heading with an Activity sparkline icon. Empty state handles the no-history case.
+- Feature 2 (Lesson Difficulty Badges): Added optional `difficulty` field + `getLessonDifficulty(lesson)` helper to types.ts (derives easy/medium/hard from phaseId + lessonIndex per spec, no need to edit 32 lesson files). New reusable `DifficultyBadge` widget renders a colored pill (green/amber/red) with three size variants. Badges appear on lesson cards in both Journey view layouts (flat search results + phase-grouped list, near duration/XP info) and on the lesson intro step (next to the "Lesson Introduction" eyebrow). Lint passes; dev server compiles cleanly.
+
+---
+Task ID: 5-d
+Agent: speech-recognition-builder
+Task: Real speech recognition scoring in Practice view
+
+Work Log:
+- Created `/src/lib/speech-recognition.ts` with:
+  - Minimal TS interfaces for the Web Speech API (SpeechRecognitionEvent, SpeechRecognitionResult, SpeechRecognitionErrorEvent, SpeechRecognitionLike, SpeechRecognitionConstructor) — Web Speech API isn't part of the standard TS DOM lib
+  - `isSpeechRecognitionAvailable()` — detects `SpeechRecognition` / `webkitSpeechRecognition` on `window` (guarded for SSR)
+  - `SpeechRecognizer` class — wraps a single recognition session. Configures `continuous=false`, `interimResults=true`, `maxAlternatives=1`, `lang` based on accent. Exposes `start()`, `stop()`, `abort()`, `isAvailable()`, `isRunning()`, `setCallbacks()`. Callbacks: `onResult(transcript, isFinal)`, `onError`, `onEnd`, `onStart`. Handles double-start and stop-after-end gracefully.
+  - `scorePronunciation(target, transcript)` — normalizes both strings (lowercase, strip punctuation incl. apostrophes, collapse whitespace), runs greedy left-to-right word matching with small tolerance (plurals/prefix-variation for ≥4-char words; Levenshtein≤1 for ≥3-char words). Returns `{ score, matchedWords, missedWords, extraWords, targetWords, transcriptWords, matchedMask }`. Score = (matched/total)*100 + sequence-order bonus (up to +10) − extra-words penalty (up to −10), clamped to 0–100.
+- Modified `/src/components/views/practice.tsx` (`PracticeContentWithDiff` — the component actually rendered; left the unused legacy `PracticeContent` untouched):
+  - Added imports: `useRef`, `useEffect`, `Sparkles` + `MessageSquare` icons, and the speech-recognition exports
+  - Added state: `transcript`, `pronScore` (`PronunciationScore | null`), `demoMode`
+  - Added refs: `recognizerRef`, `transcriptRef`, `finalizedRef` (start `true` to prevent stale finalization), `timerRef`
+  - Added `useEffect` unmount cleanup that aborts any in-flight recognizer and clears the safety timer
+  - Added `finalizeScoring` useCallback (depends on `phrase.text`, `addSpeakingTime`) that:
+    - Bails out if already finalized
+    - Stops recording, clears the safety timer
+    - Falls back to the legacy simulated score (`65 + Math.floor(Math.random() * 30)`) when SpeechRecognition isn't available OR no transcript was captured, sets `demoMode=true`
+    - Otherwise runs `scorePronunciation`, sets the score / transcript / pronScore / step / speaking-time
+  - Rewrote `handleRecord`:
+    - If recording → call `finalizeScoring()` (preserves the existing toggle semantics)
+    - Else: reset all state, init `SpeechRecognizer` with accent-aware lang, attach `onResult` (stores latest transcript in ref) and `onEnd` (auto-finalizes on natural end), call `start()` if available, schedule 6s safety-net timer
+  - Updated `nextPhrase` and both diff-change reset blocks (initial + internal) to also clear transcript/pronScore/demoMode state AND abort the recognizer + clear timer + mark finalized
+- Added visual feedback in the results step (inside the existing score block, using Framer Motion):
+  - "DEMO MODE" pill badge (Sparkles icon, amber theme) above the score ring when `demoMode===true`
+  - Transcript card (slide-in y:12→0, 0.4s delay) with:
+    - "You said" header (MessageSquare icon) + italic transcript in curly quotes
+    - "Word match" section: each target word rendered as a staggered pill (delay = 0.5 + i*0.05s, y:6→0); green (#10b981) with subtle bg if matched, red (#f87171) with line-through if missed. Uses `matchedMask[i]` (not `.includes()`) so duplicate target words render correctly.
+    - "Extra words" section (only if any): amber (#fbbf24) pills, staggered reveal
+  - Demo-mode explanation card (amber-tinted) telling the user to try Chrome/Edge for real feedback
+- Reused existing CSS variables throughout: `--card-h`, `--border`, `--t1/t2/t3`, `--card`, `--grad-btn`, `--overlay-1`. Animations use Framer Motion.
+- Kept the existing `addSpeakingTime(5)` call in both the real-scoring and demo-mode-fallback paths.
+- Fixed a TS parse error encountered during lint (`readonly` modifier on a method signature in the Web Speech API interface — removed it; `readonly` is only valid on properties/index signatures).
+
+Stage Summary:
+- Practice view now scores real pronunciation using the browser's Web Speech API (SpeechRecognition) instead of a random number.
+- New utility module `src/lib/speech-recognition.ts` exports: `isSpeechRecognitionAvailable()`, `SpeechRecognizer` class, `scorePronunciation()` (+ `PronunciationScore` interface).
+- Accent-aware recognition locale (`en-US` / `en-GB`), interim+final results, `continuous=false`, `maxAlternatives=1`.
+- Word-level scoring with sequence bonus and extra-word penalty; clamped 0–100. Returns matched/missed/extra word lists plus a `matchedMask` array for correct UI rendering of duplicate words.
+- Results step shows: numeric score ring (existing), recognized transcript in a slide-in card, staggered word-by-word pills (green/red/amber), and a "DEMO MODE" badge + explanation card when SpeechRecognition isn't available.
+- Fallback to simulated score preserves existing UX in unsupported browsers — user is clearly informed via the demo badge.
+- `bun run lint` — PASS. Dev server compiles cleanly, `GET / 200`. No existing functionality broken.
+
+---
+Task ID: 4-e
+Agent: compare-and-more-styling
+Task: CompareWave widget enhancement + More view visual polish
+
+Work Log:
+- Read existing `src/components/widgets/compare-wave.tsx` (green/red bars, per-card play buttons, basic playhead), `src/components/views/more.tsx` (profile/accent/theme/XP shop/phases/bookmarks/notes/about/reset), `src/components/widgets/xp-shop.tsx`, and `src/app/globals.css` to understand the existing animation utilities (`animate-gradient-ring`, `animate-pulse-glow`, `animate-gradient-text`, `red-pulse-glow` keyframes, etc.).
+- Rewrote `compare-wave.tsx` end-to-end (kept all business logic: bar generation, diff-index computation, deterministic scores, per-card solo play with rAF):
+  • Switched wave colors from green/red to **indigo→violet (native)** and **cyan→blue (learner)** per spec, using inline `linear-gradient` backgrounds.
+  • Wrapped each waveform bar row in a `motion.div` that animates `clipPath: inset(0 100% 0 0) → inset(0 0% 0 0)` over 0.8s — gives the left-to-right "draw" reveal (pathLength-style for SVG-equivalent feel) when the step appears.
+  • Added a `WaveformCard` sub-component (same file) that receives the per-card state and renders the gradient wave + label + playhead + diff overlay. Native card has `showDiffOverlay=false`; learner card has `showDiffOverlay=true` so the red diff overlay only shows where the learner wave diverges from native.
+  • Diff overlay: each learner bar whose index is in `diffIndices` gets a `motion.div` overlay with `linear-gradient(rgba(239,68,68,0.55)→rgba(239,68,68,0.35))` and `mixBlendMode: "screen"`, plus a red glow shadow.
+  • **Sync playhead**: added `comparing`/`compareProgress`/`comparePhase` state. When `Play comparison` is clicked, a single rAF loop drives `compareProgress` 0→1 over 4.8s (2× phrase duration). Both waveform cards receive the same `compareProgress`, so both playheads sweep across their respective waves at the same x position simultaneously. Bar heights ripple using the shared head position so the two waves move in lockstep.
+  • **Play comparison button**: gradient (indigo→violet→cyan) button below the cards. Clicking triggers `speak(nativePhrase)` immediately and `speak(learnerPhrase)` after 2520ms (via `setTimeout`). Active card glows (`boxShadow`), inactive card dims (`filter: brightness(0.7)`). Button text + spinner indicator shows "Playing native…" / "Playing your attempt…".
+  • **Match badge**: added a new "Match: NN%" badge in the score header that count-ups from 0 to the learner's match score using Framer Motion's `animate(0, matchScore, { duration: 1.2, onUpdate })`. Number uses indigo→cyan gradient `background-clip: text`.
+  • **Sliding labels**: each card's "Native" / "Your attempt" label uses `initial={{ opacity: 0, x: -16 }}` → `animate={{ opacity: 1, x: 0 }}` with `delay: 0.1` (native) and `delay: 0.25` (learner) for staggered slide-in-from-left.
+  • Preserved the existing per-card ▶ play buttons (now disabled during compare), the score header (Native vs Learner), and the "What to notice" footer card.
+- Rewrote `more.tsx` (kept all existing business logic — accent/theme/XP shop/phase overview/bookmarks/notes/about/reset):
+  • Added a `Section` wrapper component: each section fades in from y=16 with `delay = 0.05 + index*0.06` for staggered entrance (8 sections × 60ms = 0.48s total cascade).
+  • Added a `Divider` component (1px horizontal line with `linear-gradient(transparent → var(--border2) → transparent)`) placed between every section, replacing the previous plain `space-y-5` gap-only layout.
+  • **Profile**: added a `radial-gradient` pulse-glow halo behind the avatar (`animate-pulse-glow` class) PLUS the existing rotating conic ring (`animate-gradient-ring`). Avatar itself now springs in (scale 0.85→1) on mount.
+  • **Accent selector**: extracted a `SelectedCheck` sub-component with spring-bounce scale (stiffness 500, damping 18) + rotate entrance, and an animated `pathLength` draw on the check SVG path. Country flag emoji now waves (rotate + skewX keyframes) continuously when its card is selected.
+  • **Theme selector**: 🌙 moon icon fades+pulses when dark theme is active, dims when inactive. ☀️ sun icon rotates in (rotate -180→0 with spring) when light theme is active, rotates 180° and dims when inactive. AnimatePresence-free approach using `key={moon-${theme}}` / `key={sun-${theme}}` to force re-mount + re-trigger entrance animation on theme switch.
+  • **About**: "AccentAI" title now uses `animate-gradient-text` class with a 5-stop linear-gradient background-image (indigo→violet→cyan→violet→indigo) for the flowing gradient text animation.
+  • **Reset**: tracked `resetHovered` state via `onHoverStart`/`onHoverEnd`. On hover (when confirmation isn't shown), the card animates `boxShadow` through 3 keyframes (12px→28px→12px red glow) on a 1.4s infinite loop. The 🔄 icon also spins 360° continuously while hovered. Confirmation view now springs in (opacity+scale). Reset confirm button has a tap scale animation.
+  • Phase overview rows: each phase card now slides in from x=-12 with staggered 50ms delay. Phase emoji has a `whileHover={{ scale: 1.15, rotate: 5 }}` micro-interaction.
+  • Bookmarks empty state: ⭐ emoji does a rotate/scale wave on a 3s loop with 3s repeat delay.
+  • Notes header badge: springs in (scale 0→1) when count > 0.
+- Enhanced `xp-shop.tsx` (kept all existing purchase logic, affordance checks, toast calls):
+  • Added `hoveredId` state; cards now `onHoverStart`/`onHoverEnd` to track which item is hovered.
+  • Added a new **hover shimmer sweep** (separate from the existing ambient gold shimmer on affordable items): when a non-owned card is hovered, a brighter white-gradient sweep animates `x: -100% → 200%` over 0.9s, fading in/out via AnimatePresence.
+  • Wrapped the price number `{item.cost}` in the "Buy · NN XP" button text with a `motion.span` that pulses `scale: [1, 1.08, 1]` on a 1.8s infinite loop (gentle, continuous).
+- Removed an unused `<AnimatePresence />` placeholder and the corresponding import from `more.tsx` to keep the file clean.
+- Removed an unused `eslint-disable-next-line react-hooks/exhaustive-deps` directive in `compare-wave.tsx` (the project's ESLint config already turns that rule off, so the directive was triggering an "unused eslint-disable" warning).
+- Verified `bun run lint` → PASS (0 errors, 0 warnings). Verified `bunx tsc --noEmit` → 0 errors in the three files I touched (compare-wave.tsx, more.tsx, xp-shop.tsx). Pre-existing TS errors in lesson-modal.tsx, onboarding.tsx, lesson-notes-panel.tsx, and mic-waveform.tsx are unrelated to this task and were not modified.
+
+Stage Summary:
+- **CompareWave widget** (`src/components/widgets/compare-wave.tsx`): Complete visual overhaul. Native waveform uses indigo→violet gradient, learner uses cyan→blue. Both waveforms draw left-to-right via `clipPath` reveal animation. Learner wave gets a red overlay on bars where it diverges from native (diff indices). A synchronized playhead sweeps across both waveforms simultaneously when "Play comparison" is clicked; the button fires TTS for native then learner sequentially with active-phase glow on the speaking card. New "Match: NN%" badge count-ups from 0 to the match score on mount. "Native" and "Your attempt" labels slide in from the left with staggered 150ms delays. Existing per-card solo play buttons and the score-vs-score header are preserved.
+- **More view** (`src/components/views/more.tsx`): All 8 sections now fade-in-up with staggered delays (60ms cascade). Gradient divider lines separate every section. Profile avatar has both a rotating conic gradient ring AND a radial pulse-glow halo. Accent selector's flag emoji waves when selected; the selected checkmark springs in with a pathLength-drawn SVG check. Theme selector's ☀️ rotates in / 🌙 fades out on theme switch. About section's "AccentAI" title flows through a 5-stop indigo→violet→cyan gradient. Reset card pulses a red border glow on hover and the 🔄 icon spins while hovered. Phase rows stagger in from the left; phase emojis micro-bounce on hover. Bookmarks empty-state ⭐ waves.
+- **XP Shop** (`src/components/widgets/xp-shop.tsx`): Each shop item card now has a brighter white shimmer sweep that fires on hover (in addition to the existing ambient gold shimmer on affordable items). The price number in the "Buy · NN XP" button text pulses gently (1→1.08→1 scale) on a 1.8s loop.
+- All animations use Framer Motion + existing CSS variables (--p, --p2, --p3, --border, --border2, --card, --t1, --t2, --t3, --grad-btn). No business logic changed. `bun run lint` PASS, TypeScript PASS for modified files.
+
+---
+Task ID: 5-e
+Agent: streaming-and-intro-svg-builder
+Task: AI Coach streaming responses + animated SVG intro illustrations
+
+Work Log:
+- Read worklog.md (full project context), `src/app/api/ai-coach/route.ts` (existing streaming implementation), `src/components/ai-coach/ai-coach-chat.tsx` (existing chat consumer), `src/components/lesson/lesson-modal.tsx` (`IntroStepView`), and `src/lib/types.ts` (`StepVisual` union of 12 visual types) to ground the work.
+- Inspected prior agent file `agent-ctx/7-ai-coach-ai-coach-builder.md` to confirm the AI Coach was originally built non-streaming and a later pass added the streaming pipe (already present in current route.ts).
+- Confirmed the API route already returns a `Response` with a `ReadableStream<Uint8Array>` body, sends chunks as SSE (`data: {"token":"..."}\n\n`), keeps the `{ messages, context, mode }` POST validation, attempts `stream:true` on the SDK, parses OpenAI-style `choices[0].delta.content` chunks, and falls back to `simulateStreamFromFullText` (word-by-word emit at 35ms) when the SDK doesn't return a stream.
+- Refined `src/app/api/ai-coach/route.ts`:
+  • Hoisted the upstream SDK reader into an outer scope (`upstreamReader`).
+  • Added an explicit `cancel()` handler on the transform `ReadableStream` that calls `upstreamReader.cancel()` so when the client aborts (user clicks Stop, navigates away, or closes the chat), the upstream SDK connection is released promptly instead of continuing to consume tokens until natural completion.
+  • All existing error handling, the `simulateStreamFromFullText` fallback, the GET metadata endpoint, and the dual `chat` / `insights` system prompts are preserved unchanged.
+- Updated `src/components/ai-coach/ai-coach-chat.tsx`:
+  • Added `Square` icon import from lucide-react.
+  • Added a `userAbortedRef` (boolean) to distinguish an explicit user Stop click from a first-token timeout (both throw `AbortError`).
+  • Refactored the catch-block AbortError branch:
+    - When user stopped mid-stream: keep partial text, set `streaming:false`, `streamError:false` — the bubble shows the truncated reply with NO red "⚠️ Response interrupted" banner or Retry button.
+    - When timed out mid-stream: keep partial text, set `streaming:false`, `streamError:true` — preserved existing interrupted UI with Retry.
+    - When user stopped before first token: emit a fresh assistant message `"⏹ Stopped. Type another question whenever you're ready! 🎯"` with `streamError:false` (no error banner).
+    - When timed out before first token: preserved existing `"⚠️ Request timed out"` message with error banner.
+  • Added `handleStop` callback: sets `userAbortedRef.current = true` then calls `abortRef.current.abort()`.
+  • Replaced the always-visible Send button with a conditional: when `loading` is true, render a Stop button (Square icon with `fill="currentColor"`, indigo card background, red-tinted hover state, accessible `aria-label="Stop generating"`); otherwise render the original Send button. The Send button's existing disabled condition (`!input.trim() && !error`) remains — when `loading` is true the whole button is replaced, so Send can't be clicked during streaming.
+  • The textarea already has `disabled={loading}` so the input can't be edited mid-stream.
+  • IPA rendering already runs on streaming text via `renderWithIPA(message.content, !!isStreaming)` — the blink cursor (`animate-blink-cursor`) shows only while `streaming:true`.
+- Created `src/components/widgets/intro-illustration.tsx` (new file, ~670 lines):
+  • Exported `IntroIllustration({ visual, emoji?, size=120 })` that picks one of six looping animated SVG variants based on the `StepVisual` field.
+  • All variants use `viewBox="0 0 120 120"` and palette from existing CSS vars (`--p` indigo, `--p2` violet, `--p3` light violet, `--c` cyan, `--c2` light cyan).
+  • **Wave** (`wave`/`compare-wave`/`linking`/`intonation`): 4 concentric rings pulsing outward (scale 0.4→2.6, opacity 0→0.7→0, staggered 0.6s delays), a radial-gradient core dot that pulses 1→1.15→1, a glow halo, and 4 frequency tick marks at N/E/S/W positions that fade in/out.
+  • **Mouth** (`mouth`): upper lip (static gradient curve), animated mouth opening (path `d` morphs through 3 keyframes to open then close on a 1.8s loop), lower lip (path `d` morphs in sync with mouth opening), a tongue ellipse that rises when mouth opens, and 3 cyan sound particles that float upward (y: 0→-16) staggered 0.25s — articulation metaphor.
+  • **Vowel quadrilateral** (`ipa-chart`/`vowel-chart`): classic IPA trapezoid polygon with `front/back/high/low` axis labels, 4 colored dots that wander between two positions inside the trapezoid (animated `cx`/`cy` on a 3.2s loop with staggered 0.5s delays), each dot has a pulse ring expanding 4→9 with opacity fade.
+  • **Rhythm** (`rhythm`/`stress-bars`): 4 beat circles along a dashed baseline (2 heavy beats at indices 0 & 3, 2 light beats at 1 & 2), each with a pulse ring (scale 0.6→1.6, opacity 0.8→0), a glow halo, and a core dot, all staggered 0.35s on a 1.4s loop. A metronome sweep line rotates -32°↔32° pivoting at (60,90) on a 2.8s loop. Apex pivot dot at top.
+  • **Emoji burst** (`emoji-burst`): 8 particles flying outward in a radial pattern (computed from `cos/sin` of `i/8 * 2π`), staggered 0.06s, with scale 0.4→1.1→0.3 and opacity 0→1→0. Central radial-gradient core orb pulsing 1→1.18→1, with either the step's emoji rendered as an SVG `<text>` element OR a 4-pointed sparkle path that rotates 0→90° and scales 1→1.15→1.
+  • **Gradient orb** (default, also `phoneme-grid`/`shadow`): rotating glow ring (strokeDasharray "60 200" with 360° linear rotation over 5s), pulse halo (scale 1→1.2→1, opacity 0.18→0.32→0.18), core orb with radial gradient, and a central 4-pointed sparkle that rotates 0→90° over 8s while scaling 0.9→1.1→0.9.
+  • Used `transformBox: "fill-box"` + `transformOrigin: "center"` for circle scaling (well-supported for circles); used explicit pixel `transformOrigin: "60px 90px"` for the metronome line pivot to avoid ambiguity with line bounding boxes.
+  • Wrapped in a `<div style={{width,height}} aria-hidden="true">` so the SVG is decorative and doesn't duplicate screen-reader text.
+- Integrated `IntroIllustration` into `IntroStepView` in `src/components/lesson/lesson-modal.tsx`:
+  • Added `import { IntroIllustration } from "@/components/widgets/intro-illustration";`.
+  • Replaced the previous `text-7xl` emoji block with a flex-column wrapper containing the 120×120 IntroIllustration (inside the existing `animate-gentle-float` div) and, if `step.emoji` is defined, a smaller `text-2xl` emoji below it — augmenting rather than fully replacing the emoji as the spec allowed.
+  • Preserved the spring entrance (`scale 0.6→1, opacity 0→1, rotate -8→0`), the "Lesson Introduction" eyebrow, the gradient `grad-text` title, subtitle, description, waveform canvas, "Hear the title" button, and the TTS speed control — no other IntroStepView markup changed.
+- Verified `bun run lint` → EXIT 0 (no errors, no warnings) after each round of edits.
+- Verified dev.log shows clean compiles (`✓ Compiled in 151ms`, `✓ Compiled in 271ms`) and `GET / 200 in 328ms`. The one-off "Fast Refresh had to perform a full reload" warning is a known limitation when editing `lesson-modal.tsx` (which exports many internal step-view components alongside `LessonModal`) and resolved itself on the next compile — no runtime errors.
+- Verified `GET /api/ai-coach` still returns the metadata JSON (200) with `streaming: true` and `streamFormat: "SSE — data: { token: string } | [DONE]"`.
+- Did NOT modify the Zustand store, types.ts, any lesson content files, or any other widget — all changes are additive or in-place refinements of the two named features.
+
+Stage Summary:
+- **AI Coach streaming** (Feature 1): The `/api/ai-coach` POST endpoint already returned an SSE stream (`data: {"token":"..."}\n\n` chunks + terminal `data: [DONE]\n\n`); this pass added a proper `cancel()` handler on the transform stream that releases the upstream SDK reader when the client disconnects. The chat component now ships a Stop button (Square icon, replaces Send while `loading`) wired to `AbortController.abort()` via `handleStop`; a new `userAbortedRef` differentiates explicit user stops from first-token timeouts. User stops mid-stream keep the partial reply text with NO error UI; timeouts mid-stream keep the existing "⚠️ Response interrupted" + Retry banner. Send button is replaced (effectively disabled) while streaming, and the textarea already had `disabled={loading}`. IPA rendering (`/phoneme/` and `[narrow]` regex with cyan-tinted `<code>`) already runs on streaming text and continues to work, with the blink cursor visible only while `streaming:true`.
+- **Intro illustrations** (Feature 2): New `src/components/widgets/intro-illustration.tsx` renders a 120×120 looping animated SVG based on the IntroStep's `visual` field — six distinct variants (wave, mouth, vowel quadrilateral, rhythm, emoji burst, gradient orb) covering all 12 StepVisual values via fall-through grouping. All animations use Framer Motion (`motion.circle`, `motion.path` with `d` morphing, `motion.line` rotate, `motion.text` for emoji-in-SVG) and the indigo/violet/cyan palette from existing CSS variables. `IntroStepView` now renders the illustration above the title with a small auxiliary emoji below (when defined), replacing the previous `text-7xl` emoji-only hero.
+- `bun run lint` PASS (exit 0). Dev server compiles cleanly, all routes return HTTP 200, no runtime errors in dev.log. No existing functionality broken; no other files modified.
+
+---
+
+## ═══════════════════════════════════════════════════════════════
+## ROUND 10 — Speech Recognition + AI Streaming + Visual Enhancements
+## ═══════════════════════════════════════════════════════════════
+
+### 1. Current Project Status Assessment
+
+AccentAI remains a feature-rich English accent learning Next.js 16 SPA. At the start of Round 10, the app had:
+- 8 phases × 4 lessons = 32 lessons (all functional)
+- 16 step types with interactive widgets
+- 5 views: Dashboard, Journey, Practice, Progress, More
+- Existing features: AI Coach, Daily Challenge, Achievement Toasts, XP Shop, Lesson Notes, Phoneme Drill, Spaced Repetition, TTS Speed Control, Phoneme Keyboard, Coach Insights, Keyboard Shortcuts
+- Stability: lint passes, no browser errors, all HTTP 200
+
+### 2. Round 10 — Completed Modifications & Verification
+
+**QA Testing (agent-browser):**
+- ✅ App loads at / — Dashboard renders with 2 completed lessons
+- ✅ Journey: 8 phases, difficulty badges visible on lesson cards ("Difficulty: Easy")
+- ✅ Practice: All modes work, phoneme keyboard toggle functional
+- ✅ Progress: New "Score Trend" sparkline section visible
+- ✅ More: All sections render, enhanced visual polish
+- ✅ Lesson modal: Intro step with SVG illustration, step navigation, quiz, completion
+- ✅ AI Coach: Streaming responses work (Stop button appears during generation)
+- ✅ No browser errors, no console errors, lint passes
+
+**Bug Fix:**
+- **FIXED**: `src/lib/speech-recognition.ts` had a SWC parsing error on line 22 (`interface SpeechRecognitionResult` with method + index signature). Root cause: interface names conflicted with DOM lib's built-in types. Renamed all custom interfaces to `SR*` prefix (SRAlternative, SRResult, SRResultList, SREvent, SRErrorEvent) and updated all references. Parsing error resolved.
+
+**New Features (Task 5-d, 5-e, 5-f):**
+
+1. **Real Speech Recognition Scoring** (5-d):
+   - New file: `src/lib/speech-recognition.ts` — SpeechRecognizer class wrapping Web Speech API
+   - `scorePronunciation(target, transcript)` — word-level matching with tolerance, returns score + matched/missed/extra words
+   - Practice view now uses real speech recognition when available, falls back to simulated "Demo Mode" with badge
+   - Results step shows transcript card with word-by-word color coding (green=matched, red=missed, amber=extra)
+   - Browser support detection (en-US/en-GB based on accent)
+
+2. **AI Coach Streaming Responses** (5-e):
+   - API route enhanced with proper stream cancellation on client disconnect
+   - Chat component: Stop button replaces Send during streaming (AbortController)
+   - Distinguishes user-abort vs timeout for appropriate UI feedback
+   - IPA rendering works on streaming text with blink cursor
+
+3. **Animated SVG Intro Illustrations** (5-e):
+   - New file: `src/components/widgets/intro-illustration.tsx` (~670 lines)
+   - 6 looping Framer Motion SVG variants: Wave, Mouth, Vowel quadrilateral, Rhythm, Emoji burst, Gradient orb
+   - Integrated into IntroStepView — 120×120 illustration above lesson title
+   - Uses indigo/violet/cyan palette from CSS variables
+
+4. **Practice History Sparkline Chart** (5-f):
+   - New file: `src/components/widgets/practice-history.tsx`
+   - SVG sparkline of last ≤20 practice scores with smooth quadratic bezier curve
+   - Animated draw (pathLength 0→1), gradient fill, hover dots with tooltips
+   - Stats: Min/Max/Avg + trend indicator (↑/↓/→)
+   - Integrated into Progress view between Phoneme Mastery and Recent Activity
+
+5. **Lesson Difficulty Badges** (5-f):
+   - Added `difficulty?: "easy" | "medium" | "hard"` to Lesson interface
+   - `getLessonDifficulty(lesson)` helper derives difficulty from phaseId + lessonIndex
+   - New file: `src/components/widgets/difficulty-badge.tsx` — colored pill (green/amber/red)
+   - Integrated into Journey view lesson cards AND lesson intro step
+
+**Styling Improvements (Task 4-e):**
+
+1. **CompareWave Widget Enhancement**:
+   - Gradient waveforms (native: indigo→violet, learner: cyan→blue)
+   - Left-to-right drawing animation (clipPath inset)
+   - Diff highlighting (red overlay on mismatched learner bars)
+   - Sync playhead sweeps both waves simultaneously
+   - Match badge counts up from 0
+   - Sliding labels, play comparison button with sequential TTS
+
+2. **More View Visual Polish**:
+   - Staggered entrance for all 8 sections
+   - Gradient dividers between sections
+   - Profile: rotating conic gradient ring + pulse halo
+   - Accent selector: flag wave animation + spring checkmark
+   - Theme selector: sun/moon rotate transitions
+   - XP Shop: shimmer sweep on hover + price pulse
+   - About: gradient text animation on "AccentAI"
+   - Reset: pulsing red border glow on hover
+   - Phase rows stagger in, emojis micro-bounce on hover
+
+**Verification:**
+- Lint: PASS (exit 0)
+- Dev server: all compiles succeed, GET / 200, POST /api/ai-coach 200
+- Agent-browser QA: all features verified working
+- No browser errors, no console errors
+- 31 SVGs rendering on lesson page (intro illustration + widgets)
+
+### 3. Unresolved Issues & Next Phase Priority Recommendations
+
+**Current Known Issues:**
+- Pre-existing TS errors in unrelated files (examples/websocket, skills/, lesson-notes-panel.tsx ref typing, mic-waveform.tsx Uint8Array typing) — not blocking, all pre-existing
+- AI Coach streaming still has cold-start latency (~2s before first token) — could benefit from prefetching
+- Speech recognition only works in Chrome/Edge (Web Speech API limitation) — graceful fallback to demo mode
+
+**Priority Recommendations for Next Phase:**
+1. **HIGH**: Fix pre-existing TS errors in lesson-notes-panel.tsx (ref typing) and mic-waveform.tsx (Uint8Array) for cleaner type checking
+2. **MEDIUM**: Add lesson preview cards on Dashboard with difficulty badges + progress indicators
+3. **MEDIUM**: Add "Streak Freeze" visual indicator in header when streak is at risk
+4. **MEDIUM**: Add more interactive content to concept steps (animated bullet points, expandable details)
+5. **MEDIUM**: Add social features — share lesson completion with screenshot
+6. **LOW**: Add light theme polish for all new components (intro illustration, difficulty badges, practice history)
+7. **LOW**: Add keyboard shortcut for phoneme keyboard toggle (e.g., "P" key in practice view)
+8. **LOW**: Add achievement progress indicators ("3/10 lessons for Word Warrior badge")

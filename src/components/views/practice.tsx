@@ -1,10 +1,16 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Zap, Target, Piano, Volume2 } from "lucide-react";
+import { Zap, Target, Piano, Volume2, Sparkles, MessageSquare } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { speak } from "@/lib/tts";
+import {
+  SpeechRecognizer,
+  scorePronunciation,
+  isSpeechRecognitionAvailable,
+  type PronunciationScore,
+} from "@/lib/speech-recognition";
 import { MicWaveform } from "@/components/widgets/mic-waveform";
 import { PronunciationChallenge } from "@/components/widgets/pronunciation-challenge";
 import { PhonemeDrill } from "@/components/widgets/phoneme-drill";
@@ -431,10 +437,92 @@ function PracticeContentWithDiff({ diff: initialDiff }: { diff: Difficulty }) {
   const [score, setScore] = useState<number | null>(null);
   const [prevDiff, setPrevDiff] = useState<Difficulty>(diff);
   const [showPhonemes, setShowPhonemes] = useState(false);
+  // Speech-recognition result state
+  const [transcript, setTranscript] = useState<string>("");
+  const [pronScore, setPronScore] = useState<PronunciationScore | null>(null);
+  const [demoMode, setDemoMode] = useState(false);
+
+  // Refs for managing the active SpeechRecognition session across renders
+  const recognizerRef = useRef<SpeechRecognizer | null>(null);
+  const transcriptRef = useRef<string>("");
+  const finalizedRef = useRef<boolean>(true); // start finalized=true (nothing in flight)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const phrases = PHRASES[diff];
   const phrase = phrases[phraseIdx];
   const tip = TIPS[diff][phraseIdx % TIPS[diff].length];
+
+  // Tear down any active recognizer + timer on unmount
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      try {
+        recognizerRef.current?.abort();
+      } catch {
+        /* noop */
+      }
+      recognizerRef.current = null;
+    };
+  }, []);
+
+  // Shared helper — stops the recognizer, computes the score, advances to results.
+  // Captures the current `phrase.text` so the right target is scored even if
+  // the user changes phrase mid-record (edge case).
+  const finalizeScoring = useCallback(() => {
+    if (finalizedRef.current) return;
+    finalizedRef.current = true;
+    setRecording(false);
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+
+    const finalTranscript = transcriptRef.current.trim();
+    const recognizer = recognizerRef.current;
+
+    // Fall back to a simulated score when:
+    //   - SpeechRecognition API isn't available in this browser, OR
+    //   - we got no usable transcript (e.g. mic blocked, no speech detected)
+    if (
+      !isSpeechRecognitionAvailable() ||
+      !recognizer ||
+      !recognizer.isAvailable() ||
+      !finalTranscript
+    ) {
+      try {
+        recognizer?.abort();
+      } catch {
+        /* noop */
+      }
+      recognizerRef.current = null;
+      const s = 65 + Math.floor(Math.random() * 30);
+      setScore(s);
+      setDemoMode(true);
+      setTranscript("");
+      setPronScore(null);
+      setStep("results");
+      addSpeakingTime(5);
+      return;
+    }
+
+    try {
+      recognizer.stop();
+    } catch {
+      /* noop */
+    }
+    recognizerRef.current = null;
+
+    const result = scorePronunciation(phrase.text, finalTranscript);
+    setScore(result.score);
+    setDemoMode(false);
+    setTranscript(finalTranscript);
+    setPronScore(result);
+    setStep("results");
+    addSpeakingTime(5);
+  }, [phrase.text, addSpeakingTime]);
 
   // Reset when initial diff changes (from parent tab)
   if (initialDiff !== diff) {
@@ -443,6 +531,22 @@ function PracticeContentWithDiff({ diff: initialDiff }: { diff: Difficulty }) {
     setScore(null);
     setRecording(false);
     setPhraseIdx(0);
+    setTranscript("");
+    setPronScore(null);
+    setDemoMode(false);
+    // Abort any in-flight recognition
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    try {
+      recognizerRef.current?.abort();
+    } catch {
+      /* noop */
+    }
+    recognizerRef.current = null;
+    finalizedRef.current = true;
+    transcriptRef.current = "";
   }
 
   // Reset when internal diff changes
@@ -451,13 +555,43 @@ function PracticeContentWithDiff({ diff: initialDiff }: { diff: Difficulty }) {
     setStep("listen");
     setScore(null);
     setRecording(false);
+    setTranscript("");
+    setPronScore(null);
+    setDemoMode(false);
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    try {
+      recognizerRef.current?.abort();
+    } catch {
+      /* noop */
+    }
+    recognizerRef.current = null;
+    finalizedRef.current = true;
+    transcriptRef.current = "";
   }
 
   const nextPhrase = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    try {
+      recognizerRef.current?.abort();
+    } catch {
+      /* noop */
+    }
+    recognizerRef.current = null;
+    finalizedRef.current = true;
+    transcriptRef.current = "";
     setPhraseIdx((i) => (i + 1) % phrases.length);
     setStep("listen");
     setScore(null);
     setRecording(false);
+    setTranscript("");
+    setPronScore(null);
+    setDemoMode(false);
   };
 
   const handleSpeak = useCallback(() => {
@@ -473,22 +607,47 @@ function PracticeContentWithDiff({ diff: initialDiff }: { diff: Difficulty }) {
   ];
 
   const handleRecord = () => {
+    // Toggle off → finalize scoring now
     if (recording) {
-      setRecording(false);
-      const s = 65 + Math.floor(Math.random() * 30);
-      setScore(s);
-      setStep("results");
-      addSpeakingTime(5);
-    } else {
-      setRecording(true);
-      setTimeout(() => {
-        setRecording(false);
-        const s = 65 + Math.floor(Math.random() * 30);
-        setScore(s);
-        setStep("results");
-        addSpeakingTime(5);
-      }, 4000);
+      finalizeScoring();
+      return;
     }
+    // Start recording
+    setRecording(true);
+    setScore(null);
+    setTranscript("");
+    setPronScore(null);
+    setDemoMode(false);
+    transcriptRef.current = "";
+    finalizedRef.current = false;
+
+    const recognizer = new SpeechRecognizer({
+      lang: accent === "uk" ? "en-GB" : "en-US",
+      callbacks: {
+        onResult: (text) => {
+          // Keep the latest transcript (interim or final). The final result
+          // for a session supersedes any interim ones.
+          transcriptRef.current = text;
+        },
+        onEnd: () => {
+          // Browser stopped on its own (silence / end-of-utterance).
+          finalizeScoring();
+        },
+        // onError: leave to the safety timer / explicit stop so we don't
+        // double-finalize on transient errors like "no-speech".
+      },
+    });
+    recognizerRef.current = recognizer;
+
+    if (recognizer.isAvailable()) {
+      recognizer.start();
+    }
+
+    // Safety-net auto-stop after 6 seconds (in case the recognizer never fires
+    // `onend`, e.g. continuous background noise).
+    timerRef.current = setTimeout(() => {
+      finalizeScoring();
+    }, 6000);
   };
 
   const stepLabels = ["Listen", "Speak", "Results"];
@@ -679,6 +838,24 @@ function PracticeContentWithDiff({ diff: initialDiff }: { diff: Difficulty }) {
               </>
             )}
 
+            {/* Demo mode badge — shown when speech recognition wasn't available */}
+            {demoMode && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.15 }}
+                className="inline-flex items-center gap-1 px-2 py-0.5 mb-2 rounded-full text-[10px] font-semibold font-mono uppercase tracking-wider"
+                style={{
+                  background: "rgba(245,158,11,0.12)",
+                  border: "1px solid rgba(245,158,11,0.35)",
+                  color: "#fbbf24",
+                }}
+              >
+                <Sparkles className="w-2.5 h-2.5" />
+                Demo Mode
+              </motion.div>
+            )}
+
             {/* Score ring */}
             <div className="flex items-center justify-center mb-3">
               <div className="relative w-24 h-24">
@@ -722,6 +899,93 @@ function PracticeContentWithDiff({ diff: initialDiff }: { diff: Difficulty }) {
                   </span>
                 ))}
               </div>
+            )}
+
+            {/* Transcript of recognized speech + word-by-word correctness */}
+            {!demoMode && transcript && pronScore && (
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: 0.4 }}
+                className="mt-4 rounded-xl p-3 text-left"
+                style={{
+                  background: "var(--card-h)",
+                  border: "1px solid var(--border)",
+                }}
+              >
+                <div className="flex items-center gap-1.5 mb-2 text-[10px] uppercase tracking-wider text-[var(--t3)] font-mono">
+                  <MessageSquare className="w-3 h-3" />
+                  You said
+                </div>
+                <div className="text-sm text-[var(--t2)] mb-3 italic leading-relaxed">
+                  &ldquo;{transcript}&rdquo;
+                </div>
+                <div className="text-[10px] uppercase tracking-wider text-[var(--t3)] font-mono mb-1.5">
+                  Word match
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {pronScore.targetWords.map((w, i) => {
+                    const matched = pronScore.matchedMask[i];
+                    return (
+                      <motion.span
+                        key={`tw-${i}-${w}`}
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.5 + i * 0.05, duration: 0.2 }}
+                        className={`px-2 py-0.5 rounded-md text-xs font-mono ${
+                          matched
+                            ? "bg-[rgba(16,185,129,0.15)] border border-[rgba(16,185,129,0.35)] text-[#10b981]"
+                            : "bg-[rgba(239,68,68,0.12)] border border-[rgba(239,68,68,0.32)] text-[#f87171] line-through"
+                        }`}
+                      >
+                        {w}
+                      </motion.span>
+                    );
+                  })}
+                </div>
+                {pronScore.extraWords.length > 0 && (
+                  <div className="mt-2">
+                    <div className="text-[10px] uppercase tracking-wider text-[var(--t3)] font-mono mb-1.5">
+                      Extra words
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {pronScore.extraWords.map((w, i) => (
+                        <motion.span
+                          key={`ew-${i}-${w}`}
+                          initial={{ opacity: 0, y: 6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.7 + i * 0.05, duration: 0.2 }}
+                          className="px-2 py-0.5 rounded-md text-xs font-mono bg-[rgba(245,158,11,0.12)] border border-[rgba(245,158,11,0.3)] text-[#fbbf24]"
+                        >
+                          {w}
+                        </motion.span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            )}
+
+            {/* Demo mode explanation when speech recognition wasn't available */}
+            {demoMode && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="mt-4 rounded-xl p-3 text-left"
+                style={{
+                  background: "rgba(245,158,11,0.06)",
+                  border: "1px solid rgba(245,158,11,0.25)",
+                }}
+              >
+                <div className="flex items-center gap-1.5 mb-1 text-[10px] uppercase tracking-wider text-[#fbbf24] font-mono">
+                  <Sparkles className="w-3 h-3" />
+                  Simulated score
+                </div>
+                <div className="text-[11px] text-[var(--t3)] leading-relaxed">
+                  Speech recognition isn&apos;t available in this browser, so this score is a simulated demo. Try Chrome or Edge for real pronunciation feedback.
+                </div>
+              </motion.div>
             )}
           </motion.div>
         )}

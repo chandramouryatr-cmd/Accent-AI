@@ -9,6 +9,7 @@ import { ALL_LESSONS, getLessonsForPhase } from "@/lib/lessons";
 import { ProgressRing } from "@/components/widgets/progress-ring";
 import { AchievementGallery } from "@/components/widgets/achievement-gallery";
 import { PhonemeMastery } from "@/components/widgets/phoneme-mastery";
+import { PracticeHistory } from "@/components/widgets/practice-history";
 import { ShareCard, useShareCardState } from "@/components/widgets/share-card";
 
 // ─── Practice Calendar Heatmap ─────────────────────────────────────────────
@@ -434,6 +435,9 @@ export function ProgressView() {
 
       {/* Phoneme Mastery — horizontal bars + spotlight on weakest */}
       <PhonemeMastery />
+
+      {/* Score Trend — sparkline of recent practice scores */}
+      <PracticeHistory />
 
       {/* Recent activity */}
       <div>

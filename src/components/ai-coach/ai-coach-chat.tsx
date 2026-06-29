@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Sparkles, Send, X, RotateCw } from "lucide-react";
+import { Sparkles, Send, X, RotateCw, Square } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 
 interface ChatMessage {
@@ -106,6 +106,9 @@ export function AICoachChat({ open, onClose }: Props) {
   const abortRef = useRef<AbortController | null>(null);
   /** Last user message text for retry */
   const lastUserTextRef = useRef<string>("");
+  /** Set to true when the user explicitly clicks Stop — distinguishes a
+   *  user-initiated abort from a first-token timeout. */
+  const userAbortedRef = useRef<boolean>(false);
 
   // Auto-scroll to bottom whenever messages change
   useEffect(() => {
@@ -306,34 +309,50 @@ export function AICoachChat({ open, onClose }: Props) {
         clearTimeout(timeoutId);
         setWaitingFirstToken(false);
 
+        const wasUserStop = userAbortedRef.current;
+        userAbortedRef.current = false;
+
         if (err instanceof DOMException && err.name === "AbortError") {
-          // Timed out or user cancelled
+          // User clicked Stop OR first-token timeout fired
           setMessages((prev) => {
             const updated = [...prev];
             const lastIdx = updated.length - 1;
-            // If we already started streaming, mark the partial message as error
+            // If we already started streaming, finalize the partial message
             if (lastIdx >= 0 && updated[lastIdx].role === "assistant" && updated[lastIdx].streaming) {
               const partialContent = updated[lastIdx].content;
-              updated[lastIdx] = {
-                ...updated[lastIdx],
-                content: partialContent || "",
-                streaming: false,
-                streamError: true,
-              };
+              if (wasUserStop) {
+                // User stopped — keep whatever text we have, no error UI
+                updated[lastIdx] = {
+                  ...updated[lastIdx],
+                  content: partialContent || "",
+                  streaming: false,
+                  streamError: false,
+                };
+              } else {
+                // Timeout mid-stream — show interrupted UI
+                updated[lastIdx] = {
+                  ...updated[lastIdx],
+                  content: partialContent || "",
+                  streaming: false,
+                  streamError: true,
+                };
+              }
               return updated;
             }
-            // Otherwise add a new error message
+            // No streaming started yet — show a fresh message
+            const stopContent = wasUserStop
+              ? "⏹ Stopped. Type another question whenever you're ready! 🎯"
+              : "⚠️ Request timed out — the coach took too long to respond. Please try again. 🔄";
             return [
               ...updated,
               {
                 role: "assistant",
-                content:
-                  "⚠️ Request timed out — the coach took too long to respond. Please try again. 🔄",
-                streamError: true,
+                content: stopContent,
+                streamError: !wasUserStop,
               },
             ];
           });
-          setError("Request timed out. Try again.");
+          setError(wasUserStop ? null : "Request timed out. Try again.");
         } else {
           const msg = err instanceof Error ? err.message : "Something went wrong.";
           setError(msg);
@@ -370,6 +389,15 @@ export function AICoachChat({ open, onClose }: Props) {
     },
     [loading, messages, lessons, accent, xp, streak]
   );
+
+  /** User-initiated stop — abort the in-flight stream and mark partial
+   *  message as finalized (not errored). */
+  const handleStop = useCallback(() => {
+    userAbortedRef.current = true;
+    if (abortRef.current) {
+      abortRef.current.abort();
+    }
+  }, []);
 
   const handleRetry = useCallback(() => {
     if (lastUserTextRef.current) {
@@ -550,20 +578,30 @@ export function AICoachChat({ open, onClose }: Props) {
                   className="flex-1 bg-transparent text-sm text-[var(--t1)] placeholder:text-[var(--t3)] resize-none outline-none max-h-28 disabled:opacity-50"
                   aria-label="Message AccentAI Coach"
                 />
-                <button
-                  onClick={() => {
-                    if (error && lastUserTextRef.current) {
-                      handleRetry();
-                    } else {
-                      sendMessage(input);
-                    }
-                  }}
-                  disabled={!input.trim() && !error}
-                  aria-label="Send message"
-                  className="w-9 h-9 rounded-xl flex items-center justify-center bg-gradient-to-br from-[var(--p)] to-[var(--p2)] text-white disabled:opacity-30 disabled:cursor-not-allowed hover:scale-105 active:scale-95 transition shadow-[0_0_14px_rgba(99,102,241,0.4)] shrink-0"
-                >
-                  <Send className="w-4 h-4" />
-                </button>
+                {loading ? (
+                  <button
+                    onClick={handleStop}
+                    aria-label="Stop generating"
+                    className="w-9 h-9 rounded-xl flex items-center justify-center bg-[var(--card-h)] border border-[var(--border2)] text-[var(--t1)] hover:bg-[rgba(239,68,68,0.18)] hover:border-[rgba(239,68,68,0.5)] hover:text-red-300 transition shrink-0"
+                  >
+                    <Square className="w-4 h-4" fill="currentColor" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      if (error && lastUserTextRef.current) {
+                        handleRetry();
+                      } else {
+                        sendMessage(input);
+                      }
+                    }}
+                    disabled={!input.trim() && !error}
+                    aria-label="Send message"
+                    className="w-9 h-9 rounded-xl flex items-center justify-center bg-gradient-to-br from-[var(--p)] to-[var(--p2)] text-white disabled:opacity-30 disabled:cursor-not-allowed hover:scale-105 active:scale-95 transition shadow-[0_0_14px_rgba(99,102,241,0.4)] shrink-0"
+                  >
+                    <Send className="w-4 h-4" />
+                  </button>
+                )}
               </div>
               <div className="text-[10px] text-[var(--t3)] text-center mt-1.5">
                 AccentAI Coach can make mistakes. Verify phonetic advice with practice.

@@ -251,14 +251,18 @@ export async function POST(req: NextRequest) {
       const decoder = new TextDecoder();
       const encoder = new TextEncoder();
 
+      // Hold the upstream reader in an outer scope so the cancel() handler
+      // can release it when the client disconnects (e.g. user clicks Stop).
+      let upstreamReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+
       const transformedStream = new ReadableStream<Uint8Array>({
         async start(controller) {
-          const reader = completion.getReader();
+          upstreamReader = completion.getReader();
           let buffer = "";
 
           try {
             while (true) {
-              const { done, value } = await reader.read();
+              const { done, value } = await upstreamReader.read();
               if (done) break;
 
               buffer += decoder.decode(value, { stream: true });
@@ -322,6 +326,18 @@ export async function POST(req: NextRequest) {
             );
             controller.enqueue(encoder.encode("data: [DONE]\n\n"));
             controller.close();
+          }
+        },
+        // Client disconnected — release the upstream SDK reader so the
+        // underlying connection is cleaned up promptly instead of
+        // continuing to consume tokens.
+        async cancel() {
+          if (upstreamReader) {
+            try {
+              await upstreamReader.cancel();
+            } catch {
+              /* already closed */
+            }
           }
         },
       });

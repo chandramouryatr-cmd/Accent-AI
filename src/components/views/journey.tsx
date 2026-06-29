@@ -6,6 +6,7 @@ import { Lock, Check, ChevronDown, Play, Search, Star } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { PHASES } from "@/lib/types";
 import { ALL_LESSONS, getLessonsForPhase } from "@/lib/lessons";
+import { DifficultyBadge } from "@/components/widgets/difficulty-badge";
 
 type FilterMode = "all" | "completed" | "in-progress" | "not-started" | "bookmarked";
 
@@ -211,10 +212,11 @@ export function JourneyView() {
                       <span className="truncate">{lesson.title}</span>
                       {showReviewBadge && <ReviewBadge />}
                     </div>
-                    <div className="text-[10px] text-[var(--t3)] flex items-center gap-2">
+                    <div className="text-[10px] text-[var(--t3)] flex items-center gap-2 flex-wrap">
                       <span>Phase {phaseIdx + 1}</span>
                       <span>⏱ {lesson.duration} min</span>
                       <span>⚡ {lesson.xp} XP</span>
+                      <DifficultyBadge lesson={lesson} size="xs" animate={false} />
                       {isLessonDone && <span className="text-[#10b981]">✓ {prog.score}%</span>}
                     </div>
                   </button>
@@ -417,9 +419,10 @@ export function JourneyView() {
                                       <span className="truncate">{lesson.title}</span>
                                       {showReviewBadge && <ReviewBadge />}
                                     </div>
-                                    <div className="text-[10px] text-[var(--t3)] flex items-center gap-2">
+                                    <div className="text-[10px] text-[var(--t3)] flex items-center gap-2 flex-wrap">
                                       <span>⏱ {lesson.duration} min</span>
                                       <span>⚡ {lesson.xp} XP</span>
+                                      <DifficultyBadge lesson={lesson} size="xs" animate={false} />
                                       {isLessonDone && <span className="text-[#10b981]">✓ {prog.score}%</span>}
                                     </div>
                                   </button>

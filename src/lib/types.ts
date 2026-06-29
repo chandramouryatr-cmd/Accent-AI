@@ -205,6 +205,8 @@ export type LessonStep =
   | QuizStep
   | CompletionStep;
 
+export type LessonDifficulty = "easy" | "medium" | "hard";
+
 export interface Lesson {
   id: string;
   phaseId: number;
@@ -215,6 +217,43 @@ export interface Lesson {
   xp: number;
   objectives: string[];
   steps: LessonStep[];
+  /** Optional explicit difficulty. If omitted, `getLessonDifficulty` derives it from phaseId + lessonIndex. */
+  difficulty?: LessonDifficulty;
+}
+
+/**
+ * Derive a lesson's difficulty from its position in the curriculum.
+ *
+ * Rules (phaseId is 0-indexed — 0 = Phase 1, 7 = Phase 8):
+ *   • Phase 1–2 (phaseId 0–1)            → easy
+ *   • Phase 3–4 (phaseId 2–3)            → medium
+ *   • Phase 5–6 (phaseId 4–5)            → medium for lessons 0–1, hard for lessons 2–3
+ *   • Phase 7–8 (phaseId 6–7)            → hard
+ *
+ * Within a phase, lessons 2–3 are treated as the "harder half" and bumped
+ * up one level when the phase sits on a difficulty boundary.
+ */
+export function getLessonDifficulty(lesson: Pick<Lesson, "phaseId" | "lessonIndex" | "difficulty">): LessonDifficulty {
+  // Allow an explicit override on the lesson itself.
+  if (lesson.difficulty) return lesson.difficulty;
+
+  const { phaseId, lessonIndex } = lesson;
+  const isLaterInPhase = lessonIndex >= 2; // lessons 2–3 are the harder half
+
+  if (phaseId <= 1) {
+    // Phase 1–2: easy (bump lessons 2–3 of Phase 2 up to medium)
+    return phaseId === 1 && isLaterInPhase ? "medium" : "easy";
+  }
+  if (phaseId <= 3) {
+    // Phase 3–4: medium (bump lessons 2–3 of Phase 4 up to hard)
+    return phaseId === 3 && isLaterInPhase ? "hard" : "medium";
+  }
+  if (phaseId <= 5) {
+    // Phase 5–6: medium-hard (lessons 0–1 medium, lessons 2–3 hard)
+    return isLaterInPhase ? "hard" : "medium";
+  }
+  // Phase 7–8: hard
+  return "hard";
 }
 
 // ─── Phases master data ───

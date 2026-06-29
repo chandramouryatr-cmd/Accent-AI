@@ -67,6 +67,7 @@ export function XPShop() {
   const [purchasingId, setPurchasingId] = useState<string | null>(null);
   const [justBought, setJustBought] = useState<string | null>(null);
   const [xpDelta, setXpDelta] = useState<{ from: number; to: number } | null>(null);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   const handleBuy = useCallback(
     (item: ShopItem) => {
@@ -189,6 +190,8 @@ export function XPShop() {
           return (
             <motion.div
               key={item.id}
+              onHoverStart={() => setHoveredId(item.id)}
+              onHoverEnd={() => setHoveredId(null)}
               whileHover={!isDisabled ? { y: -4, scale: 1.02 } : {}}
               whileTap={!isDisabled ? { scale: 0.98 } : {}}
               className={`relative rounded-2xl overflow-hidden transition-colors ${
@@ -203,7 +206,7 @@ export function XPShop() {
                 WebkitBackdropFilter: "blur(12px)",
               }}
             >
-              {/* Gold shimmer sweep on affordable items */}
+              {/* Gold shimmer sweep on affordable items (ambient) */}
               {canAfford && !owned && (
                 <div className="absolute inset-0 overflow-hidden pointer-events-none rounded-2xl">
                   <motion.div
@@ -222,6 +225,31 @@ export function XPShop() {
                   />
                 </div>
               )}
+
+              {/* Hover shimmer sweep — brighter single-pass highlight on any card */}
+              <AnimatePresence>
+                {hoveredId === item.id && !owned && (
+                  <motion.div
+                    key="hover-shimmer"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="absolute inset-0 overflow-hidden pointer-events-none rounded-2xl z-[2]"
+                  >
+                    <motion.div
+                      className="absolute inset-0"
+                      style={{
+                        background:
+                          "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.16) 45%, rgba(255,255,255,0.22) 50%, rgba(255,255,255,0.16) 55%, transparent 100%)",
+                      }}
+                      initial={{ x: "-100%" }}
+                      animate={{ x: "200%" }}
+                      transition={{ duration: 0.9, ease: "easeInOut" }}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {/* Purchase success overlay */}
               <AnimatePresence>
@@ -311,7 +339,19 @@ export function XPShop() {
                       ) : canAfford ? (
                         <>
                           <Zap className="w-3.5 h-3.5" />
-                          Buy · {item.cost} XP
+                          <span>Buy · </span>
+                          <motion.span
+                            className="inline-block font-mono"
+                            animate={{ scale: [1, 1.08, 1] }}
+                            transition={{
+                              duration: 1.8,
+                              repeat: Infinity,
+                              ease: "easeInOut",
+                            }}
+                          >
+                            {item.cost}
+                          </motion.span>
+                          <span> XP</span>
                         </>
                       ) : (
                         <>

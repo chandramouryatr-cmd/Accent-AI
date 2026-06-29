@@ -18,6 +18,8 @@ import { CompareWave } from "@/components/widgets/compare-wave";
 import { MicWaveform } from "@/components/widgets/mic-waveform";
 import { Confetti } from "@/components/widgets/confetti";
 import { ProgressRing } from "@/components/widgets/progress-ring";
+import { DifficultyBadge } from "@/components/widgets/difficulty-badge";
+import { IntroIllustration } from "@/components/widgets/intro-illustration";
 
 interface Props {
   lesson: Lesson;
@@ -584,6 +586,7 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
             </motion.div>
             <StepRenderer
               step={step}
+              lesson={lesson}
               speak={handleSpeak}
               ttsSpeed={ttsSpeed}
               setTtsSpeed={setTtsSpeed}
@@ -728,6 +731,7 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
 
 interface StepRendererProps {
   step: LessonStep;
+  lesson: Lesson;
   speak: (text: string) => void;
   ttsSpeed: number;
   setTtsSpeed: (s: number) => void;
@@ -744,11 +748,11 @@ interface StepRendererProps {
 }
 
 function StepRenderer(props: StepRendererProps) {
-  const { step, speak, ttsSpeed, setTtsSpeed } = props;
+  const { step, lesson, speak, ttsSpeed, setTtsSpeed } = props;
 
   switch (step.type) {
     case "intro":
-      return <IntroStepView step={step} speak={speak} ttsSpeed={ttsSpeed} setTtsSpeed={setTtsSpeed} />;
+      return <IntroStepView step={step} lesson={lesson} speak={speak} ttsSpeed={ttsSpeed} setTtsSpeed={setTtsSpeed} />;
     case "concept":
       return <ConceptStepView step={step} />;
     case "example":
@@ -788,8 +792,9 @@ function StepRenderer(props: StepRendererProps) {
 
 const TTS_SPEEDS = [0.6, 0.8, 1, 1.2] as const;
 
-function IntroStepView({ step, speak, ttsSpeed, setTtsSpeed }: {
+function IntroStepView({ step, lesson, speak, ttsSpeed, setTtsSpeed }: {
   step: Extract<LessonStep, { type: "intro" }>;
+  lesson: Lesson;
   speak: (t: string) => void;
   ttsSpeed: number;
   setTtsSpeed: (s: number) => void;
@@ -802,12 +807,25 @@ function IntroStepView({ step, speak, ttsSpeed, setTtsSpeed }: {
       </div>
 
       <motion.div
-        initial={{ scale: 0.7, opacity: 0, rotate: -10 }}
+        initial={{ scale: 0.6, opacity: 0, rotate: -8 }}
         animate={{ scale: 1, opacity: 1, rotate: 0 }}
         transition={{ type: "spring", stiffness: 200, damping: 14 }}
-        className="text-7xl mb-2 relative z-10 animate-gentle-float"
+        className="relative z-10 flex flex-col items-center gap-1.5 mb-2"
       >
-        {step.emoji || VISUAL_EMOJI[step.visual] || "✨"}
+        <div className="animate-gentle-float">
+          <IntroIllustration visual={step.visual} emoji={step.emoji} size={120} />
+        </div>
+        {step.emoji && (
+          <motion.span
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.25 }}
+            className="text-2xl"
+            aria-hidden="true"
+          >
+            {step.emoji}
+          </motion.span>
+        )}
       </motion.div>
       <motion.div
         initial={{ opacity: 0, y: 15 }}
@@ -815,8 +833,11 @@ function IntroStepView({ step, speak, ttsSpeed, setTtsSpeed }: {
         transition={{ delay: 0.2 }}
         className="relative z-10"
       >
-        <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--t3)] font-mono mb-2">
-          Lesson Introduction
+        <div className="flex items-center justify-center gap-2 mb-2">
+          <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--t3)] font-mono">
+            Lesson Introduction
+          </div>
+          <DifficultyBadge lesson={lesson} size="sm" />
         </div>
         <h1 className="font-d text-3xl font-bold mb-2">
           <span className="grad-text">{step.title}</span>
