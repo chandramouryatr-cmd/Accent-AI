@@ -1,0 +1,1571 @@
+     1→"use client";
+     2→
+     3→import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+     4→import { AnimatePresence, motion } from "framer-motion";
+     5→import { ChevronLeft, ChevronRight, X, Check, RotateCcw, NotebookPen, Gauge } from "lucide-react";
+     6→import type { Lesson, LessonStep } from "@/lib/types";
+     7→import { useAppStore } from "@/lib/store";
+     8→import { speak, stopSpeaking, loadVoices } from "@/lib/tts";
+     9→import { WaveformCanvas } from "@/components/widgets/waveform-canvas";
+    10→import { MouthDiagram } from "@/components/widgets/mouth-diagram";
+    11→import { VowelChart } from "@/components/widgets/vowel-chart";
+    12→import { StressBars } from "@/components/widgets/stress-bars";
+    13→import { RhythmBeats } from "@/components/widgets/rhythm-beats";
+    14→import { LinkingDiagram } from "@/components/widgets/linking-diagram";
+    15→import { IntonationContour } from "@/components/widgets/intonation-contour";
+    16→import { LessonNotesPanel } from "@/components/widgets/lesson-notes-panel";
+    17→import { CompareWave } from "@/components/widgets/compare-wave";
+    18→import { MicWaveform } from "@/components/widgets/mic-waveform";
+    19→import { Confetti } from "@/components/widgets/confetti";
+    20→import { ProgressRing } from "@/components/widgets/progress-ring";
+    21→import { DifficultyBadge } from "@/components/widgets/difficulty-badge";
+    22→import { IntroIllustration } from "@/components/widgets/intro-illustration";
+    23→
+    24→interface Props {
+    25→  lesson: Lesson;
+    26→  onClose: () => void;
+    27→  onNext?: () => void;
+    28→}
+    29→
+    30→/**
+    31→ * Returns the "primary audio" text for a lesson step — the text that should
+    32→ * be spoken when the user presses Space (or wants a quick replay).
+    33→ * Returns `null` for step types that have no meaningful auto-play audio.
+    34→ */
+    35→function getPrimaryAudioText(step: LessonStep | undefined): string | null {
+    36→  if (!step) return null;
+    37→  switch (step.type) {
+    38→    case "intro":
+    39→      return step.title;
+    40→    case "example":
+    41→      return step.phrase;
+    42→    case "mouth-diagram":
+    43→      return step.exampleWord || null;
+    44→    case "compare":
+    45→      return step.nativePhrase;
+    46→    case "stress-bars":
+    47→      return step.word;
+    48→    case "rhythm":
+    49→      return step.phrase;
+    50→    case "linking":
+    51→      return step.words.join(" ");
+    52→    case "shadow":
+    53→      return step.phrase;
+    54→    case "intonation":
+    55→      return step.phrase;
+    56→    case "practice":
+    57→      return step.phrase;
+    58→    // No primary audio: concept, vowel-chart, tap-pronounce, tip, quiz, completion
+    59→    default:
+    60→      return null;
+    61→  }
+    62→}
+    63→
+    64→/** Step transition variants — direction: 1 = forward, −1 = backward.
+    65→ *  Uses `custom` prop so exiting components receive the *latest*
+    66→ *  direction value (fixes stale-closure bug with inline objects). */
+    67→const stepVariants = {
+    68→  enter: (direction: number) => ({
+    69→    x: direction * 80,
+    70→    opacity: 0,
+    71→    scale: 0.97,
+    72→  }),
+    73→  center: {
+    74→    x: 0,
+    75→    opacity: 1,
+    76→    scale: 1,
+    77→  },
+    78→  exit: (direction: number) => ({
+    79→    x: direction * -80,
+    80→    opacity: 0,
+    81→    scale: 0.97,
+    82→  }),
+    83→};
+    84→
+    85→const stepTransition = {
+    86→  duration: 0.25,
+    87→  ease: [0.25, 0.46, 0.45, 0.94], // ease-out-quad — snappy feel
+    88→};
+    89→
+    90→/** Brief fade overlay that appears between step transitions.
+    91→ *  Mounts with a subtle bg tint and fades out, giving a
+    92→ *  polished cross-fade feel without blocking interaction. */
+    93→function StepTransitionOverlay() {
+    94→  return (
+    95→    <motion.div
+    96→      initial={{ opacity: 0.1 }}
+    97→      animate={{ opacity: 0 }}
+    98→      transition={{ duration: 0.2, ease: "easeOut" }}
+    99→      className="absolute inset-0 bg-[var(--bg)] z-[5] pointer-events-none"
+   100→    />
+   101→  );
+   102→}
+   103→
+   104→const VISUAL_EMOJI: Record<string, string> = {
+   105→  wave: "🌊",
+   106→  mouth: "👄",
+   107→  "ipa-chart": "🔤",
+   108→  "vowel-chart": "🎯",
+   109→  "compare-wave": "📊",
+   110→  rhythm: "🎵",
+   111→  "phoneme-grid": "🔡",
+   112→  "stress-bars": "📈",
+   113→  linking: "🔗",
+   114→  shadow: "🪞",
+   115→  intonation: "📐",
+   116→  "emoji-burst": "✨",
+   117→};
+   118→
+   119→/** Step type → emoji icon mapping */
+   120→const STEP_ICON: Record<string, string> = {
+   121→  intro: "👋", concept: "📖", example: "💬", "mouth-diagram": "👄",
+   122→  "vowel-chart": "🎯", compare: "📊", "stress-bars": "📈", rhythm: "🎵",
+   123→  linking: "🔗", shadow: "🪞", intonation: "📐", "tap-pronounce": "👆",
+   124→  tip: "💡", practice: "🎙", quiz: "❓", completion: "🏆"
+   125→};
+   126→
+   127→/** Step type → category for background tint */
+   128→type StepCategory = "intro" | "concept" | "visual" | "practice" | "completion";
+   129→function getStepCategory(type: string): StepCategory {
+   130→  switch (type) {
+   131→    case "intro": return "intro";
+   132→    case "concept": return "concept";
+   133→    case "mouth-diagram": case "vowel-chart": case "stress-bars":
+   134→    case "rhythm": case "linking": case "intonation":
+   135→      return "visual";
+   136→    case "example": case "compare": case "shadow":
+   137→    case "tap-pronounce": case "tip": case "practice": case "quiz":
+   138→      return "practice";
+   139→    case "completion": return "completion";
+   140→    default: return "practice";
+   141→  }
+   142→}
+   143→
+   144→/** Step category → background tint color (RGBA) */
+   145→const CATEGORY_TINT: Record<StepCategory, string> = {
+   146→  intro:     "rgba(99,102,241,0.06)",   // indigo
+   147→  concept:   "rgba(139,92,246,0.06)",   // violet
+   148→  visual:    "rgba(34,211,238,0.05)",   // cyan
+   149→  practice:  "rgba(245,158,11,0.05)",   // amber
+   150→  completion:"rgba(16,185,129,0.06)",   // green
+   151→};
+   152→
+   153→/** Step category → accent glow color for current dot */
+   154→const CATEGORY_GLOW: Record<StepCategory, string> = {
+   155→  intro:     "rgba(99,102,241,0.6)",
+   156→  concept:   "rgba(139,92,246,0.6)",
+   157→  visual:    "rgba(34,211,238,0.6)",
+   158→  practice:  "rgba(245,158,11,0.6)",
+   159→  completion:"rgba(16,185,129,0.6)",
+   160→};
+   161→
+   162→// Module-level map to persist timer state across modal mount/unmount cycles
+   163→const lessonTimerAccumulated: Map<string, number> = new Map();
+   164→
+   165→/** Format seconds as mm:ss */
+   166→function formatTimer(seconds: number): string {
+   167→  const m = Math.floor(seconds / 60);
+   168→  const s = Math.floor(seconds % 60);
+   169→  return `${m}:${s.toString().padStart(2, "0")}`;
+   170→}
+   171→
+   172→export function LessonModal({ lesson, onClose, onNext }: Props) {
+   173→  const [stepIdx, setStepIdx] = useState(0);
+   174→  const [direction, setDirection] = useState(1);
+   175→  const [quizAnswer, setQuizAnswer] = useState<number | null>(null);
+   176→  const [practiceScore, setPracticeScore] = useState<number | null>(null);
+   177→  const [recording, setRecording] = useState(false);
+   178→  const [showConfetti, setShowConfetti] = useState(false);
+   179→  // Briefly shows a "⌨ Press Space to play" hint when a step with audio loads.
+   180→  const [showSpaceHint, setShowSpaceHint] = useState(false);
+   181→  // Track the previous stepIdx so we can reset per-step interactive state
+   182→  // when the step changes — using the official "adjust state during render"
+   183→  // pattern instead of setState-in-effect (react-hooks/set-state-in-effect).
+   184→  const [prevStepIdx, setPrevStepIdx] = useState(stepIdx);
+   185→  const [showNotesPanel, setShowNotesPanel] = useState(false);
+   186→  const [ttsSpeed, setTtsSpeed] = useState(1);
+   187→
+   188→  // ── Lesson Timer ──
+   189→  const [timerDisplay, setTimerDisplay] = useState("0:00");
+   190→  const timerStartRef = useRef<number>(Date.now());
+   191→  const timerAccumulatedRef = useRef<number>(lessonTimerAccumulated.get(lesson.id) ?? 0);
+   192→
+   193→  const accent = useAppStore((s) => s.accent);
+   194→  const completeLesson = useAppStore((s) => s.completeLesson);
+   195→  const markReviewed = useAppStore((s) => s.markReviewed);
+   196→  const lessons = useAppStore((s) => s.lessons);
+   197→  const addSpeakingTime = useAppStore((s) => s.addSpeakingTime);
+   198→  const hasLessonNote = useAppStore((s) => (s.lessonNotes[lesson.id] ?? "").trim().length > 0);
+   199→
+   200→  const step = lesson.steps[stepIdx];
+   201→  const isLast = stepIdx === lesson.steps.length - 1;
+   202→  const isFirst = stepIdx === 0;
+   203→  const totalSteps = lesson.steps.length;
+   204→  const pct = Math.round(((stepIdx + 1) / totalSteps) * 100);
+   205→
+   206→  // Preload voices on mount
+   207→  useEffect(() => {
+   208→    loadVoices();
+   209→  }, []);
+   210→
+   211→  // ── Timer tick effect ──
+   212→  useEffect(() => {
+   213→    timerStartRef.current = Date.now();
+   214→    const tick = () => {
+   215→      const elapsed = timerAccumulatedRef.current + (Date.now() - timerStartRef.current) / 1000;
+   216→      setTimerDisplay(formatTimer(elapsed));
+   217→    };
+   218→    tick(); // initial tick
+   219→    const id = setInterval(tick, 1000);
+   220→    return () => {
+   221→      clearInterval(id);
+   222→      // Save accumulated time for this lesson when modal unmounts (pause)
+   223→      const elapsed = timerAccumulatedRef.current + (Date.now() - timerStartRef.current) / 1000;
+   224→      timerAccumulatedRef.current = elapsed;
+   225→      lessonTimerAccumulated.set(lesson.id, elapsed);
+   226→    };
+   227→  }, [lesson.id]);
+   228→
+   229→  // Reset per-step interactive state when stepIdx changes.
+   230→  // Official React pattern: adjust state during render based on a tracked
+   231→  // previous value. React re-renders immediately without committing the
+   232→  // stale intermediate state. (Avoids setState-in-effect cascades.)
+   233→  if (stepIdx !== prevStepIdx) {
+   234→    setPrevStepIdx(stepIdx);
+   235→    setQuizAnswer(null);
+   236→    setPracticeScore(null);
+   237→    setRecording(false);
+   238→    // Reset the Space-to-play hint based on whether the new step has audio.
+   239→    setShowSpaceHint(!!getPrimaryAudioText(lesson.steps[stepIdx]));
+   240→  }
+   241→
+   242→  // Stop TTS on unmount or step change
+   243→  useEffect(() => {
+   244→    return () => stopSpeaking();
+   245→  }, [stepIdx]);
+   246→
+   247→  // Auto-hide the "Press Space to play" hint after 3s when it's showing.
+   248→  // The hint itself is shown/hidden via the render-time adjustment above
+   249→  // (avoids setState-in-effect cascades).
+   250→  useEffect(() => {
+   251→    if (!showSpaceHint) return;
+   252→    const t = setTimeout(() => setShowSpaceHint(false), 3000);
+   253→    return () => clearTimeout(t);
+   254→  }, [showSpaceHint]);
+   255→
+   256→  const handleSpeak = useCallback(
+   257→    (text: string) => {
+   258→      speak(text, { accent, rate: ttsSpeed });
+   259→    },
+   260→    [accent, ttsSpeed]
+   261→  );
+   262→
+   263→  const goNext = useCallback(() => {
+   264→    if (isLast) {
+   265→      // already at completion step
+   266→      return;
+   267→    }
+   268→    setDirection(1);
+   269→    setStepIdx((i) => i + 1);
+   270→  }, [isLast]);
+   271→
+   272→  const goPrev = useCallback(() => {
+   273→    if (isFirst) return;
+   274→    setDirection(-1);
+   275→    setStepIdx((i) => i - 1);
+   276→  }, [isFirst]);
+   277→
+   278→  // Mark completion when reaching completion step
+   279→  const completionStep = lesson.steps.find((s) => s.type === "completion");
+   280→  const alreadyCompleted = lessons[lesson.id]?.completed;
+   281→
+   282→  const handleComplete = useCallback(() => {
+   283→    if (alreadyCompleted) return;
+   284→    if (completionStep?.type === "completion") {
+   285→      // Calculate total time spent
+   286→      const elapsed = timerAccumulatedRef.current + (Date.now() - timerStartRef.current) / 1000;
+   287→      completeLesson(
+   288→        lesson.id,
+   289→        practiceScore ?? 85,
+   290→        completionStep.xp,
+   291→        completionStep.badge,
+   292→        Math.floor(elapsed)
+   293→      );
+   294→      // Mark as reviewed since they just completed it
+   295→      markReviewed(lesson.id);
+   296→      addSpeakingTime(8);
+   297→      setShowConfetti(true);
+   298→      setTimeout(() => setShowConfetti(false), 4000);
+   299→      // Clear timer state for this lesson
+   300→      lessonTimerAccumulated.delete(lesson.id);
+   301→    }
+   302→  }, [alreadyCompleted, completionStep, completeLesson, markReviewed, lesson.id, practiceScore, addSpeakingTime]);
+   303→
+   304→  // Auto-trigger completion when user reaches the completion step.
+   305→  // handleComplete calls setState (setShowConfetti + store actions), so we
+   306→  // defer it out of the synchronous effect body to satisfy
+   307→  // react-hooks/set-state-in-effect (no cascading renders).
+   308→  useEffect(() => {
+   309→    if (step?.type !== "completion" || alreadyCompleted) return;
+   310→    const id = setTimeout(() => handleComplete(), 0);
+   311→    return () => clearTimeout(id);
+   312→  }, [step, alreadyCompleted, handleComplete]);
+   313→
+   314→  // ESC to close, Arrows to navigate, Space to play step audio
+   315→  useEffect(() => {
+   316→    const onKey = (e: KeyboardEvent) => {
+   317→      if (e.key === "Escape") {
+   318→        // Close the notes panel first if it's open; otherwise close the lesson.
+   319→        if (showNotesPanel) {
+   320→          setShowNotesPanel(false);
+   321→          return;
+   322→        }
+   323→        onClose();
+   324→        return;
+   325→      }
+   326→      if (e.key === "ArrowRight") {
+   327→        goNext();
+   328→        return;
+   329→      }
+   330→      if (e.key === "ArrowLeft") {
+   331→        goPrev();
+   332→        return;
+   333→      }
+   334→      // Space → play the current step's primary audio
+   335→      if (e.key === " " || e.code === "Space") {
+   336→        // When the notes panel is open, the user is taking notes — don't
+   337→        // hijack Space for audio playback.
+   338→        if (showNotesPanel) return;
+   339→        const target = e.target as HTMLElement | null;
+   340→        const isTyping =
+   341→          target &&
+   342→          (target.tagName === "INPUT" ||
+   343→            target.tagName === "TEXTAREA" ||
+   344→            target.isContentEditable);
+   345→        if (isTyping) return;
+   346→
+   347→        // Don't capture Space when another overlay is open that needs it
+   348→        // (AI Coach chat input, or this very shortcuts overlay).
+   349→        const coachOpen = document.querySelector(
+   350→          '[aria-label="AccentAI Coach chat"]'
+   351→        );
+   352→        if (coachOpen) return;
+   353→        const overlay = document.getElementById("shortcuts-overlay");
+   354→        if (overlay && !overlay.classList.contains("hidden")) return;
+   355→
+   356→        // If an interactive element (button / link) is focused, let the
+   357→        // browser's native Space-to-click behaviour win so users who tab
+   358→        // through the UI can still activate controls with Space.
+   359→        const active = document.activeElement as HTMLElement | null;
+   360→        if (
+   361→          active &&
+   362→          (active.tagName === "BUTTON" ||
+   363→            active.tagName === "A" ||
+   364→            active.getAttribute("role") === "button")
+   365→        ) {
+   366→          return;
+   367→        }
+   368→
+   369→        const text = getPrimaryAudioText(step);
+   370→        if (text) {
+   371→          e.preventDefault();
+   372→          handleSpeak(text);
+   373→        }
+   374→      }
+   375→    };
+   376→    window.addEventListener("keydown", onKey);
+   377→    return () => window.removeEventListener("keydown", onKey);
+   378→  }, [goNext, goPrev, onClose, step, handleSpeak, showNotesPanel]);
+   379→
+   380→  const currentCategory = getStepCategory(step?.type ?? "");
+   381→  const currentTint = CATEGORY_TINT[currentCategory];
+   382→  const currentGlow = CATEGORY_GLOW[currentCategory];
+   383→
+   384→  return (
+   385→    <motion.div
+   386→      initial={{ opacity: 0 }}
+   387→      animate={{ opacity: 1 }}
+   388→      exit={{ opacity: 0 }}
+   389→      className="fixed inset-0 z-[200] bg-[var(--bg)] flex flex-col relative overflow-hidden"
+   390→    >
+   391→      {/* Animated step-type background tint */}
+   392→      <motion.div
+   393→        key={currentCategory}
+   394→        initial={{ opacity: 0 }}
+   395→        animate={{ opacity: 1 }}
+   396→        exit={{ opacity: 0 }}
+   397→        transition={{ duration: 0.6 }}
+   398→        className="absolute inset-0 pointer-events-none z-0"
+   399→        style={{ background: `radial-gradient(ellipse at 50% 0%, ${currentTint} 0%, transparent 70%)` }}
+   400→      />
+   401→      {/* Content sits above the tint */}
+   402→      <div className="relative z-10 flex flex-col flex-1 min-h-0">
+   403→      {showConfetti && <Confetti count={100} />}
+   404→
+   405→      {/* Header */}
+   406→      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)] bg-[var(--bg2)]/80 backdrop-blur safe-top">
+   407→        <button
+   408→          onClick={onClose}
+   409→          className="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-[var(--card-h)] transition"
+   410→          aria-label="Close lesson"
+   411→        >
+   412→          <X className="w-5 h-5" />
+   413→        </button>
+   414→        <div className="flex-1 px-3 text-center">
+   415→          <div className="text-[10px] text-[var(--t3)] uppercase tracking-wider font-mono">
+   416→            Phase {lesson.phaseId + 1} · Lesson {lesson.lessonIndex + 1}
+   417→          </div>
+   418→          <div className="text-sm font-d font-semibold truncate">{lesson.title}</div>
+   419→        </div>
+   420→        <div className="flex items-center gap-1.5">
+   421→          <motion.button
+   422→            onClick={() => setShowNotesPanel(true)}
+   423→            whileTap={{ scale: 0.9 }}
+   424→            whileHover={{ scale: 1.05 }}
+   425→            className="relative w-9 h-9 rounded-xl flex items-center justify-center hover:bg-[var(--card-h)] transition text-[var(--t2)] hover:text-[var(--p3)]"
+   426→            aria-label="Open lesson notes"
+   427→            aria-expanded={showNotesPanel}
+   428→          >
+   429→            <NotebookPen style={{ width: 18, height: 18 }} />
+   430→            <AnimatePresence>
+   431→              {hasLessonNote && (
+   432→                <motion.span
+   433→                  key="note-dot"
+   434→                  initial={{ scale: 0 }}
+   435→                  animate={{ scale: 1 }}
+   436→                  exit={{ scale: 0 }}
+   437→                  transition={{ type: "spring", stiffness: 400, damping: 18 }}
+   438→                  className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[var(--p3)] ring-2 ring-[var(--bg2)]"
+   439→                  style={{ boxShadow: "0 0 6px rgba(167,139,250,0.8)" }}
+   440→                />
+   441→              )}
+   442→            </AnimatePresence>
+   443→          </motion.button>
+   444→          {/* Timer display */}
+   445→          <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[var(--card)]/60 border border-[var(--border2)] text-[11px] font-mono text-[var(--t2)]">
+   446→            <span className="text-[10px]">⏱</span>
+   447→            <span>{timerDisplay}</span>
+   448→          </div>
+   449→          <span className="text-xs font-mono text-[var(--t2)]">{stepIdx + 1}/{totalSteps}</span>
+   450→          <ProgressRing pct={pct} size={36} stroke={3} />
+   451→        </div>
+   452→      </div>
+   453→
+   454→      {/* ── Enhanced animated step progress bar ── */}
+   455→      <div className="px-3 py-2 bg-[var(--bg2)]/70 border-b border-[var(--border)]">
+   456→        <div className="relative max-w-2xl mx-auto" style={{ height: 44 }}>
+   457→          {/* Gradient connecting line (background track) */}
+   458→          <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-[3px] rounded-full bg-[var(--border)]" />
+   459→
+   460→          {/* Animated gradient fill line — draws from left to the current step */}
+   461→          <motion.div
+   462→            className="absolute top-1/2 -translate-y-1/2 h-[3px] rounded-full"
+   463→            style={{
+   464→              left: 0,
+   465→              width: `calc(${(stepIdx / Math.max(totalSteps - 1, 1)) * 100}% + 0px)`,
+   466→              background: "linear-gradient(90deg, var(--p), var(--p2))",
+   467→              boxShadow: "0 0 8px rgba(99,102,241,0.4)",
+   468→            }}
+   469→            initial={{ scaleX: 0, transformOrigin: "left" }}
+   470→            animate={{ scaleX: 1 }}
+   471→            transition={{ duration: 0.5, ease: "easeOut" }}
+   472→          />
+   473→
+   474→          {/* Shimmer sweep on the filled line */}
+   475→          <motion.div
+   476→            className="absolute top-1/2 -translate-y-1/2 h-[3px] rounded-full"
+   477→            style={{
+   478→              left: 0,
+   479→              width: `calc(${(stepIdx / Math.max(totalSteps - 1, 1)) * 100}% + 0px)`,
+   480→              background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent)",
+   481→              backgroundSize: "200% 100%",
+   482→            }}
+   483→            animate={{ backgroundPosition: ["200% 0", "-200% 0"] }}
+   484→            transition={{ duration: 2.5, repeat: Infinity, repeatDelay: 3, ease: "easeInOut" }}
+   485→          />
+   486→
+   487→          {/* Step dots row */}
+   488→          <div className="absolute inset-0 flex items-center justify-between">
+   489→            {lesson.steps.map((s, i) => {
+   490→              const isCurrent = i === stepIdx;
+   491→              const isPast = i < stepIdx;
+   492→              const isUpcoming = i > stepIdx;
+   493→              const cat = getStepCategory(s.type);
+   494→              const glow = CATEGORY_GLOW[cat];
+   495→              const icon = STEP_ICON[s.type] || "•";
+   496→              const stepTitle = s.title || s.type.replace(/-/g, " ");
+   497→
+   498→              return (
+   499→                <motion.button
+   500→                  key={i}
+   501→                  onClick={() => { setDirection(i > stepIdx ? 1 : -1); setStepIdx(i); }}
+   502→                  className="relative flex items-center justify-center rounded-full cursor-pointer group"
+   503→                  style={{
+   504→                    width: isCurrent ? 32 : isPast ? 24 : 22,
+   505→                    height: isCurrent ? 32 : isPast ? 24 : 22,
+   506→                    fontSize: isCurrent ? 13 : isPast ? 10 : 9,
+   507→                    background: isCurrent
+   508→                      ? "linear-gradient(135deg, #6366f1, #8b5cf6)"
+   509→                      : isPast
+   510→                      ? "linear-gradient(135deg, rgba(99,102,241,0.25), rgba(139,92,246,0.25))"
+   511→                      : "var(--card)",
+   512→                    border: isUpcoming ? "1px solid var(--border)" : "none",
+   513→                    color: isCurrent ? "#fff" : isPast ? "var(--p3)" : "var(--t3)",
+   514→                    boxShadow: isCurrent
+   515→                      ? `0 0 14px ${glow}, 0 0 4px ${glow}`
+   516→                      : "none",
+   517→                  }}
+   518→                  initial={false}
+   519→                  animate={{
+   520→                    scale: isCurrent ? 1 : 1,
+   521→                    opacity: isUpcoming ? 0.45 : 1,
+   522→                  }}
+   523→                  transition={{ type: "spring", stiffness: 350, damping: 22 }}
+   524→                  whileHover={{ scale: 1.18, opacity: 1 }}
+   525→                  whileTap={{ scale: 0.88 }}
+   526→                  aria-label={`Step ${i + 1}: ${stepTitle}`}
+   527→                >
+   528→                  <span className="relative z-10 leading-none select-none">{icon}</span>
+   529→
+   530→                  {/* Pulsing glow ring for current step */}
+   531→                  {isCurrent && (
+   532→                    <motion.span
+   533→                      className="absolute inset-[-4px] rounded-full"
+   534→                      style={{ border: `2px solid ${glow.replace("0.6", "0.5")}` }}
+   535→                      animate={{
+   536→                        scale: [1, 1.25, 1],
+   537→                        opacity: [0.6, 0, 0.6],
+   538→                      }}
+   539→                      transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+   540→                    />
+   541→                  )}
+   542→
+   543→                  {/* Hover tooltip */}
+   544→                  <span className="absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-md bg-[var(--bg3)] border border-[var(--border2)] text-[9px] text-[var(--t2)] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none font-mono z-20">
+   545→                    {stepTitle}
+   546→                  </span>
+   547→                </motion.button>
+   548→              );
+   549→            })}
+   550→          </div>
+   551→        </div>
+   552→      </div>
+   553→
+   554→      {/* Step content */}
+   555→      <div className="flex-1 overflow-y-auto relative">
+   556→        {/* Subtle fade overlay between steps */}
+   557→        <AnimatePresence>
+   558→          <StepTransitionOverlay key={stepIdx} />
+   559→        </AnimatePresence>
+   560→        <AnimatePresence mode="wait" custom={direction}>
+   561→          <motion.div
+   562→            key={stepIdx}
+   563→            custom={direction}
+   564→            variants={stepVariants}
+   565→            initial="enter"
+   566→            animate="center"
+   567→            exit="exit"
+   568→            transition={stepTransition}
+   569→            className="max-w-2xl mx-auto px-5 py-6 pb-32"
+   570→          >
+   571→            {/* Step-type chip with icon + label, animated entrance */}
+   572→            <motion.div
+   573→              initial={{ opacity: 0, y: -6 }}
+   574→              animate={{ opacity: 1, y: 0 }}
+   575→              transition={{ delay: 0.1, duration: 0.3 }}
+   576→              className="flex items-center justify-center gap-2 mb-4"
+   577→            >
+   578→              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--card)] border border-[var(--border2)] text-[10px] uppercase tracking-wider font-mono text-[var(--t3)]">
+   579→                <span className="text-sm leading-none">
+   580→                  {STEP_ICON[step?.type || ""] || "•"}
+   581→                </span>
+   582→                <span>{step?.type?.replace("-", " ")}</span>
+   583→                <span className="opacity-50">·</span>
+   584→                <span>Step {stepIdx + 1} of {totalSteps}</span>
+   585→              </div>
+   586→            </motion.div>
+   587→            <StepRenderer
+   588→              step={step}
+   589→              lesson={lesson}
+   590→              speak={handleSpeak}
+   591→              ttsSpeed={ttsSpeed}
+   592→              setTtsSpeed={setTtsSpeed}
+   593→              quizAnswer={quizAnswer}
+   594→              setQuizAnswer={setQuizAnswer}
+   595→              practiceScore={practiceScore}
+   596→              setPracticeScore={setPracticeScore}
+   597→              recording={recording}
+   598→              setRecording={setRecording}
+   599→              isLast={isLast}
+   600→              onComplete={handleComplete}
+   601→              onNext={onNext}
+   602→              timeSpentSeconds={timerAccumulatedRef.current + (Date.now() - timerStartRef.current) / 1000}
+   603→            />
+   604→          </motion.div>
+   605→        </AnimatePresence>
+   606→      </div>
+   607→
+   608→      {/* "Press Space to play" hint — appears briefly above the footer when a
+   609→          step with audio loads. pointer-events-none so it never blocks taps. */}
+   610→      <AnimatePresence>
+   611→        {showSpaceHint && (
+   612→          <motion.div
+   613→            initial={{ opacity: 0, y: 14, scale: 0.92 }}
+   614→            animate={{ opacity: 1, y: 0, scale: 1 }}
+   615→            exit={{ opacity: 0, y: 14, scale: 0.92 }}
+   616→            transition={{ type: "spring", stiffness: 320, damping: 24 }}
+   617→            className="absolute left-1/2 -translate-x-1/2 bottom-24 z-10 pointer-events-none"
+   618→          >
+   619→            <div className="flex items-center gap-2 px-3.5 py-2 rounded-full bg-[var(--card)]/95 border border-[var(--border2)] backdrop-blur-md shadow-[0_6px_24px_rgba(0,0,0,0.45)]">
+   620→              <span className="text-sm leading-none" aria-hidden="true">⌨</span>
+   621→              <kbd className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-[var(--bg2)] border border-[var(--border2)] text-[var(--p3)] shadow-[0_1px_0_var(--border2)]">
+   622→                Space
+   623→              </kbd>
+   624→              <span className="text-xs text-[var(--t2)] font-medium">Press Space to play</span>
+   625→            </div>
+   626→          </motion.div>
+   627→        )}
+   628→      </AnimatePresence>
+   629→
+   630→      {/* Footer nav */}
+   631→      <div className="border-t border-[var(--border)] bg-[var(--bg2)]/95 backdrop-blur px-4 py-3 flex items-center gap-3 safe-bottom">
+   632→        <button
+   633→          onClick={goPrev}
+   634→          disabled={isFirst}
+   635→          className="px-4 py-2.5 rounded-xl flex items-center gap-1.5 text-sm font-semibold disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[var(--card-h)] transition"
+   636→        >
+   637→          <ChevronLeft className="w-4 h-4" /> Back
+   638→        </button>
+   639→        <div className="flex-1" />
+   640→        {step?.type === "completion" ? (
+   641→          onNext ? (
+   642→            <button
+   643→              onClick={onNext}
+   644→              className="px-5 py-2.5 rounded-xl bg-[var(--grad-btn)] text-white text-sm font-semibold flex items-center gap-1.5 hover:opacity-90 transition"
+   645→            >
+   646→              Next Lesson <ChevronRight className="w-4 h-4" />
+   647→            </button>
+   648→          ) : (
+   649→            <button
+   650→              onClick={onClose}
+   651→              className="px-5 py-2.5 rounded-xl bg-[var(--grad-btn)] text-white text-sm font-semibold flex items-center gap-1.5 hover:opacity-90 transition"
+   652→            >
+   653→              <Check className="w-4 h-4" /> Finish
+   654→            </button>
+   655→          )
+   656→        ) : (
+   657→          <button
+   658→            onClick={goNext}
+   659→            className="px-5 py-2.5 rounded-xl bg-[var(--grad-btn)] text-white text-sm font-semibold flex items-center gap-1.5 hover:opacity-90 transition"
+   660→          >
+   661→            {isLast ? "Complete" : "Continue"} <ChevronRight className="w-4 h-4" />
+   662→          </button>
+   663→        )}
+   664→      </div>
+   665→
+   666→      {/* Lesson Notes — slide-in side panel overlay */}
+   667→      <AnimatePresence>
+   668→        {showNotesPanel && (
+   669→          <motion.div
+   670→            key="notes-backdrop"
+   671→            initial={{ opacity: 0 }}
+   672→            animate={{ opacity: 1 }}
+   673→            exit={{ opacity: 0 }}
+   674→            transition={{ duration: 0.2 }}
+   675→            className="absolute inset-0 z-[60] bg-black/50 backdrop-blur-sm flex justify-end"
+   676→            onClick={() => setShowNotesPanel(false)}
+   677→            aria-hidden="false"
+   678→          >
+   679→            <motion.div
+   680→              key="notes-panel"
+   681→              initial={{ x: "100%" }}
+   682→              animate={{ x: 0 }}
+   683→              exit={{ x: "100%" }}
+   684→              transition={{ type: "spring", stiffness: 320, damping: 32 }}
+   685→              onClick={(e) => e.stopPropagation()}
+   686→              className="h-full w-full max-w-md bg-[var(--bg)] border-l border-[var(--border2)] flex flex-col safe-top safe-bottom"
+   687→              role="dialog"
+   688→              aria-label={`Notes panel for ${lesson.title}`}
+   689→            >
+   690→              {/* Panel header */}
+   691→              <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)] bg-[var(--bg2)]/80 backdrop-blur">
+   692→                <div className="flex items-center gap-2">
+   693→                  <div
+   694→                    className="w-7 h-7 rounded-lg flex items-center justify-center text-white"
+   695→                    style={{ background: "var(--grad-btn)" }}
+   696→                  >
+   697→                    <NotebookPen style={{ width: 14, height: 14 }} />
+   698→                  </div>
+   699→                  <div>
+   700→                    <div className="text-[10px] uppercase tracking-wider font-mono text-[var(--t3)]">
+   701→                      My Notebook
+   702→                    </div>
+   703→                    <div className="text-xs font-d font-semibold text-[var(--t1)] truncate max-w-[200px] sm:max-w-xs">
+   704→                      {lesson.title}
+   705→                    </div>
+   706→                  </div>
+   707→                </div>
+   708→                <button
+   709→                  onClick={() => setShowNotesPanel(false)}
+   710→                  className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[var(--card-h)] transition text-[var(--t2)] hover:text-[var(--t1)]"
+   711→                  aria-label="Close notes panel"
+   712→                >
+   713→                  <X className="w-4 h-4" />
+   714→                </button>
+   715→              </div>
+   716→
+   717→              {/* Panel body */}
+   718→              <div className="flex-1 overflow-y-auto p-4">
+   719→                <LessonNotesPanel lessonId={lesson.id} lessonTitle={lesson.title} />
+   720→              </div>
+   721→            </motion.div>
+   722→          </motion.div>
+   723→        )}
+   724→      </AnimatePresence>
+   725→      </div>{/* end z-10 inner wrapper */}
+   726→    </motion.div>
+   727→  );
+   728→}
+   729→
+   730→// ─── Step Renderer ───
+   731→
+   732→interface StepRendererProps {
+   733→  step: LessonStep;
+   734→  lesson: Lesson;
+   735→  speak: (text: string) => void;
+   736→  ttsSpeed: number;
+   737→  setTtsSpeed: (s: number) => void;
+   738→  quizAnswer: number | null;
+   739→  setQuizAnswer: (n: number | null) => void;
+   740→  practiceScore: number | null;
+   741→  setPracticeScore: (n: number | null) => void;
+   742→  recording: boolean;
+   743→  setRecording: (b: boolean) => void;
+   744→  isLast: boolean;
+   745→  onComplete: () => void;
+   746→  onNext?: () => void;
+   747→  timeSpentSeconds: number;
+   748→}
+   749→
+   750→function StepRenderer(props: StepRendererProps) {
+   751→  const { step, lesson, speak, ttsSpeed, setTtsSpeed } = props;
+   752→
+   753→  switch (step.type) {
+   754→    case "intro":
+   755→      return <IntroStepView step={step} lesson={lesson} speak={speak} ttsSpeed={ttsSpeed} setTtsSpeed={setTtsSpeed} />;
+   756→    case "concept":
+   757→      return <ConceptStepView step={step} />;
+   758→    case "example":
+   759→      return <ExampleStepView step={step} speak={speak} />;
+   760→    case "mouth-diagram":
+   761→      return <MouthDiagram step={step} speak={speak} />;
+   762→    case "vowel-chart":
+   763→      return <VowelChart step={step} speak={speak} />;
+   764→    case "compare":
+   765→      return <CompareWave step={step} speak={speak} />;
+   766→    case "stress-bars":
+   767→      return <StressBars step={step} speak={speak} />;
+   768→    case "rhythm":
+   769→      return <RhythmBeats step={step} speak={speak} />;
+   770→    case "linking":
+   771→      return <LinkingDiagram step={step} speak={speak} />;
+   772→    case "intonation":
+   773→      return <IntonationContour step={step} speak={speak} />;
+   774→    case "shadow":
+   775→      return <ShadowStepView step={step} speak={speak} />;
+   776→    case "tap-pronounce":
+   777→      return <TapPronounceStepView step={step} speak={speak} />;
+   778→    case "tip":
+   779→      return <TipStepView step={step} />;
+   780→    case "practice":
+   781→      return <PracticeStepView {...props} />;
+   782→    case "quiz":
+   783→      return <QuizStepView {...props} />;
+   784→    case "completion":
+   785→      return <CompletionStepView step={step} onNext={props.onNext} timeSpentSeconds={props.timeSpentSeconds} practiceScore={props.practiceScore} />;
+   786→    default:
+   787→      return <div>Unknown step type</div>;
+   788→  }
+   789→}
+   790→
+   791→// ─── Individual step views ───
+   792→
+   793→const TTS_SPEEDS = [0.6, 0.8, 1, 1.2] as const;
+   794→
+   795→function IntroStepView({ step, lesson, speak, ttsSpeed, setTtsSpeed }: {
+   796→  step: Extract<LessonStep, { type: "intro" }>;
+   797→  lesson: Lesson;
+   798→  speak: (t: string) => void;
+   799→  ttsSpeed: number;
+   800→  setTtsSpeed: (s: number) => void;
+   801→}) {
+   802→  return (
+   803→    <div className="space-y-5 text-center relative">
+   804→      {/* Subtle background glow */}
+   805→      <div className="absolute inset-0 pointer-events-none">
+   806→        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-64 h-64 rounded-full bg-[rgba(99,102,241,0.06)] blur-[60px]" />
+   807→      </div>
+   808→
+   809→      <motion.div
+   810→        initial={{ scale: 0.6, opacity: 0, rotate: -8 }}
+   811→        animate={{ scale: 1, opacity: 1, rotate: 0 }}
+   812→        transition={{ type: "spring", stiffness: 200, damping: 14 }}
+   813→        className="relative z-10 flex flex-col items-center gap-1.5 mb-2"
+   814→      >
+   815→        <div className="animate-gentle-float">
+   816→          <IntroIllustration visual={step.visual} emoji={step.emoji} size={120} />
+   817→        </div>
+   818→        {step.emoji && (
+   819→          <motion.span
+   820→            initial={{ opacity: 0, y: -4 }}
+   821→            animate={{ opacity: 1, y: 0 }}
+   822→            transition={{ delay: 0.25 }}
+   823→            className="text-2xl"
+   824→            aria-hidden="true"
+   825→          >
+   826→            {step.emoji}
+   827→          </motion.span>
+   828→        )}
+   829→      </motion.div>
+   830→      <motion.div
+   831→        initial={{ opacity: 0, y: 15 }}
+   832→        animate={{ opacity: 1, y: 0 }}
+   833→        transition={{ delay: 0.2 }}
+   834→        className="relative z-10"
+   835→      >
+   836→        <div className="flex items-center justify-center gap-2 mb-2">
+   837→          <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--t3)] font-mono">
+   838→            Lesson Introduction
+   839→          </div>
+   840→          <DifficultyBadge lesson={lesson} size="sm" />
+   841→        </div>
+   842→        <h1 className="font-d text-3xl font-bold mb-2">
+   843→          <span className="grad-text">{step.title}</span>
+   844→        </h1>
+   845→        <p className="text-[var(--t2)] text-base mb-4">{step.subtitle}</p>
+   846→        <p className="text-[var(--t2)] text-sm leading-relaxed max-w-md mx-auto">
+   847→          {step.description}
+   848→        </p>
+   849→      </motion.div>
+   850→      <motion.div
+   851→        initial={{ opacity: 0, y: 10 }}
+   852→        animate={{ opacity: 1, y: 0 }}
+   853→        transition={{ delay: 0.4 }}
+   854→        className="relative z-10"
+   855→      >
+   856→        <div className="rounded-2xl overflow-hidden border border-[var(--border)] relative">
+   857→          <WaveformCanvas height={140} />
+   858→          <div className="absolute inset-0 bg-gradient-to-t from-[var(--bg)] via-transparent to-transparent" />
+   859→        </div>
+   860→      </motion.div>
+   861→      <motion.button
+   862→        initial={{ opacity: 0 }}
+   863→        animate={{ opacity: 1 }}
+   864→        transition={{ delay: 0.5 }}
+   865→        whileHover={{ scale: 1.04 }}
+   866→        whileTap={{ scale: 0.96 }}
+   867→        onClick={() => speak(step.title)}
+   868→        className="px-5 py-2.5 rounded-xl bg-[var(--card-h)] border border-[var(--border2)] text-sm font-semibold flex items-center gap-2 mx-auto hover:bg-[var(--card)] transition relative z-10"
+   869→      >
+   870→        ▶ Hear the title
+   871→      </motion.button>
+   872→
+   873→      {/* TTS Speed Control */}
+   874→      <motion.div
+   875→        initial={{ opacity: 0, y: 6 }}
+   876→        animate={{ opacity: 1, y: 0 }}
+   877→        transition={{ delay: 0.6 }}
+   878→        className="flex items-center justify-center gap-1.5 relative z-10"
+   879→      >
+   880→        <Gauge className="w-3.5 h-3.5 text-[var(--t3)] shrink-0" />
+   881→        {TTS_SPEEDS.map((speed) => {
+   882→          const isSelected = ttsSpeed === speed;
+   883→          return (
+   884→            <motion.button
+   885→              key={speed}
+   886→              whileHover={{ scale: 1.1 }}
+   887→              whileTap={{ scale: 0.92 }}
+   888→              onClick={() => setTtsSpeed(speed)}
+   889→              className={`px-2.5 py-1 rounded-full text-[11px] font-mono font-semibold transition-all ${
+   890→                isSelected
+   891→                  ? "bg-[var(--grad-btn)] text-white shadow-[0_0_10px_rgba(99,102,241,0.5)]"
+   892→                  : "bg-[var(--card)] text-[var(--t3)] border border-[var(--border)] hover:border-[var(--p3)] hover:text-[var(--t2)]"
+   893→              }`}
+   894→              aria-label={`Set speed to ${speed}x`}
+   895→              aria-pressed={isSelected}
+   896→            >
+   897→              {speed}×
+   898→            </motion.button>
+   899→          );
+   900→        })}
+   901→      </motion.div>
+   902→    </div>
+   903→  );
+   904→}
+   905→
+   906→function ConceptStepView({ step }: { step: Extract<LessonStep, { type: "concept" }> }) {
+   907→  return (
+   908→    <div className="space-y-4">
+   909→      <div className="flex items-center gap-2">
+   910→        <span className="text-xs px-2.5 py-1 rounded-full bg-[rgba(99,102,241,0.15)] text-[#a78bfa] font-mono font-bold uppercase tracking-wider border border-[rgba(99,102,241,0.2)]">
+   911→          Concept
+   912→        </span>
+   913→        {step.visualLabel && (
+   914→          <span className="text-[10px] text-[var(--t3)] px-2 py-0.5 rounded-full bg-[var(--card)] border border-[var(--border)]">
+   915→            {step.visualLabel}
+   916→          </span>
+   917→        )}
+   918→      </div>
+   919→      <h2 className="font-d text-2xl font-bold text-[var(--t1)]">{step.title}</h2>
+   920→      <div className="space-y-3">
+   921→        {step.body.map((p, i) => (
+   922→          <motion.p
+   923→            key={i}
+   924→            initial={{ opacity: 0, y: 8 }}
+   925→            animate={{ opacity: 1, y: 0 }}
+   926→            transition={{ delay: i * 0.1 }}
+   927→            className="text-[var(--t2)] text-sm leading-relaxed"
+   928→          >
+   929→            {p}
+   930→          </motion.p>
+   931→        ))}
+   932→      </div>
+   933→      {step.bulletPoints && step.bulletPoints.length > 0 && (
+   934→        <ul className="space-y-2 mt-2">
+   935→          {step.bulletPoints.map((b, i) => (
+   936→            <motion.li
+   937→              key={i}
+   938→              initial={{ opacity: 0, x: -10 }}
+   939→              animate={{ opacity: 1, x: 0 }}
+   940→              transition={{ delay: 0.1 + i * 0.06 }}
+   941→              className="flex items-start gap-3 p-3 rounded-xl bg-[rgba(99,102,241,0.06)] border border-[rgba(99,102,241,0.12)] hover:border-[rgba(99,102,241,0.25)] transition-colors"
+   942→            >
+   943→              <span className="inline-block w-2 h-2 rounded-full bg-[var(--grad-btn)] mt-1.5 shrink-0 shadow-[0_0_6px_rgba(99,102,241,0.5)]" />
+   944→              <span className="text-[var(--t2)] text-sm font-mono">{b}</span>
+   945→            </motion.li>
+   946→          ))}
+   947→        </ul>
+   948→      )}
+   949→    </div>
+   950→  );
+   951→}
+   952→
+   953→function ExampleStepView({ step, speak }: { step: Extract<LessonStep, { type: "example" }>; speak: (t: string) => void }) {
+   954→  const words = step.phrase.split(/\s+/);
+   955→  return (
+   956→    <div className="space-y-4">
+   957→      {step.title && (
+   958→        <div className="flex items-center gap-2">
+   959→          <span className="text-xs px-2.5 py-1 rounded-full bg-[rgba(34,211,238,0.15)] text-[#22d3ee] font-mono font-bold uppercase tracking-wider border border-[rgba(34,211,238,0.2)]">
+   960→            Example
+   961→          </span>
+   962→        </div>
+   963→      )}
+   964→      <div className="rounded-2xl p-5 bg-[rgba(99,102,241,0.06)] border border-[rgba(99,102,241,0.25)] relative overflow-hidden">
+   965→        {/* Background glow */}
+   966→        <div className="absolute -top-10 -right-10 w-32 h-32 rounded-full bg-[rgba(99,102,241,0.06)] blur-[40px] pointer-events-none" />
+   967→        
+   968→        <div className="flex flex-wrap gap-1.5 mb-4 relative z-10">
+   969→          {words.map((w, i) => {
+   970→            const cleaned = w.replace(/[.,!?;:"']/g, "");
+   971→            const isHl = step.highlightWords?.some((hw) => hw.replace(/[.,!?;:"']/g, "") === cleaned);
+   972→            return (
+   973→              <motion.button
+   974→                key={i}
+   975→                initial={{ opacity: 0, y: 5 }}
+   976→                animate={{ opacity: 1, y: 0 }}
+   977→                transition={{ delay: i * 0.04 }}
+   978→                whileHover={{ scale: 1.05 }}
+   979→                whileTap={{ scale: 0.95 }}
+   980→                onClick={() => speak(w)}
+   981→                className={`px-2.5 py-1.5 rounded-lg text-base font-d transition ${
+   982→                  isHl
+   983→                    ? "bg-[var(--grad-btn)] text-white font-semibold shadow-[0_0_12px_rgba(99,102,241,0.4)]"
+   984→                    : "bg-[var(--card-h)] text-[var(--t2)] hover:text-[var(--t1)] border border-[var(--border)]"
+   985→                }`}
+   986→              >
+   987→                {w}
+   988→              </motion.button>
+   989→            );
+   990→          })}
+   991→        </div>
+   992→        <div className="text-center font-mono text-sm text-[var(--t3)] mb-4 relative z-10">{step.ipa}</div>
+   993→        <motion.button
+   994→          whileHover={{ scale: 1.02 }}
+   995→          whileTap={{ scale: 0.98 }}
+   996→          onClick={() => speak(step.phrase)}
+   997→          className="w-full py-3 rounded-xl bg-[var(--grad-btn)] text-white text-sm font-semibold flex items-center justify-center gap-2 hover:opacity-90 transition relative z-10"
+   998→          style={{ boxShadow: "0 0 20px rgba(99,102,241,0.3)" }}
+   999→        >
+  1000→          <span className="text-lg">▶</span> Play full phrase
+  1001→        </motion.button>
+  1002→      </div>
+  1003→      {step.tapWords && step.tapWords.length > 0 && (
+  1004→        <div>
+  1005→          <div className="text-[10px] text-[var(--t3)] uppercase tracking-wider font-mono mb-2">
+  1006→            Tap to hear individual words
+  1007→          </div>
+  1008→          <div className="flex flex-wrap gap-2">
+  1009→            {step.tapWords.map((tw, i) => (
+  1010→              <button
+  1011→                key={i}
+  1012→                onClick={() => speak(tw.word)}
+  1013→                className="px-3 py-2 rounded-xl bg-[var(--card-h)] border border-[var(--border)] hover:border-[var(--p3)] transition text-left"
+  1014→              >
+  1015→                <div className="font-d text-sm">{tw.word}</div>
+  1016→                <div className="font-mono text-[10px] text-[var(--t3)]">{tw.ipa}</div>
+  1017→              </button>
+  1018→            ))}
+  1019→          </div>
+  1020→        </div>
+  1021→      )}
+  1022→      {step.tip && (
+  1023→        <div className="rounded-xl p-3 bg-[rgba(245,158,11,0.08)] border border-[rgba(245,158,11,0.25)] text-xs text-[var(--t2)]">
+  1024→          <strong className="text-[#f59e0b]">💡 Tip:</strong> {step.tip}
+  1025→        </div>
+  1026→      )}
+  1027→    </div>
+  1028→  );
+  1029→}
+  1030→
+  1031→function TapPronounceStepView({ step, speak }: { step: Extract<LessonStep, { type: "tap-pronounce" }>; speak: (t: string) => void }) {
+  1032→  return (
+  1033→    <div className="space-y-4">
+  1034→      {step.title && <h2 className="font-d text-2xl font-bold">{step.title}</h2>}
+  1035→      {step.description && <p className="text-[var(--t2)] text-sm leading-relaxed">{step.description}</p>}
+  1036→      <div className="grid grid-cols-2 gap-3">
+  1037→        {step.words.map((w, i) => (
+  1038→          <motion.button
+  1039→            key={i}
+  1040→            initial={{ opacity: 0, y: 10 }}
+  1041→            animate={{ opacity: 1, y: 0 }}
+  1042→            transition={{ delay: i * 0.06 }}
+  1043→            whileTap={{ scale: 0.96 }}
+  1044→            onClick={() => speak(w.word)}
+  1045→            className="rounded-2xl p-4 bg-[var(--card)] border border-[var(--border)] hover:border-[var(--p3)] hover:bg-[var(--card-h)] transition text-left group"
+  1046→          >
+  1047→            <div className="font-d text-lg text-[var(--t1)] group-hover:text-[var(--p3)] transition">
+  1048→              {w.word}
+  1049→            </div>
+  1050→            <div className="font-mono text-xs text-[var(--t3)] mt-1">{w.ipa}</div>
+  1051→            {w.meaning && (
+  1052→              <div className="text-[10px] text-[var(--t2)] mt-1.5 px-2 py-0.5 rounded-full bg-[rgba(99,102,241,0.1)] inline-block">
+  1053→                {w.meaning}
+  1054→              </div>
+  1055→            )}
+  1056→            <div className="text-right text-[var(--t3)] text-xs mt-2">tap ▶</div>
+  1057→          </motion.button>
+  1058→        ))}
+  1059→      </div>
+  1060→    </div>
+  1061→  );
+  1062→}
+  1063→
+  1064→function TipStepView({ step }: { step: Extract<LessonStep, { type: "tip" }> }) {
+  1065→  const variantStyles = {
+  1066→    info: { bg: "rgba(99,102,241,0.08)", border: "rgba(99,102,241,0.3)", color: "#a78bfa", icon: "💡" },
+  1067→    success: { bg: "rgba(16,185,129,0.08)", border: "rgba(16,185,129,0.3)", color: "#10b981", icon: "✓" },
+  1068→    warning: { bg: "rgba(245,158,11,0.08)", border: "rgba(245,158,11,0.3)", color: "#f59e0b", icon: "⚠" },
+  1069→  };
+  1070→  const v = variantStyles[step.variant || "info"];
+  1071→  return (
+  1072→    <div className="space-y-3">
+  1073→      <div
+  1074→        className="rounded-2xl p-5 border"
+  1075→        style={{ background: v.bg, borderColor: v.border }}
+  1076→      >
+  1077→        <div className="flex items-center gap-2 mb-2">
+  1078→          <span className="text-2xl">{v.icon}</span>
+  1079→          {step.title && <h3 className="font-d text-lg font-bold" style={{ color: v.color }}>{step.title}</h3>}
+  1080→        </div>
+  1081→        <p className="text-[var(--t2)] text-sm leading-relaxed">{step.body}</p>
+  1082→      </div>
+  1083→    </div>
+  1084→  );
+  1085→}
+  1086→
+  1087→function ShadowStepView({ step, speak }: { step: Extract<LessonStep, { type: "shadow" }>; speak: (t: string) => void }) {
+  1088→  const [count, setCount] = useState(3);
+  1089→  useEffect(() => {
+  1090→    if (count <= 0) return;
+  1091→    const t = setTimeout(() => setCount((c) => c - 1), 1000);
+  1092→    return () => clearTimeout(t);
+  1093→  }, [count]);
+  1094→  return (
+  1095→    <div className="space-y-4">
+  1096→      {step.title && <h2 className="font-d text-2xl font-bold">{step.title}</h2>}
+  1097→      <p className="text-[var(--t2)] text-sm leading-relaxed">{step.description}</p>
+  1098→      <div className="rounded-2xl p-5 bg-[rgba(99,102,241,0.06)] border border-[var(--border)]">
+  1099→        <div className="text-center mb-3">
+  1100→          <div className="text-[10px] uppercase tracking-wider text-[var(--t3)] font-mono mb-2">
+  1101→            Shadow this phrase
+  1102→          </div>
+  1103→          <div className="font-d text-xl text-[var(--t1)]">{step.phrase}</div>
+  1104→          <div className="font-mono text-sm text-[var(--t3)] mt-1">{step.ipa}</div>
+  1105→        </div>
+  1106→        <div className="rounded-xl overflow-hidden border border-[var(--border)] mb-3">
+  1107→          <WaveformCanvas height={80} />
+  1108→        </div>
+  1109→        <button
+  1110→          onClick={() => {
+  1111→            speak(step.phrase);
+  1112→            setCount(3);
+  1113→          }}
+  1114→          className="w-full py-3 rounded-xl bg-[var(--grad-btn)] text-white text-sm font-semibold flex items-center justify-center gap-2 hover:opacity-90 transition"
+  1115→        >
+  1116→          {count > 0 && count < 3 ? `Repeat in ${count}...` : "▶ Listen & Repeat"}
+  1117→        </button>
+  1118→      </div>
+  1119→    </div>
+  1120→  );
+  1121→}
+  1122→
+  1123→function PracticeStepView({
+  1124→  step,
+  1125→  speak,
+  1126→  recording,
+  1127→  setRecording,
+  1128→  practiceScore,
+  1129→  setPracticeScore,
+  1130→}: StepRendererProps) {
+  1131→  const s = step as Extract<LessonStep, { type: "practice" }>;
+  1132→  const pass = s.passScore ?? 70;
+  1133→
+  1134→  useEffect(() => {
+  1135→    if (recording) {
+  1136→      const t1 = setTimeout(() => {
+  1137→        // simulate analysis
+  1138→        const score = 65 + Math.floor(Math.random() * 30);
+  1139→        setPracticeScore(score);
+  1140→        setRecording(false);
+  1141→      }, 3500);
+  1142→      return () => clearTimeout(t1);
+  1143→    }
+  1144→  }, [recording, setPracticeScore, setRecording]);
+  1145→
+  1146→  const passed = practiceScore !== null && practiceScore >= pass;
+  1147→
+  1148→  return (
+  1149→    <div className="space-y-4">
+  1150→      {s.title && <h2 className="font-d text-2xl font-bold">{s.title}</h2>}
+  1151→      <div className="rounded-2xl p-5 bg-[rgba(99,102,241,0.06)] border border-[var(--border)]">
+  1152→        <div className="text-center mb-3">
+  1153→          <div className="text-[10px] uppercase tracking-wider text-[var(--t3)] font-mono mb-2">
+  1154→            Your turn to speak
+  1155→          </div>
+  1156→          <div className="font-d text-xl text-[var(--t1)]">{s.phrase}</div>
+  1157→          <div className="font-mono text-sm text-[var(--t3)] mt-1">{s.ipa}</div>
+  1158→        </div>
+  1159→
+  1160→        <button
+  1161→          onClick={() => speak(s.phrase)}
+  1162→          className="w-full py-2.5 rounded-xl bg-[var(--card-h)] border border-[var(--border2)] text-sm font-semibold mb-4 flex items-center justify-center gap-2 hover:bg-[var(--card)] transition"
+  1163→        >
+  1164→          ▶ Hear the target
+  1165→        </button>
+  1166→
+  1167→        <div className="rounded-xl overflow-hidden border border-[var(--border)] bg-[var(--bg2)]">
+  1168→          <MicWaveform height={100} active={recording} />
+  1169→        </div>
+  1170→
+  1171→        <div className="mt-4 flex flex-col items-center gap-3">
+  1172→          <motion.button
+  1173→            whileTap={{ scale: 0.95 }}
+  1174→            onClick={() => {
+  1175→              if (recording) {
+  1176→                setRecording(false);
+  1177→              } else {
+  1178→                setPracticeScore(null);
+  1179→                setRecording(true);
+  1180→              }
+  1181→            }}
+  1182→            className="w-24 h-24 rounded-full flex items-center justify-center text-3xl font-bold relative"
+  1183→            style={{
+  1184→              background: recording
+  1185→                ? "radial-gradient(circle, #ef4444, #dc2626)"
+  1186→                : "var(--grad-btn)",
+  1187→              color: "white",
+  1188→              boxShadow: recording
+  1189→                ? "0 0 40px rgba(239,68,68,0.5)"
+  1190→                : "0 0 30px rgba(99,102,241,0.4)",
+  1191→            }}
+  1192→          >
+  1193→            {recording ? (
+  1194→              <motion.span
+  1195→                animate={{ scale: [1, 1.2, 1] }}
+  1196→                transition={{ duration: 1, repeat: Infinity }}
+  1197→              >
+  1198→                ■
+  1199→              </motion.span>
+  1200→            ) : (
+  1201→              "🎙"
+  1202→            )}
+  1203→            {recording && (
+  1204→              <motion.span
+  1205→                className="absolute inset-0 rounded-full border-2 border-[#ef4444]"
+  1206→                animate={{ scale: [1, 1.4], opacity: [0.6, 0] }}
+  1207→                transition={{ duration: 1.4, repeat: Infinity }}
+  1208→              />
+  1209→            )}
+  1210→          </motion.button>
+  1211→          <div className="text-xs text-[var(--t3)]">
+  1212→            {recording ? "Recording... tap to stop" : "Tap to record"}
+  1213→          </div>
+  1214→        </div>
+  1215→
+  1216→        {practiceScore !== null && (
+  1217→          <motion.div
+  1218→            initial={{ opacity: 0, y: 10 }}
+  1219→            animate={{ opacity: 1, y: 0 }}
+  1220→            className="mt-4"
+  1221→          >
+  1222→            <div
+  1223→              className="rounded-xl p-4 text-center"
+  1224→              style={{
+  1225→                background: passed ? "rgba(16,185,129,0.1)" : "rgba(245,158,11,0.1)",
+  1226→                border: `1px solid ${passed ? "rgba(16,185,129,0.3)" : "rgba(245,158,11,0.3)"}`,
+  1227→              }}
+  1228→            >
+  1229→              <div
+  1230→                className="font-d text-3xl font-bold"
+  1231→                style={{ color: passed ? "#10b981" : "#f59e0b" }}
+  1232→              >
+  1233→                {practiceScore}%
+  1234→              </div>
+  1235→              <div className="text-xs text-[var(--t2)] mt-1">
+  1236→                {passed ? "🎉 Great job! You passed." : "Almost there — try again!"}
+  1237→              </div>
+  1238→            </div>
+  1239→          </motion.div>
+  1240→        )}
+  1241→
+  1242→        {s.tip && (
+  1243→          <div className="mt-3 rounded-xl p-3 bg-[rgba(245,158,11,0.08)] border border-[rgba(245,158,11,0.25)] text-xs text-[var(--t2)]">
+  1244→            <strong className="text-[#f59e0b]">💡 Tip:</strong> {s.tip}
+  1245→          </div>
+  1246→        )}
+  1247→      </div>
+  1248→    </div>
+  1249→  );
+  1250→}
+  1251→
+  1252→function QuizStepView({
+  1253→  step,
+  1254→  quizAnswer,
+  1255→  setQuizAnswer,
+  1256→}: StepRendererProps) {
+  1257→  const s = step as Extract<LessonStep, { type: "quiz" }>;
+  1258→  const answered = quizAnswer !== null;
+  1259→  const isCorrect = answered && quizAnswer === s.correct;
+  1260→
+  1261→  return (
+  1262→    <div className="space-y-4">
+  1263→      <div className="flex items-center gap-2">
+  1264→        <span className="text-xs px-2 py-0.5 rounded-full bg-[rgba(167,139,250,0.15)] text-[#a78bfa] font-mono font-bold uppercase tracking-wider">
+  1265→          Quiz
+  1266→        </span>
+  1267→      </div>
+  1268→      <h2 className="font-d text-xl font-bold text-[var(--t1)] leading-snug">{s.question}</h2>
+  1269→      <div className="space-y-2">
+  1270→        {s.options.map((opt, i) => {
+  1271→          const isSelected = quizAnswer === i;
+  1272→          const isCorrectOpt = i === s.correct;
+  1273→          let style = "bg-[var(--card)] border-[var(--border)] hover:border-[var(--p3)]";
+  1274→          if (answered) {
+  1275→            if (isCorrectOpt) {
+  1276→              style = "bg-[rgba(16,185,129,0.1)] border-[rgba(16,185,129,0.5)]";
+  1277→            } else if (isSelected) {
+  1278→              style = "bg-[rgba(239,68,68,0.1)] border-[rgba(239,68,68,0.5)]";
+  1279→            } else {
+  1280→              style = "bg-[var(--card)] border-[var(--border)] opacity-50";
+  1281→            }
+  1282→          }
+  1283→          return (
+  1284→            <motion.button
+  1285→              key={i}
+  1286→              whileTap={{ scale: 0.98 }}
+  1287→              disabled={answered}
+  1288→              onClick={() => setQuizAnswer(i)}
+  1289→              className={`w-full p-4 rounded-xl border-2 text-left flex items-center justify-between gap-3 transition ${style}`}
+  1290→            >
+  1291→              <span className="text-sm font-medium text-[var(--t1)]">{opt}</span>
+  1292→              {answered && isCorrectOpt && <Check className="w-5 h-5 text-[#10b981]" />}
+  1293→              {answered && isSelected && !isCorrectOpt && <X className="w-5 h-5 text-[#ef4444]" />}
+  1294→            </motion.button>
+  1295→          );
+  1296→        })}
+  1297→      </div>
+  1298→      {answered && (
+  1299→        <motion.div
+  1300→          initial={{ opacity: 0, y: 10 }}
+  1301→          animate={{ opacity: 1, y: 0 }}
+  1302→          className={`rounded-xl p-4 border ${
+  1303→            isCorrect
+  1304→              ? "bg-[rgba(16,185,129,0.08)] border-[rgba(16,185,129,0.3)]"
+  1305→              : "bg-[rgba(239,68,68,0.08)] border-[rgba(239,68,68,0.3)]"
+  1306→          }`}
+  1307→        >
+  1308→          <div className="flex items-center gap-2 mb-2">
+  1309→            <span className={`font-bold ${isCorrect ? "text-[#10b981]" : "text-[#ef4444]"}`}>
+  1310→              {isCorrect ? "✓ Correct!" : "✗ Not quite"}
+  1311→            </span>
+  1312→          </div>
+  1313→          <p className="text-[var(--t2)] text-sm leading-relaxed">{s.explanation}</p>
+  1314→        </motion.div>
+  1315→      )}
+  1316→    </div>
+  1317→  );
+  1318→}
+  1319→
+  1320→function CompletionStepView({
+  1321→  step,
+  1322→  onNext,
+  1323→  timeSpentSeconds,
+  1324→  practiceScore,
+  1325→}: {
+  1326→  step: Extract<LessonStep, { type: "completion" }>;
+  1327→  onNext?: () => void;
+  1328→  timeSpentSeconds: number;
+  1329→  practiceScore: number | null;
+  1330→}) {
+  1331→  const [displayXp, setDisplayXp] = useState(0);
+  1332→  const [displayScore, setDisplayScore] = useState(0);
+  1333→  const targetXp = step.xp;
+  1334→  const score = practiceScore ?? 85;
+  1335→
+  1336→  // Animated XP counter with ease-out over 800ms
+  1337→  useEffect(() => {
+  1338→    if (targetXp <= 0) return;
+  1339→    const duration = 800;
+  1340→    const startTime = performance.now();
+  1341→    let raf: number;
+  1342→    const tick = (now: number) => {
+  1343→      const elapsed = now - startTime;
+  1344→      const progress = Math.min(1, elapsed / duration);
+  1345→      const eased = 1 - Math.pow(1 - progress, 3);
+  1346→      setDisplayXp(Math.round(eased * targetXp));
+  1347→      if (progress < 1) {
+  1348→        raf = requestAnimationFrame(tick);
+  1349→      }
+  1350→    };
+  1351→    raf = requestAnimationFrame(tick);
+  1352→    return () => cancelAnimationFrame(raf);
+  1353→  }, [targetXp]);
+  1354→
+  1355→  // Animated score counter
+  1356→  useEffect(() => {
+  1357→    const duration = 1000;
+  1358→    const startTime = performance.now();
+  1359→    let raf: number;
+  1360→    const tick = (now: number) => {
+  1361→      const elapsed = now - startTime;
+  1362→      const progress = Math.min(1, elapsed / duration);
+  1363→      const eased = 1 - Math.pow(1 - progress, 3);
+  1364→      setDisplayScore(Math.round(eased * score));
+  1365→      if (progress < 1) {
+  1366→        raf = requestAnimationFrame(tick);
+  1367→      }
+  1368→    };
+  1369→    raf = requestAnimationFrame(tick);
+  1370→    return () => cancelAnimationFrame(raf);
+  1371→  }, [score]);
+  1372→
+  1373→  // Star particles — explode outward from badge center
+  1374→  const starParticles = useMemo(() => {
+  1375→    const colors = ["#6366f1", "#8b5cf6", "#22d3ee", "#f59e0b", "#10b981", "#a78bfa", "#67e8f9", "#fb923c", "#34d399"];
+  1376→    return Array.from({ length: 9 }, (_, i) => {
+  1377→      const angle = (i / 9) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
+  1378→      const distance = 60 + Math.random() * 50;
+  1379→      return {
+  1380→        id: i,
+  1381→        x: Math.cos(angle) * distance,
+  1382→        y: Math.sin(angle) * distance,
+  1383→        char: i % 3 === 0 ? "✦" : "•",
+  1384→        size: i % 3 === 0 ? 14 : 10,
+  1385→        delay: 0.15 + i * 0.03,
+  1386→        color: colors[i],
+  1387→      };
+  1388→    });
+  1389→  }, []);
+  1390→
+  1391→  return (
+  1392→    <div className="text-center space-y-5 py-8 relative overflow-hidden">
+  1393→      {/* Background celebration glow — pulsing radial gradient */}
+  1394→      <motion.div
+  1395→        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 rounded-full pointer-events-none"
+  1396→        style={{
+  1397→          background: "radial-gradient(circle, rgba(99,102,241,0.2) 0%, rgba(139,92,246,0.12) 35%, rgba(34,211,238,0.06) 65%, transparent 100%)",
+  1398→        }}
+  1399→        animate={{
+  1400→          scale: [0.8, 1.2, 0.95, 1.1, 1],
+  1401→          opacity: [0, 0.7, 0.4, 0.6, 0.5],
+  1402→        }}
+  1403→        transition={{
+  1404→          duration: 3,
+  1405→          repeat: Infinity,
+  1406→          repeatType: "reverse",
+  1407→          ease: "easeInOut",
+  1408→        }}
+  1409→      />
+  1410→
+  1411→      {/* Star particles exploding outward */}
+  1412→      {starParticles.map((p) => (
+  1413→        <motion.span
+  1414→          key={p.id}
+  1415→          className="absolute pointer-events-none z-20"
+  1416→          style={{
+  1417→            top: "38%",
+  1418→            left: "50%",
+  1419→            fontSize: p.size,
+  1420→            color: p.color,
+  1421→            textShadow: `0 0 6px ${p.color}88`,
+  1422→          }}
+  1423→          initial={{ x: 0, y: 0, opacity: 0, scale: 0 }}
+  1424→          animate={{
+  1425→            x: p.x,
+  1426→            y: p.y,
+  1427→            opacity: [0, 1, 0.8, 0],
+  1428→            scale: [0, 1.3, 1, 0.2],
+  1429→          }}
+  1430→          transition={{
+  1431→            duration: 1.2,
+  1432→            delay: p.delay,
+  1433→            ease: "easeOut",
+  1434→          }}
+  1435→        >
+  1436→          {p.char}
+  1437→        </motion.span>
+  1438→      ))}
+  1439→
+  1440→      {/* Badge with spring bounce + continuous float — staggered 0ms */}
+  1441→      <motion.div
+  1442→        initial={{ scale: 0 }}
+  1443→        animate={{ scale: 1 }}
+  1444→        transition={{ type: "spring", stiffness: 260, damping: 14, delay: 0 }}
+  1445→        className="relative z-10 inline-block"
+  1446→      >
+  1447→        <motion.div
+  1448→          animate={{ y: [-3, 3, -3] }}
+  1449→          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+  1450→          className="text-8xl"
+  1451→        >
+  1452→          🏆
+  1453→        </motion.div>
+  1454→      </motion.div>
+  1455→
+  1456→      {/* Title + subtitle */}
+  1457→      <motion.div
+  1458→        initial={{ opacity: 0, y: 20 }}
+  1459→        animate={{ opacity: 1, y: 0 }}
+  1460→        transition={{ delay: 0.1, duration: 0.5 }}
+  1461→      >
+  1462→        <h1 className="font-d text-3xl font-bold mb-2">
+  1463→          <span className="grad-text">{step.title}</span>
+  1464→        </h1>
+  1465→        <p className="text-[var(--t2)] text-base max-w-md mx-auto">{step.subtitle}</p>
+  1466→      </motion.div>
+  1467→
+  1468→      {/* Animated XP counter with glow — staggered 200ms */}
+  1469→      <motion.div
+  1470→        initial={{ scale: 0.8, opacity: 0 }}
+  1471→        animate={{ scale: 1, opacity: 1 }}
+  1472→        transition={{ delay: 0.2, type: "spring" }}
+  1473→        className="inline-flex items-center gap-2 px-6 py-3 rounded-full relative overflow-hidden"
+  1474→        style={{
+  1475→          background: "var(--grad-btn)",
+  1476→          boxShadow: "0 0 30px rgba(99,102,241,0.5), 0 0 60px rgba(99,102,241,0.2)",
+  1477→        }}
+  1478→      >
+  1479→        {/* Shimmer sweep on XP badge */}
+  1480→        <motion.div
+  1481→          className="absolute inset-y-0 w-1/3"
+  1482→          style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent)" }}
+  1483→          animate={{ x: ["-100%", "300%"] }}
+  1484→          transition={{ duration: 2, repeat: Infinity, repeatDelay: 2, ease: "easeInOut" }}
+  1485→        />
+  1486→        <span className="text-xl relative z-10">⚡</span>
+  1487→        <span className="font-d text-xl font-bold text-white relative z-10">
+  1488→          +{displayXp} XP
+  1489→        </span>
+  1490→      </motion.div>
+  1491→
+  1492→      {/* Score ring — staggered 400ms */}
+  1493→      <motion.div
+  1494→        initial={{ opacity: 0, scale: 0.8 }}
+  1495→        animate={{ opacity: 1, scale: 1 }}
+  1496→        transition={{ delay: 0.4, type: "spring", stiffness: 200 }}
+  1497→        className="flex flex-col items-center gap-2"
+  1498→      >
+  1499→        <div className="relative">
+  1500→          <ProgressRing pct={score} size={80} stroke={5} label={`${displayScore}%`} />
+  1501→        </div>
+  1502→        <div className="text-[10px] uppercase tracking-wider text-[var(--t3)] font-mono">
+  1503→          Accuracy Score
+  1504→        </div>
+  1505→      </motion.div>
+  1506→
+  1507→      {step.badge && (
+  1508→        <motion.div
+  1509→          initial={{ opacity: 0, y: 10, scale: 0.9 }}
+  1510→          animate={{ opacity: 1, y: 0, scale: 1 }}
+  1511→          transition={{ delay: 0.5, type: "spring", stiffness: 200 }}
+  1512→          className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[rgba(245,158,11,0.12)] border border-[rgba(245,158,11,0.3)] text-sm font-semibold text-[#f59e0b] animate-achievement-burst"
+  1513→        >
+  1514→          <motion.span
+  1515→            animate={{ rotate: [0, -10, 10, -5, 0] }}
+  1516→            transition={{ delay: 0.6, duration: 0.5 }}
+  1517→          >
+  1518→            🏅
+  1519→          </motion.span>
+  1520→          <span>Badge unlocked: {step.badge}</span>
+  1521→        </motion.div>
+  1522→      )}
+  1523→
+  1524→      {/* Time spent on lesson */}
+  1525→      <motion.div
+  1526→        initial={{ opacity: 0, y: 8 }}
+  1527→        animate={{ opacity: 1, y: 0 }}
+  1528→        transition={{ delay: 0.5 }}
+  1529→        className="flex flex-col items-center gap-2"
+  1530→      >
+  1531→        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--card)] border border-[var(--border)] text-sm text-[var(--t2)]">
+  1532→          <span className="text-base">⏱</span>
+  1533→          <span className="font-mono font-semibold">{formatTimer(timeSpentSeconds)}</span>
+  1534→          <span className="text-[var(--t3)]">spent</span>
+  1535→        </div>
+  1536→        <div className="text-[10px] text-[var(--t3)] font-mono flex items-center gap-1">
+  1537→          <span>🔄</span> Next review suggested in 2 days
+  1538→        </div>
+  1539→      </motion.div>
+  1540→
+  1541→      {/* Next lesson preview + button — staggered 600ms */}
+  1542→      {step.nextLessonTitle && (
+  1543→        <motion.div
+  1544→          initial={{ opacity: 0 }}
+  1545→          animate={{ opacity: 1 }}
+  1546→          transition={{ delay: 0.6 }}
+  1547→          className="pt-2"
+  1548→        >
+  1549→          <div className="text-[10px] uppercase tracking-wider text-[var(--t3)] font-mono mb-1">
+  1550→            Up Next
+  1551→          </div>
+  1552→          <div className="font-d text-lg text-[var(--t1)]">{step.nextLessonTitle}</div>
+  1553→          {onNext && (
+  1554→            <motion.button
+  1555→              onClick={onNext}
+  1556→              className="mt-3 px-8 py-3 rounded-xl bg-[var(--grad-btn)] text-white font-semibold text-sm hover:opacity-90 transition"
+  1557→              initial={{ opacity: 0, y: 10 }}
+  1558→              animate={{ opacity: 1, y: 0 }}
+  1559→              transition={{ delay: 0.7, type: "spring" }}
+  1560→              whileHover={{ scale: 1.03 }}
+  1561→              whileTap={{ scale: 0.97 }}
+  1562→            >
+  1563→              Next Lesson
+  1564→            </motion.button>
+  1565→          )}
+  1566→        </motion.div>
+  1567→      )}
+  1568→    </div>
+  1569→  );
+  1570→}
+  1571→
