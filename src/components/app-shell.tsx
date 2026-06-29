@@ -45,7 +45,26 @@ export function AppShell() {
   }, [activeLessonId]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-[var(--bg)]">
+    <div className="min-h-screen flex flex-col bg-[var(--bg)] relative overflow-hidden">
+      {/* Animated gradient orb behind header */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[200px] pointer-events-none z-0 opacity-60">
+        <motion.div
+          className="absolute inset-0 rounded-full"
+          style={{
+            background: "radial-gradient(ellipse at center, rgba(99,102,241,0.2) 0%, rgba(139,92,246,0.1) 40%, transparent 70%)",
+          }}
+          animate={{
+            scale: [1, 1.08, 1],
+            opacity: [0.5, 0.8, 0.5],
+          }}
+          transition={{
+            duration: 4,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+        />
+      </div>
+
       {/* Top bar */}
       <header className="sticky top-0 z-30 backdrop-blur-xl bg-[rgba(7,7,15,0.85)] border-b border-[var(--border)] safe-top">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
@@ -54,11 +73,11 @@ export function AppShell() {
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#22d3ee] ml-0.5 align-middle" />
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[rgba(245,158,11,0.1)] border border-[rgba(245,158,11,0.25)]">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[rgba(245,158,11,0.1)] border border-[rgba(245,158,11,0.25)] animate-pill-glow-amber">
               <Flame className="w-3.5 h-3.5 text-[#f59e0b]" />
               <span className="text-xs font-mono font-bold text-[#f59e0b]">{streak}</span>
             </div>
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[rgba(99,102,241,0.1)] border border-[rgba(99,102,241,0.25)]">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[rgba(99,102,241,0.1)] border border-[rgba(99,102,241,0.25)] animate-pill-glow-violet">
               <Zap className="w-3.5 h-3.5 text-[#a78bfa]" />
               <span className="text-xs font-mono font-bold text-[#a78bfa]">{xp}</span>
             </div>
@@ -77,7 +96,7 @@ export function AppShell() {
       </header>
 
       {/* Main content */}
-      <main className="flex-1 max-w-3xl w-full mx-auto px-4 py-5 pb-28">
+      <main className="flex-1 max-w-3xl w-full mx-auto px-4 py-5 pb-28 relative z-10">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
@@ -101,9 +120,11 @@ export function AppShell() {
           {TABS.map((t) => {
             const isActive = activeTab === t.id;
             return (
-              <button
+              <motion.button
                 key={t.id}
                 onClick={() => setActiveTab(t.id)}
+                whileHover={{ scale: 1.08 }}
+                whileTap={{ scale: 0.95 }}
                 className="relative flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg min-w-[56px] transition"
               >
                 {isActive && (
@@ -113,7 +134,13 @@ export function AppShell() {
                     transition={{ type: "spring", stiffness: 400, damping: 30 }}
                   />
                 )}
-                <span className={`relative text-lg ${isActive ? "" : "opacity-50"}`}>{t.icon}</span>
+                <motion.span
+                  className={`relative text-lg ${isActive ? "" : "opacity-50"}`}
+                  animate={isActive ? { scale: [1, 1.15, 1] } : {}}
+                  transition={{ duration: 0.3, ease: "easeOut" }}
+                >
+                  {t.icon}
+                </motion.span>
                 <span
                   className={`relative text-[10px] font-medium ${
                     isActive ? "text-[var(--p3)]" : "text-[var(--t3)]"
@@ -121,7 +148,16 @@ export function AppShell() {
                 >
                   {t.label}
                 </span>
-              </button>
+                {/* Glowing dot indicator under active tab */}
+                {isActive && (
+                  <motion.div
+                    layoutId="tab-dot"
+                    className="absolute -bottom-0.5 w-1 h-1 rounded-full bg-[var(--p3)]"
+                    style={{ boxShadow: "0 0 8px rgba(167,139,250,0.6)" }}
+                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  />
+                )}
+              </motion.button>
             );
           })}
         </nav>

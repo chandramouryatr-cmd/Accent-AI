@@ -82,9 +82,17 @@ export function ProgressView() {
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="rounded-2xl p-5 bg-[rgba(99,102,241,0.06)] border border-[var(--border)] flex items-center gap-4"
+        className="rounded-2xl p-5 bg-[rgba(99,102,241,0.06)] border border-[var(--border)] flex items-center gap-4 relative overflow-hidden"
       >
-        <div className="text-5xl">{rank.emoji}</div>
+        {/* Shimmer sweep on progress bar */}
+        <div className="absolute inset-0 pointer-events-none">
+          <motion.div
+            className="absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-white/[0.03] to-transparent"
+            animate={{ x: ["-100%", "300%"] }}
+            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut", repeatDelay: 2 }}
+          />
+        </div>
+        <div className="text-5xl animate-gold-glow rounded-full p-1">{rank.emoji}</div>
         <div className="flex-1">
           <div className="text-[10px] uppercase tracking-wider text-[var(--t3)] font-mono">Current Rank</div>
           <div className="font-d text-lg font-bold text-[var(--t1)]">{rank.name}</div>
@@ -108,18 +116,30 @@ export function ProgressView() {
       </motion.div>
 
       {/* Rank ladder */}
-      <div className="flex items-center justify-between px-1">
+      <div className="flex items-center justify-between px-1 relative">
+        {/* Animated connector line */}
+        <div className="absolute inset-x-8 top-4 h-0.5 bg-[var(--border)]" />
+        <motion.div
+          className="absolute top-4 h-0.5 bg-[var(--grad-btn)] origin-left"
+          initial={{ width: 0 }}
+          animate={{ width: `${(currentRankIdx / (rankSteps.length - 1)) * 100}%`, left: "2rem", right: "auto" }}
+          transition={{ duration: 1, ease: "easeOut" }}
+          style={{ maxWidth: "calc(100% - 4rem)" }}
+        />
         {rankSteps.map((r, i) => (
-          <div key={r.name} className="flex flex-col items-center gap-1 flex-1">
-            <div
+          <div key={r.name} className="flex flex-col items-center gap-1 flex-1 relative z-10">
+            <motion.div
               className={`w-9 h-9 rounded-full flex items-center justify-center text-base transition ${
                 i <= currentRankIdx
                   ? "bg-[var(--grad-btn)] text-white"
                   : "bg-[var(--card)] text-[var(--t3)] border border-[var(--border)]"
               }`}
+              animate={i === currentRankIdx ? { scale: [1, 1.1, 1] } : {}}
+              transition={{ duration: 2, repeat: i === currentRankIdx ? Infinity : 0, ease: "easeInOut" }}
+              style={i === currentRankIdx ? { boxShadow: "0 0 16px rgba(99,102,241,0.5)" } : {}}
             >
               {r.emoji}
-            </div>
+            </motion.div>
             <span
               className={`text-[9px] text-center leading-tight ${
                 i === currentRankIdx ? "text-[var(--p3)] font-bold" : "text-[var(--t3)]"
@@ -133,18 +153,35 @@ export function ProgressView() {
 
       {/* Stats summary */}
       <div className="grid grid-cols-3 gap-2">
-        <div className="rounded-2xl p-4 bg-[var(--card)] border border-[var(--border)] text-center">
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-2xl p-4 bg-[var(--card)] border border-[var(--border)] text-center"
+          style={{ borderTop: "3px solid var(--p)" }}
+        >
           <div className="font-d text-2xl font-bold text-[var(--p3)]">{completedCount}</div>
           <div className="text-[10px] text-[var(--t3)] uppercase tracking-wider">Lessons</div>
-        </div>
-        <div className="rounded-2xl p-4 bg-[var(--card)] border border-[var(--border)] text-center">
+        </motion.div>
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+          className="rounded-2xl p-4 bg-[var(--card)] border border-[var(--border)] text-center"
+          style={{ borderTop: "3px solid #f59e0b" }}
+        >
           <div className="font-d text-2xl font-bold text-[#f59e0b]">{xp}</div>
           <div className="text-[10px] text-[var(--t3)] uppercase tracking-wider">Total XP</div>
-        </div>
-        <div className="rounded-2xl p-4 bg-[var(--card)] border border-[var(--border)] text-center">
+        </motion.div>
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="rounded-2xl p-4 bg-[var(--card)] border border-[var(--border)] text-center"
+          style={{ borderTop: "3px solid #10b981" }}
+        >
           <div className="font-d text-2xl font-bold text-[#10b981]">{earnedBadges.size}</div>
           <div className="text-[10px] text-[var(--t3)] uppercase tracking-wider">Badges</div>
-        </div>
+        </motion.div>
       </div>
 
       {/* Badges */}
@@ -157,10 +194,11 @@ export function ProgressView() {
               <motion.div
                 key={b.id}
                 initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
+                animate={earned ? { opacity: 1, scale: [1, 1.02, 1] } : { opacity: 1, scale: 1 }}
+                transition={earned ? { duration: 3, repeat: Infinity, repeatDelay: 2, ease: "easeInOut" } : {}}
                 className={`rounded-2xl p-3 text-center border transition ${
                   earned
-                    ? "bg-[rgba(245,158,11,0.08)] border-[rgba(245,158,11,0.3)]"
+                    ? "bg-[rgba(245,158,11,0.08)] border-[rgba(245,158,11,0.3)] animate-gold-glow"
                     : "bg-[var(--card)] border-[var(--border)] opacity-40"
                 }`}
               >

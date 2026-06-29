@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useAppStore } from "@/lib/store";
 import { WaveformCanvas } from "@/components/widgets/waveform-canvas";
@@ -19,11 +19,11 @@ export function Onboarding() {
   const setOnboarded = useAppStore((s) => s.setOnboarded);
   const setAccent = useAppStore((s) => s.setAccent);
 
-  // cycle taglines
-  useState(() => {
+  // Cycle taglines — useEffect (not useState) for side effects with cleanup
+  useEffect(() => {
     const t = setInterval(() => setTaglineIdx((i) => (i + 1) % TAGLINES.length), 3000);
     return () => clearInterval(t);
-  });
+  }, []);
 
   const handleLogin = () => setStage("accent");
   const handleSelectAccent = (a: "usa") => setSelectedAccent(a);

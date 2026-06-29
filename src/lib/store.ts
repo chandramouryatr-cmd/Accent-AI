@@ -28,6 +28,14 @@ export interface AppState {
   badges: string[]; // earned badge ids
   history: { date: string; score: number; lessonId: string }[];
 
+  // daily goals
+  dailyGoal: number; // lessons per day target
+  dailyGoalCompleted: number; // lessons completed today
+  dailyGoalDate: string; // YYYY-MM-DD for daily reset
+
+  // bookmarks
+  bookmarkedLessons: string[]; // array of lesson IDs
+
   // ui
   activeTab: "dashboard" | "journey" | "practice" | "progress" | "more";
   activeLessonId: string | null;
@@ -44,6 +52,9 @@ export interface AppState {
   completeLesson: (lessonId: string, score: number, xp: number, badge?: string) => void;
   markStepViewed: (lessonId: string, totalSteps: number) => void;
   addSpeakingTime: (seconds: number) => void;
+  setDailyGoal: (n: number) => void;
+  toggleBookmark: (lessonId: string) => void;
+  isBookmarked: (lessonId: string) => boolean;
   resetAll: () => void;
 }
 
@@ -66,6 +77,12 @@ export const useAppStore = create<AppState>()(
       lessons: {},
       badges: [],
       history: [],
+
+      dailyGoal: 3,
+      dailyGoalCompleted: 0,
+      dailyGoalDate: todayStr(),
+
+      bookmarkedLessons: [],
 
       activeTab: "dashboard",
       activeLessonId: null,
@@ -105,6 +122,16 @@ export const useAppStore = create<AppState>()(
           ? [...state.badges, badge]
           : state.badges;
 
+        // daily goal logic — reset if new day, increment if first completion today
+        let goalDate = state.dailyGoalDate;
+        let goalCompleted = state.dailyGoalCompleted;
+        if (goalDate !== today) {
+          goalDate = today;
+          goalCompleted = 1; // this is the first lesson completed today
+        } else if (isFirstTime) {
+          goalCompleted = state.dailyGoalCompleted + 1;
+        }
+
         set({
           lessons: {
             ...state.lessons,
@@ -124,6 +151,8 @@ export const useAppStore = create<AppState>()(
             { date: today, score, lessonId },
             ...state.history,
           ].slice(0, 50),
+          dailyGoalDate: goalDate,
+          dailyGoalCompleted: goalCompleted,
         });
       },
 
@@ -166,6 +195,22 @@ export const useAppStore = create<AppState>()(
         }
       },
 
+      setDailyGoal: (n) => set({ dailyGoal: Math.max(1, Math.min(10, n)) }),
+
+      toggleBookmark: (lessonId) => {
+        const state = get();
+        const isCurrentlyBookmarked = state.bookmarkedLessons.includes(lessonId);
+        set({
+          bookmarkedLessons: isCurrentlyBookmarked
+            ? state.bookmarkedLessons.filter((id) => id !== lessonId)
+            : [...state.bookmarkedLessons, lessonId],
+        });
+      },
+
+      isBookmarked: (lessonId) => {
+        return get().bookmarkedLessons.includes(lessonId);
+      },
+
       resetAll: () => {
         set({
           onboarded: false,
@@ -177,6 +222,10 @@ export const useAppStore = create<AppState>()(
           lessons: {},
           badges: [],
           history: [],
+          dailyGoal: 3,
+          dailyGoalCompleted: 0,
+          dailyGoalDate: todayStr(),
+          bookmarkedLessons: [],
           activeLessonId: null,
           expandedPhase: null,
           activeTab: "dashboard",
@@ -197,6 +246,10 @@ export const useAppStore = create<AppState>()(
         lessons: s.lessons,
         badges: s.badges,
         history: s.history,
+        dailyGoal: s.dailyGoal,
+        dailyGoalCompleted: s.dailyGoalCompleted,
+        dailyGoalDate: s.dailyGoalDate,
+        bookmarkedLessons: s.bookmarkedLessons,
       }),
     }
   )

@@ -171,3 +171,114 @@ Stage Summary:
 - FIX: Created the index.ts registry (32 imports + 5 exports) and the 3 missing Phase 8 lessons. Also fixed 5 pre-existing React 19 lint errors for runtime stability.
 - VERIFICATION: lint exit 0; dev log clean (HTTP 200 only); agent-browser confirms full user flow works end-to-end (onboarding → dashboard → journey → lesson modal → step navigation).
 - AccentAI is now fully functional: 8 phases × 4 lessons = 32 complete lessons, all accessible and interactive. The "fully functioning application with no half-baked lessons" requirement is met.
+
+---
+Task ID: 3-styling
+Agent: styling-improver
+Task: Major visual styling improvements across all 5 views + AppShell
+
+Work Log:
+- Added 12 new CSS keyframe animations to globals.css: draw-line, golden-shimmer, red-pulse-glow, border-pulse-cyan, float-badge, gradient-ring-spin, node-glow, gold-glow, pill-glow-amber, pill-glow-violet, celebrate-bounce, shimmer-sweep, plus corresponding utility classes
+- AppShell: Added animated gradient orb behind header (pulsing radial gradient), added glowing dot indicator under active bottom nav tab (with spring transition), added whileHover/whileTap scale on bottom nav buttons, added active tab icon bounce animation, added gradient border glow animations on streak/XP pills
+- Dashboard: Added 3 floating gradient orbs in background with slow animate movement, added hover lift effect (translateY -2px + shadow) + colored left border accent on stat cards, added shimmer sweep overlay on current phase card, added pulsing glow around ProgressRing, added glow/pulse animation on today's bar in weekly chart + gradient transitions on all bars, added staggered entrance animation + left-border accent on AI recommendations, added hover scale + glow on phoneme cards, added whileHover/whileTap on Quick Action buttons
+- Journey: Replaced static timeline line with animated draw-from-top effect using motion.div, added glowing nodes at each phase intersection point (animate-node-glow), added phase color gradient background overlays on phase cards, added glass-morphism backdrop-blur on phase cards, added staggered entrance animation on lesson items when expanding, added colored progress dot indicator on lesson items, added golden shimmer sweep animation on badge card
+- Practice: Added pulsing cyan border animation on phrase card when in "listen" step (animate-border-pulse), added pulsing red glow on recording button (animate-red-pulse), added celebration animation on score display: spring scale entrance, 8 colorful particles exploding outward, and scale bounce on score text when >= 80%, added glow/shadow on active difficulty toggle pill
+- Progress: Added shimmer sweep overlay on rank card, added animated glow aura around rank emoji (animate-gold-glow), added animated connector line on rank ladder with gradient fill, added pulsing current rank node, added colored top borders on stats cards (indigo/amber/emerald), added gold glow + gentle float animation on earned badges
+- More: Added animated spinning gradient ring around profile avatar, added spring-animated checkmark on selected accent/theme cards, added glow/shadow on selected selector cards, added whileHover/whileTap on selector buttons, added gradient text on "AccentAI" in About section
+- Verified lint passes (exit 0), tsc shows no new errors in our files, dev server compiles successfully
+
+Stage Summary:
+- All 6 component files edited with visual-only changes (no functional logic modified)
+- 12 new CSS keyframe animations + utility classes added to globals.css
+- Key improvements: floating gradient orbs, shimmer effects, glass morphism, pulsing glows, celebration particles, animated timeline draw, staggered entrances, hover micro-interactions across all views
+- Lint: PASS (exit 0). No new TypeScript errors introduced. Dev server compiles cleanly.
+
+---
+Task ID: 4-features
+Agent: feature-adder
+Task: Add daily goals, lesson search/filter, and lesson bookmarks features
+
+Work Log:
+- Read worklog.md, store.ts, dashboard.tsx, journey.tsx, more.tsx, progress-ring.tsx, types.ts, lessons/index.ts to understand full codebase state
+- Updated Zustand store (src/lib/store.ts) with new state fields and actions:
+  - Daily Goal: `dailyGoal` (default 3), `dailyGoalCompleted` (default 0), `dailyGoalDate` (YYYY-MM-DD), `setDailyGoal(n)` with 1-10 clamping
+  - Updated `completeLesson` to increment `dailyGoalCompleted` with daily reset logic (resets count if date changed, increments on first-time completions only)
+  - Bookmarks: `bookmarkedLessons: string[]`, `toggleBookmark(lessonId)`, `isBookmarked(lessonId)`
+  - Added all new fields to `partialize` so they persist across sessions
+  - Added new fields to `resetAll` so they reset properly
+- Updated Dashboard view (src/components/views/dashboard.tsx):
+  - Added Daily Goal section between greeting and stats row
+  - Shows circular ProgressRing with completed/goal ratio (e.g. "2/3")
+  - Motivational text: "1 more lesson to hit your goal!" or "🎉 Goal complete! You're on fire!"
+  - Subtle glow animation (pulsing radial gradient) when goal is complete
+  - Green gradient border + background when goal is complete
+  - Tap to open goal picker overlay with 1-10 number buttons, +/− buttons, and Done
+  - Resolves daily reset at render time (if dailyGoalDate !== today, treats completed as 0)
+- Updated Journey view (src/components/views/journey.tsx):
+  - Added glass-morphism search bar below header with Search icon (Lucide)
+  - Added filter chips: All, Completed, In Progress, Not Started, ⭐ Bookmarked
+  - Active chip uses gradient background, inactive chips have border
+  - Search + filter work together simultaneously
+  - When searching or filtering (non-All), shows flat list of matching lessons
+  - When search is empty and filter is "All", shows original phase-grouped view
+  - Added bookmark star button (Lucide Star) next to Play icon on every lesson row
+  - Animated scale bounce on bookmark toggle (spring animation)
+  - Filled star = bookmarked (amber), outline star = not bookmarked
+  - Both in search/filter flat list and in phase-grouped expanded lesson rows
+- Updated More view (src/components/views/more.tsx):
+  - Added "Bookmarked Lessons" section with Star icon in heading
+  - Lists all bookmarked lessons with phase number, duration, XP, and completion status
+  - Each item is tappable (opens lesson modal via setActiveLesson)
+  - max-h-96 with overflow scroll for long lists
+  - Friendly empty state: "⭐ No bookmarked lessons yet. Tap the star icon on any lesson to save it for quick access."
+- Ran `bun run lint` — exit 0, zero errors
+- Verified dev.log: GET / 200, compiled successfully
+
+Stage Summary:
+- Three fully functional features added: Daily Goals, Lesson Search/Filter, Lesson Bookmarks
+- Store updated with all new state + actions + persistence + reset support
+- Dashboard: circular progress ring goal tracker with goal picker and completion glow
+- Journey: search-as-you-type with 5 filter chips, flat list view when filtering, star bookmark toggle with bounce animation
+- More: bookmarked lessons list with tappable items and friendly empty state
+- Lint passes clean (exit 0), app compiles and serves 200
+
+---
+Task ID: QA-round-1
+Agent: main
+Task: Comprehensive QA, bug fixes, styling improvements, and new feature additions
+
+Work Log:
+- Performed full QA testing with agent-browser: all 5 views (Dashboard, Journey, Practice, Progress, More) + lesson modal with step navigation
+- Verified lesson completion flow: intro → concept → vowel-chart → mouth-diagram → example → tap-pronounce → tip → practice → quiz → completion — all step types render and function correctly
+- Confirmed progress persistence: completed lessons show ✓ 85% score in Journey view
+- Fixed 3 bugs:
+  1. Onboarding: `useState(() => {...})` for interval → changed to `useEffect` (proper side effect handling)
+  2. Dashboard weekly chart: `Math.random()` producing inconsistent data → replaced with deterministic data from actual history, only showing real practice scores
+  3. (From previous session) Module-not-found + lint errors already fixed
+- Dispatched subagent (Task ID 3-styling) for major visual styling improvements:
+  - globals.css: Added 12 new CSS keyframe animations (draw-line, golden-shimmer, red-pulse-glow, border-pulse-cyan, float-badge, gradient-ring-spin, node-glow, gold-glow, pill-glow-amber/violet, celebrate-bounce, shimmer-sweep)
+  - AppShell: Animated gradient orb behind header, glowing dot indicator under active tab, whileHover/whileTap on nav buttons, gradient glow on streak/XP pills
+  - Dashboard: 3 floating gradient orbs, stat card hover lift + colored left borders, shimmer sweep on phase card, pulsing glow on ProgressRing, today's bar glow/pulse, gradient chart bars, staggered AI recommendations + left-border accent, hover scale/glow on phoneme cards, whileHover/whileTap Quick Actions
+  - Journey: Animated timeline draw effect, glowing phase nodes, phase color gradient overlays, glass-morphism backdrop-blur, staggered lesson entrances, colored progress dots, golden shimmer on badge card
+  - Practice: Pulsing cyan border in "listen" step, red pulse glow on recording button, celebration particles + bounce when score ≥ 80%, glow on active difficulty pill
+  - Progress: Shimmer sweep + gold glow aura on rank card, animated connector line on rank ladder, pulsing current rank node, colored top borders on stats, gold glow + float on earned badges
+  - More: Animated spinning gradient ring on avatar, spring checkmark animation on selectors, glow on selected cards, gradient "AccentAI" text
+- Dispatched subagent (Task ID 4-features) for 3 new features:
+  1. **Daily Goals**: Added dailyGoal/dailyGoalCompleted/dailyGoalDate/setDailyGoal to Zustand store with date-reset logic. Dashboard shows circular ProgressRing (0/3 default) with motivational text, tap-to-change goal picker (1-10). Glowing green animation on completion.
+  2. **Lesson Search/Filter**: Glass-morphism search bar with Lucide Search icon. 5 pill-shaped filter chips (All, Completed, In Progress, Not Started, ⭐ Bookmarked). Search + filter work simultaneously. Flat list view when searching/filtering.
+  3. **Lesson Bookmarks**: bookmarkedLessons[] + toggleBookmark() in store with persistence. Star icon (filled/outline) on every lesson row with spring bounce animation. "⭐ Bookmarked" filter chip. "Bookmarked Lessons" section in More view with tappable list and friendly empty state.
+- Verified all changes: lint exit 0, dev log clean (HTTP 200 only), agent-browser QA confirms all features working
+
+Stage Summary:
+- QA: All 5 views functional, lesson modal step navigation works, progress persists
+- Bugs fixed: onboarding interval, weekly chart random data
+- Styling: 7 files enhanced with 12 new animations, glass morphism, micro-interactions, gradient effects
+- Features: Daily Goals (Dashboard), Search/Filter (Journey), Bookmarks (Journey + More)
+- Current state: App is stable, visually polished, and feature-rich. Lint passes, dev server compiles cleanly.
+
+Unresolved issues / next steps:
+- Lesson step renderers (widgets like vowel-chart, mouth-diagram, rhythm, etc.) could be further polished with better SVG animations and interactive feedback
+- Sound Profile on Dashboard is still hardcoded — should eventually reflect actual user performance
+- UK accent is still "Coming Soon" on onboarding
+- Light theme could use additional polish for consistency
+- Could add more practice phrases and difficulty levels

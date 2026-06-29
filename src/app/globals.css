@@ -252,6 +252,85 @@
   animation: shimmer 2s linear infinite;
 }
 
+/* ─── Additional AccentAI Animations ─── */
+@keyframes draw-line {
+  from { height: 0; }
+  to { height: 100%; }
+}
+@keyframes golden-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes red-pulse-glow {
+  0%, 100% { box-shadow: 0 0 15px rgba(239, 68, 68, 0.4); }
+  50% { box-shadow: 0 0 35px rgba(239, 68, 68, 0.7), 0 0 60px rgba(239, 68, 68, 0.3); }
+}
+@keyframes border-pulse-cyan {
+  0%, 100% { border-color: rgba(34, 211, 238, 0.3); box-shadow: 0 0 10px rgba(34, 211, 238, 0.1); }
+  50% { border-color: rgba(34, 211, 238, 0.7); box-shadow: 0 0 25px rgba(34, 211, 238, 0.25); }
+}
+@keyframes float-badge {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+@keyframes gradient-ring-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+@keyframes node-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(99, 102, 241, 0.4); }
+  50% { box-shadow: 0 0 18px rgba(99, 102, 241, 0.7), 0 0 30px rgba(34, 211, 238, 0.3); }
+}
+@keyframes gold-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(245, 158, 11, 0.3); }
+  50% { box-shadow: 0 0 20px rgba(245, 158, 11, 0.6), 0 0 35px rgba(245, 158, 11, 0.2); }
+}
+@keyframes pill-glow-amber {
+  0%, 100% { box-shadow: 0 0 8px rgba(245, 158, 11, 0.15); }
+  50% { box-shadow: 0 0 16px rgba(245, 158, 11, 0.35); }
+}
+@keyframes pill-glow-violet {
+  0%, 100% { box-shadow: 0 0 8px rgba(167, 139, 250, 0.15); }
+  50% { box-shadow: 0 0 16px rgba(167, 139, 250, 0.35); }
+}
+@keyframes celebrate-bounce {
+  0% { transform: scale(0.5); opacity: 0; }
+  50% { transform: scale(1.15); }
+  70% { transform: scale(0.95); }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes shimmer-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+.animate-draw-line { animation: draw-line 1.2s ease-out forwards; }
+.animate-red-pulse { animation: red-pulse-glow 1.5s ease-in-out infinite; }
+.animate-border-pulse { animation: border-pulse-cyan 2s ease-in-out infinite; }
+.animate-float-badge { animation: float-badge 3s ease-in-out infinite; }
+.animate-gradient-ring { animation: gradient-ring-spin 3s linear infinite; }
+.animate-node-glow { animation: node-glow 2.5s ease-in-out infinite; }
+.animate-gold-glow { animation: gold-glow 2.5s ease-in-out infinite; }
+.animate-pill-glow-amber { animation: pill-glow-amber 2.5s ease-in-out infinite; }
+.animate-pill-glow-violet { animation: pill-glow-violet 2.5s ease-in-out infinite; }
+.animate-celebrate { animation: celebrate-bounce 0.5s cubic-bezier(.34,1.56,.64,1); }
+
+.golden-shimmer-bg {
+  background: linear-gradient(90deg, transparent, rgba(245,158,11,0.25), transparent);
+  background-size: 200% 100%;
+  animation: golden-shimmer 2.5s linear infinite;
+}
+
+.shimmer-sweep::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+  animation: shimmer-sweep 3s ease-in-out infinite;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
 /* Safe area for mobile */
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
 .safe-top { padding-top: env(safe-area-inset-top); }

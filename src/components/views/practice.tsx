@@ -136,6 +136,7 @@ export function PracticeView() {
               <motion.div
                 layoutId="diff-pill"
                 className="absolute inset-0 rounded-lg bg-[var(--grad-btn)]"
+                style={{ boxShadow: "0 0 16px rgba(99,102,241,0.4)" }}
                 transition={{ type: "spring", stiffness: 400, damping: 30 }}
               />
             )}
@@ -185,7 +186,7 @@ export function PracticeView() {
       </div>
 
       {/* Phrase card */}
-      <div className="rounded-2xl p-5 bg-[rgba(99,102,241,0.06)] border border-[var(--border)]">
+      <div className={`rounded-2xl p-5 bg-[rgba(99,102,241,0.06)] border border-[var(--border)] ${step === "listen" ? "animate-border-pulse" : ""}`}>
         <div className="text-[10px] uppercase tracking-wider text-[var(--t3)] font-mono mb-2">
           {accent === "usa" ? "🇺🇸" : "🇬🇧"} {accent.toUpperCase()} · {diff}
         </div>
@@ -228,7 +229,7 @@ export function PracticeView() {
 
         <button
           onClick={handleRecord}
-          className="w-full py-3 rounded-xl text-white font-semibold text-sm flex items-center justify-center gap-2 transition"
+          className={`w-full py-3 rounded-xl text-white font-semibold text-sm flex items-center justify-center gap-2 transition ${recording ? "animate-red-pulse" : ""}`}
           style={{
             background: recording
               ? "radial-gradient(circle, #ef4444, #dc2626)"
@@ -241,11 +242,41 @@ export function PracticeView() {
 
         {score !== null && (
           <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mt-3 rounded-xl p-4 text-center bg-[rgba(16,185,129,0.1)] border border-[rgba(16,185,129,0.3)]"
+            initial={{ opacity: 0, scale: 0.5 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ type: "spring", stiffness: 300, damping: 15 }}
+            className="mt-3 rounded-xl p-4 text-center bg-[rgba(16,185,129,0.1)] border border-[rgba(16,185,129,0.3)] relative overflow-hidden"
           >
-            <div className="font-d text-2xl font-bold text-[#10b981]">{score}%</div>
+            {/* Celebration particles when score >= 80 */}
+            {score >= 80 && (
+              <>
+                {[...Array(8)].map((_, pi) => (
+                  <motion.div
+                    key={pi}
+                    className="absolute w-1.5 h-1.5 rounded-full"
+                    style={{
+                      background: ["#f59e0b", "#22d3ee", "#a78bfa", "#10b981", "#6366f1", "#ef4444", "#8b5cf6", "#67e8f9"][pi],
+                      top: "50%",
+                      left: "50%",
+                    }}
+                    initial={{ x: 0, y: 0, opacity: 1, scale: 1 }}
+                    animate={{
+                      x: [0, (Math.cos((pi / 8) * Math.PI * 2) * 60)],
+                      y: [0, (Math.sin((pi / 8) * Math.PI * 2) * 40)],
+                      opacity: [1, 0],
+                      scale: [1, 0.5],
+                    }}
+                    transition={{ duration: 0.8, ease: "easeOut" }}
+                  />
+                ))}
+              </>
+            )}
+            <motion.div
+              animate={score >= 80 ? { scale: [1, 1.15, 1] } : {}}
+              transition={{ duration: 0.4, ease: "easeOut" }}
+            >
+              <div className="font-d text-2xl font-bold text-[#10b981]">{score}%</div>
+            </motion.div>
             <div className="text-xs text-[var(--t2)] mt-1">
               {score >= 80 ? "Excellent! Native-like." : score >= 70 ? "Good job — keep practicing." : "Keep going, you'll get there!"}
             </div>
