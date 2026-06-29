@@ -11,9 +11,9 @@ interface Props {
 
 // Connected-speech linking visualization.
 // Words are shown as cards; curved animated SVG flow lines link them.
-// Enhanced: animated SVG curves with dashed flow, sequential "play linked"
-// (words glow in sequence, then link lines animate), "play separate" button
-// (words play with gaps), visual phoneme badges between words, hover lift.
+// Enhanced: multiple animated particles along flow lines, highlight glow
+// on linked sound portions, arrow indicators showing direction, wave pattern
+// between linked words, staggered entrance animation, phoneme badges.
 
 const LINK_COLORS: Record<string, string> = {
   "consonant-vowel": "#22d3ee",
@@ -120,6 +120,61 @@ export function LinkingDiagram({ step, speak }: Props) {
     return `M ${x1} ${y1} Q ${midX} ${midY} ${x2} ${y2}`;
   };
 
+  // Build a wave pattern path between two points (subtle sine wave along the arc)
+  const wavePath = (x1: number, y1: number, x2: number, y2: number, segments: number = 12) => {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const arcHeight = -18;
+    const amplitude = 3; // wave amplitude
+    const points: string[] = [];
+    for (let i = 0; i <= segments; i++) {
+      const t = i / segments;
+      const px = x1 + dx * t;
+      // Quadratic bezier y + sine wave offset
+      const baseY = y1 + dy * t + arcHeight * 4 * t * (1 - t);
+      const waveOffset = Math.sin(t * Math.PI * 4) * amplitude * (1 - Math.abs(t - 0.5) * 2);
+      const py = baseY + waveOffset;
+      points.push(i === 0 ? `M ${px} ${py}` : `L ${px} ${py}`);
+    }
+    return points.join(" ");
+  };
+
+  // Check if a word is part of an active link
+  const isWordInActiveLink = (idx: number) => {
+    return linkFlow && links.some((l) => l.from === idx || l.to === idx);
+  };
+
+  // Determine which link pair is currently being highlighted during play
+  // Use ref + interval to cycle without setState in effect body
+  const [activeLinkIdx, setActiveLinkIdx] = useState(-1);
+  const linkCycleRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (linkCycleRef.current) clearInterval(linkCycleRef.current);
+    linkCycleRef.current = null;
+
+    if (!linkFlow) return;
+    let current = 0;
+    // Defer the first setState so it's not synchronous within the effect
+    const timeout = setTimeout(() => setActiveLinkIdx(0), 0);
+    linkCycleRef.current = setInterval(() => {
+      current = (current + 1) % links.length;
+      setActiveLinkIdx(current);
+    }, 800);
+    return () => {
+      clearTimeout(timeout);
+      if (linkCycleRef.current) clearInterval(linkCycleRef.current);
+    };
+  }, [linkFlow, links.length]);
+
+  // Reset activeLinkIdx when linkFlow turns off
+  useEffect(() => {
+    if (!linkFlow && activeLinkIdx !== -1) {
+      const t = setTimeout(() => setActiveLinkIdx(-1), 0);
+      return () => clearTimeout(t);
+    }
+  }, [linkFlow, activeLinkIdx]);
+
   return (
     <div className="space-y-3">
       {title && <h4 className="font-d font-semibold text-lg text-[var(--t1)]">{title}</h4>}
@@ -131,30 +186,39 @@ export function LinkingDiagram({ step, speak }: Props) {
           <div className="flex flex-wrap items-center justify-center gap-3 relative">
             {words.map((w, i) => {
               const isGlowing = glowIdx === i;
+              const inActiveLink = isWordInActiveLink(i);
               // find any link where this is the "from" word
               const outgoingLink = links.find((l) => l.from === i);
+              // find any link where this is the "to" word
+              const incomingLink = links.find((l) => l.to === i);
               return (
                 <motion.div
                   key={i}
                   ref={(el) => { cardRefs.current[i] = el; }}
-                  initial={{ y: 20, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
+                  initial={{ y: 30, opacity: 0, scale: 0.8 }}
+                  animate={{ y: 0, opacity: 1, scale: 1 }}
                   whileHover={{ y: -4, scale: 1.04 }}
-                  transition={{ delay: i * 0.1 }}
+                  transition={{ delay: i * 0.15, type: "spring", stiffness: 200, damping: 15 }}
                   className="relative"
                 >
                   <motion.div
-                    className="rounded-xl px-4 py-2.5 font-d text-base cursor-pointer select-none"
+                    className="rounded-xl px-4 py-2.5 font-d text-base cursor-pointer select-none relative overflow-hidden"
                     animate={{
                       boxShadow: isGlowing
                         ? "0 0 20px rgba(167,139,250,0.8)"
-                        : "0 0 0px rgba(0,0,0,0)",
+                        : inActiveLink
+                          ? "0 0 12px rgba(167,139,250,0.4)"
+                          : "0 0 0px rgba(0,0,0,0)",
                       backgroundColor: isGlowing
                         ? "rgba(167,139,250,0.22)"
-                        : "rgba(99,102,241,0.1)",
+                        : inActiveLink
+                          ? "rgba(99,102,241,0.18)"
+                          : "rgba(99,102,241,0.1)",
                       borderColor: isGlowing
                         ? "rgba(167,139,250,0.8)"
-                        : "rgba(99,102,241,0.3)",
+                        : inActiveLink
+                          ? "rgba(99,102,241,0.5)"
+                          : "rgba(99,102,241,0.3)",
                     }}
                     style={{
                       border: "1px solid rgba(99,102,241,0.3)",
@@ -167,6 +231,18 @@ export function LinkingDiagram({ step, speak }: Props) {
                     }}
                   >
                     {w}
+
+                    {/* Highlight glow overlay on linked portion */}
+                    {inActiveLink && (
+                      <motion.div
+                        className="absolute inset-0 rounded-xl pointer-events-none"
+                        style={{
+                          background: "linear-gradient(90deg, transparent, rgba(167,139,250,0.15), transparent)",
+                        }}
+                        animate={{ opacity: [0, 1, 0] }}
+                        transition={{ duration: 1.2, repeat: Infinity }}
+                      />
+                    )}
                   </motion.div>
 
                   {/* Resulting phoneme badge below outgoing link */}
@@ -184,6 +260,32 @@ export function LinkingDiagram({ step, speak }: Props) {
                       {LINK_PHONEME[outgoingLink.type]}
                     </motion.div>
                   )}
+
+                  {/* Arrow indicator for incoming link */}
+                  {incomingLink && linkFlow && (
+                    <motion.div
+                      initial={{ opacity: 0, x: -5 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.2, type: "spring" }}
+                      className="absolute left-0 top-1/2 -translate-x-3 -translate-y-1/2 text-xs"
+                      style={{ color: LINK_COLORS[incomingLink.type] }}
+                    >
+                      ▸
+                    </motion.div>
+                  )}
+
+                  {/* Arrow indicator for outgoing link */}
+                  {outgoingLink && linkFlow && (
+                    <motion.div
+                      initial={{ opacity: 0, x: 5 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.2, type: "spring" }}
+                      className="absolute right-0 top-1/2 translate-x-3 -translate-y-1/2 text-xs"
+                      style={{ color: LINK_COLORS[outgoingLink.type] }}
+                    >
+                      ▸
+                    </motion.div>
+                  )}
                 </motion.div>
               );
             })}
@@ -197,13 +299,53 @@ export function LinkingDiagram({ step, speak }: Props) {
               height="100%"
               style={{ overflow: "visible" }}
             >
+              <defs>
+                {/* Glow filter for active links */}
+                <filter id="link-glow" x="-30%" y="-30%" width="160%" height="160%">
+                  <feGaussianBlur stdDeviation="2" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+              </defs>
+
               {linePoints.map((lp, i) => {
                 const linkType = links.find((l) => l.from === lp.from && l.to === lp.to)?.type || "consonant-vowel";
                 const color = LINK_COLORS[linkType];
+                const isActiveLink = i === activeLinkIdx && linkFlow;
+                const curve = curvePath(lp.x1, lp.y1, lp.x2, lp.y2);
+                const wave = wavePath(lp.x1, lp.y1, lp.x2, lp.y2);
+
+                // Arrowhead at destination — calculate direction at endpoint
+                const arrowSize = 5;
+                // Direction from control point to endpoint
+                const midX = (lp.x1 + lp.x2) / 2;
+                const midY = Math.min(lp.y1, lp.y2) - 18;
+                const angle = Math.atan2(lp.y2 - midY, lp.x2 - midX);
+                const arrowX1 = lp.x2 - arrowSize * Math.cos(angle - Math.PI / 6);
+                const arrowY1 = lp.y2 - arrowSize * Math.sin(angle - Math.PI / 6);
+                const arrowX2 = lp.x2 - arrowSize * Math.cos(angle + Math.PI / 6);
+                const arrowY2 = lp.y2 - arrowSize * Math.sin(angle + Math.PI / 6);
+
                 return (
                   <g key={i}>
+                    {/* Subtle wave pattern between linked words */}
                     <motion.path
-                      d={curvePath(lp.x1, lp.y1, lp.x2, lp.y2)}
+                      d={wave}
+                      fill="none"
+                      stroke={color}
+                      strokeWidth="1"
+                      strokeLinecap="round"
+                      opacity="0.15"
+                      initial={{ pathLength: 0 }}
+                      animate={{ pathLength: linkFlow ? 1 : 0.3 }}
+                      transition={{ duration: 1.2, delay: linkFlow ? i * 0.15 : 0 }}
+                    />
+
+                    {/* Main curved flow line */}
+                    <motion.path
+                      d={curve}
                       fill="none"
                       stroke={color}
                       strokeWidth="2"
@@ -215,26 +357,39 @@ export function LinkingDiagram({ step, speak }: Props) {
                         opacity: linkFlow ? 0.95 : 0.4,
                       }}
                       transition={{ duration: linkFlow ? 0.6 : 0.3, delay: linkFlow ? i * 0.15 : 0 }}
+                      filter={isActiveLink ? "url(#link-glow)" : undefined}
                     />
-                    {/* Animated flowing dot along the curve */}
-                    {linkFlow && (
+
+                    {/* Animated particles along the curve — 3 staggered particles */}
+                    {linkFlow && [0, 1, 2].map((particle) => (
                       <motion.circle
-                        r="3"
+                        key={`particle-${particle}`}
+                        r={2.5 - particle * 0.5}
                         fill={color}
+                        opacity={0.9 - particle * 0.2}
                         initial={{ offsetDistance: "0%" }}
                         animate={{ offsetDistance: ["0%", "100%"] }}
-                        transition={{ duration: 1, repeat: Infinity, delay: i * 0.15, ease: "easeInOut" }}
-                        style={{ offsetPath: `path("${curvePath(lp.x1, lp.y1, lp.x2, lp.y2)}")` }}
+                        transition={{
+                          duration: 1.2,
+                          repeat: Infinity,
+                          delay: i * 0.15 + particle * 0.25,
+                          ease: "easeInOut",
+                        }}
+                        style={{ offsetPath: `path("${curve}")` }}
                       />
-                    )}
-                    {/* Arrowhead at the destination */}
-                    <motion.circle
-                      cx={lp.x2}
-                      cy={lp.y2}
-                      r="2"
+                    ))}
+
+                    {/* Arrowhead at destination showing flow direction */}
+                    <motion.polygon
+                      points={`${lp.x2},${lp.y2} ${arrowX1},${arrowY1} ${arrowX2},${arrowY2}`}
                       fill={color}
-                      animate={{ opacity: linkFlow ? [0.4, 1, 0.4] : 0.4 }}
-                      transition={{ duration: 0.8, repeat: linkFlow ? Infinity : 0 }}
+                      initial={{ opacity: 0, scale: 0 }}
+                      animate={{
+                        opacity: linkFlow ? 0.9 : 0.3,
+                        scale: linkFlow ? 1 : 0.6,
+                      }}
+                      transition={{ duration: 0.3, delay: linkFlow ? i * 0.15 + 0.3 : 0 }}
+                      style={{ transformOrigin: `${lp.x2}px ${lp.y2}px` }}
                     />
                   </g>
                 );

@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import type { RhythmStep } from "@/lib/types";
 
@@ -11,8 +11,9 @@ interface Props {
 
 // Animated rhythm visualization — beats pulse in sequence showing
 // stressed vs unstressed syllables and their relative durations.
-// Enhanced: metronome pendulum, beat numbers, speed control (0.5x/1x/1.5x),
-// grid timeline backdrop, glowing top edge on stressed bars, progress indicator.
+// Enhanced: circle beats with beat numbers, metronome sweep line,
+// gradient glow on heavy beats, shadow/depth, ripple on active beat,
+// speed control (0.5x/1x/1.5x), grid timeline backdrop, progress indicator.
 
 const SPEEDS = [
   { label: "0.5x", value: 0.5 },
@@ -43,7 +44,7 @@ export function RhythmBeats({ step, speak }: Props) {
   // Derive the currently active beat index from progress (no ref / no stale closures)
   const activeBeat = (() => {
     if (!playing) return -1;
-    const realElapsed = progress * totalDur; // duration units (already scaled by speed in rAF)
+    const realElapsed = progress * totalDur;
     for (let i = 0; i < cum.length; i++) {
       if (realElapsed <= cum[i]) return i;
     }
@@ -78,10 +79,15 @@ export function RhythmBeats({ step, speak }: Props) {
     } else {
       setProgress(0);
       setPlaying(true);
-      // Speak at requested speed — Web Speech uses default rate; visual speed only (per spec)
       speak(phrase);
     }
   };
+
+  // SVG viewBox dimensions for the circle visualization
+  const vbW = 100;
+  const vbH = 50;
+  const circleR = 5.5;
+  const spacing = vbW / (beats.length + 1);
 
   return (
     <div className="space-y-3">
@@ -110,7 +116,7 @@ export function RhythmBeats({ step, speak }: Props) {
         </div>
 
         {/* Phrase display with active highlighting */}
-        <div className="flex flex-wrap items-center justify-center gap-1.5 mb-3">
+        <div className="flex flex-wrap items-center justify-center gap-1.5 mb-4">
           {beats.map((b, i) => (
             <motion.span
               key={i}
@@ -127,90 +133,167 @@ export function RhythmBeats({ step, speak }: Props) {
           ))}
         </div>
 
-        {/* Beat numbers */}
-        <div className="flex items-end justify-center gap-1.5 mb-1">
-          {beats.map((b, i) => {
-            const isActive = activeBeat === i;
-            return (
-              <div
-                key={i}
-                className="text-center text-[10px] font-mono font-bold transition-colors"
-                style={{
-                  flex: b.duration,
-                  minWidth: 24,
-                  color: isActive ? "#a78bfa" : "rgba(240,239,255,0.35)",
-                }}
-              >
-                {i + 1}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Beat timeline with grid backdrop */}
+        {/* Circle beat visualization with SVG */}
         <div className="relative">
-          {/* Horizontal grid lines */}
-          <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
-            {[0, 1, 2, 3].map((g) => (
-              <div key={g} className="border-t border-dashed border-[rgba(255,255,255,0.05)]" />
-            ))}
-          </div>
-          {/* Vertical playhead line */}
-          {playing && (
-            <motion.div
-              className="absolute top-0 bottom-0 w-0.5 bg-[#22d3ee] z-10 pointer-events-none"
-              style={{ left: `${progress * 100}%` }}
-              animate={{ opacity: [0.4, 1, 0.4] }}
-              transition={{ duration: 0.6, repeat: Infinity }}
-            />
-          )}
+          <svg viewBox={`0 0 ${vbW} ${vbH}`} className="w-full" style={{ aspectRatio: `${vbW}/${vbH}` }}>
+            <defs>
+              {/* Gradient glow for stressed beats */}
+              <radialGradient id="beat-glow-heavy" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stopColor="#a78bfa" stopOpacity="0.9" />
+                <stop offset="60%" stopColor="#6366f1" stopOpacity="0.5" />
+                <stop offset="100%" stopColor="#6366f1" stopOpacity="0" />
+              </radialGradient>
+              {/* Gradient for unstressed beats */}
+              <radialGradient id="beat-glow-light" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stopColor="rgba(255,255,255,0.15)" stopOpacity="0.6" />
+                <stop offset="100%" stopColor="rgba(255,255,255,0.05)" stopOpacity="0" />
+              </radialGradient>
+              {/* Drop shadow filter */}
+              <filter id="beat-shadow" x="-40%" y="-40%" width="180%" height="180%">
+                <feDropShadow dx="0" dy="1" stdDeviation="1.2" floodColor="#000000" floodOpacity="0.5" />
+              </filter>
+              {/* Active glow filter */}
+              <filter id="beat-active-glow" x="-60%" y="-60%" width="220%" height="220%">
+                <feGaussianBlur stdDeviation="2" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+              {/* Pulse glow filter for heavy beats when playing */}
+              <filter id="beat-pulse-glow" x="-80%" y="-80%" width="260%" height="260%">
+                <feGaussianBlur stdDeviation="3" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+            </defs>
 
-          <div className="flex items-end justify-center gap-1.5 h-20 relative">
+            {/* Horizontal baseline */}
+            <line x1="2" y1={vbH / 2} x2={vbW - 2} y2={vbH / 2} stroke="rgba(255,255,255,0.06)" strokeWidth="0.3" />
+
+            {/* Metronome sweep line */}
+            {playing && (
+              <motion.line
+                x1={2 + progress * (vbW - 4)}
+                y1="2"
+                x2={2 + progress * (vbW - 4)}
+                y2={vbH - 2}
+                stroke="#22d3ee"
+                strokeWidth="0.5"
+                strokeDasharray="1,0.5"
+                animate={{ opacity: [0.3, 0.8, 0.3] }}
+                transition={{ duration: 0.5, repeat: Infinity }}
+              />
+            )}
+
+            {/* Beat circles */}
             {beats.map((b, i) => {
+              const cx = spacing * (i + 1);
+              const cy = vbH / 2;
               const isActive = activeBeat === i;
-              const heightPct = (b.duration / Math.max(...beats.map((x) => x.duration))) * 100;
+              // Scale circle radius based on duration relative to max
+              const maxDur = Math.max(...beats.map((x) => x.duration));
+              const sizeScale = 0.7 + (b.duration / maxDur) * 0.5;
+              const r = circleR * sizeScale;
+
               return (
-                <motion.div
-                  key={i}
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{
-                    height: `${Math.max(heightPct, 20)}%`,
-                    opacity: 1,
-                    backgroundColor: isActive
-                      ? b.stressed
-                        ? "#6366f1"
-                        : "#22d3ee"
-                      : b.stressed
-                      ? "rgba(99,102,241,0.4)"
-                      : "rgba(255,255,255,0.1)",
-                  }}
-                  transition={{ delay: i * 0.05, duration: 0.2 }}
-                  className="rounded-t-md relative"
-                  style={{
-                    minWidth: 24,
-                    flex: b.duration,
-                    border: isActive ? "1px solid rgba(255,255,255,0.4)" : "none",
-                  }}
-                >
-                  {/* Glowing top edge on stressed bars */}
+                <g key={i}>
+                  {/* Ripple effect on active beat */}
+                  <AnimatePresence>
+                    {isActive && (
+                      <>
+                        <motion.circle
+                          cx={cx}
+                          cy={cy}
+                          r={r}
+                          fill="none"
+                          stroke={b.stressed ? "#a78bfa" : "#22d3ee"}
+                          strokeWidth="0.4"
+                          initial={{ r, opacity: 0.8 }}
+                          animate={{ r: r + 8, opacity: 0 }}
+                          transition={{ duration: 0.8, ease: "easeOut" }}
+                        />
+                        <motion.circle
+                          cx={cx}
+                          cy={cy}
+                          r={r}
+                          fill="none"
+                          stroke={b.stressed ? "#a78bfa" : "#22d3ee"}
+                          strokeWidth="0.3"
+                          initial={{ r, opacity: 0.6 }}
+                          animate={{ r: r + 14, opacity: 0 }}
+                          transition={{ duration: 1.1, ease: "easeOut", delay: 0.15 }}
+                        />
+                      </>
+                    )}
+                  </AnimatePresence>
+
+                  {/* Gradient glow behind stressed beats */}
                   {b.stressed && (
-                    <div
-                      className="absolute -top-1 left-0 right-0 h-1 rounded-full"
-                      style={{
-                        background: isActive ? "#a78bfa" : "#6366f1",
-                        boxShadow: isActive
-                          ? "0 0 12px 2px rgba(167,139,250,0.8)"
-                          : "0 0 6px 1px rgba(99,102,241,0.5)",
-                      }}
+                    <motion.circle
+                      cx={cx}
+                      cy={cy}
+                      r={r + 3}
+                      fill="url(#beat-glow-heavy)"
+                      animate={isActive ? { opacity: [0.4, 0.9, 0.4], r: [r + 3, r + 5, r + 3] } : { opacity: 0.3, r: r + 3 }}
+                      transition={isActive ? { duration: 0.6, repeat: Infinity } : { duration: 0.3 }}
                     />
                   )}
+
+                  {/* Main beat circle with shadow */}
+                  <motion.circle
+                    cx={cx}
+                    cy={cy}
+                    r={r}
+                    fill={isActive
+                      ? b.stressed ? "#6366f1" : "#22d3ee"
+                      : b.stressed ? "rgba(99,102,241,0.35)" : "rgba(255,255,255,0.08)"}
+                    stroke={isActive
+                      ? b.stressed ? "#a78bfa" : "#67e8f9"
+                      : b.stressed ? "rgba(99,102,241,0.6)" : "rgba(255,255,255,0.15)"}
+                    strokeWidth={isActive ? 1 : 0.5}
+                    filter={isActive ? "url(#beat-active-glow)" : "url(#beat-shadow)"}
+                    animate={{
+                      scale: isActive ? 1.15 : 1,
+                    }}
+                    transition={{ duration: 0.15 }}
+                    style={{ transformOrigin: `${cx}px ${cy}px` }}
+                  />
+
+                  {/* Beat number inside circle */}
+                  <motion.text
+                    x={cx}
+                    y={cy + 1.2}
+                    textAnchor="middle"
+                    fontSize={r * 0.85}
+                    fontWeight="bold"
+                    fontFamily="var(--font-mono), monospace"
+                    fill={isActive ? "#ffffff" : b.stressed ? "rgba(240,239,255,0.8)" : "rgba(240,239,255,0.4)"}
+                    animate={{ scale: isActive ? 1.1 : 1 }}
+                    transition={{ duration: 0.15 }}
+                    style={{ transformOrigin: `${cx}px ${cy}px` }}
+                  >
+                    {i + 1}
+                  </motion.text>
+
+                  {/* Stressed indicator dot above */}
                   {b.stressed && (
-                    <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-xs">●</div>
+                    <motion.circle
+                      cx={cx}
+                      cy={cy - r - 2.5}
+                      r="1"
+                      fill="#a78bfa"
+                      animate={playing ? { opacity: [0.5, 1, 0.5] } : { opacity: 0.6 }}
+                      transition={{ duration: 0.8, repeat: Infinity }}
+                    />
                   )}
-                </motion.div>
+                </g>
               );
             })}
-          </div>
+          </svg>
         </div>
 
         {/* Progress bar */}
@@ -226,10 +309,10 @@ export function RhythmBeats({ step, speak }: Props) {
         <div className="mt-4 flex items-center justify-between text-xs gap-2 flex-wrap">
           <div className="flex items-center gap-3">
             <span className="flex items-center gap-1.5">
-              <span className="inline-block w-2.5 h-2.5 rounded bg-[#6366f1]" /> Stressed
+              <span className="inline-block w-2.5 h-2.5 rounded-full bg-[#6366f1]" /> Stressed
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block w-2.5 h-2.5 rounded bg-[rgba(255,255,255,0.1)]" /> Unstressed
+              <span className="inline-block w-2.5 h-2.5 rounded-full bg-[rgba(255,255,255,0.1)]" /> Unstressed
             </span>
           </div>
 

@@ -260,9 +260,9 @@ export function DashboardView() {
 
   const stats = [
     { icon: "🔥", val: streak, lbl: "Day Streak", color: "#f59e0b", spark: sparklines.streak },
-    { icon: "🎙️", val: `${Math.round(speakingSecondsToday / 60)}m`, lbl: "Speaking Today", color: "#22d3ee", spark: sparklines.speaking },
-    { icon: "🎯", val: accuracy === null ? "—" : `${accuracy}%`, lbl: "Accuracy", color: "#10b981", spark: sparklines.accuracy },
-    { icon: "⚡", val: xp, lbl: "Total XP", color: "#a78bfa", spark: sparklines.xp },
+    { icon: "🎙️", val: `${Math.round(speakingSecondsToday / 60)}m`, lbl: "Speaking Today", color: "#10b981", spark: sparklines.speaking },
+    { icon: "🎯", val: accuracy === null ? "—" : `${accuracy}%`, lbl: "Accuracy", color: "#22d3ee", spark: sparklines.accuracy },
+    { icon: "⚡", val: xp, lbl: "Total XP", color: "#6366f1", spark: sparklines.xp },
   ];
 
   // weekly chart data — deterministic, based on actual history
@@ -366,11 +366,16 @@ export function DashboardView() {
           transition={{ duration: 0.5, delay: 0.05 }}
           className="font-d text-2xl sm:text-3xl font-bold leading-tight"
         >
-          <span className="animate-gradient-text" style={{
-            backgroundImage: "linear-gradient(120deg, var(--p), var(--p2), var(--p3), var(--p), var(--p2))",
-          }}>
+          <motion.span
+            className="animate-gradient-text"
+            style={{
+              backgroundImage: "linear-gradient(120deg, var(--p), var(--p2), var(--p3), var(--p), var(--p2))",
+            }}
+            animate={{ backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"] }}
+            transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+          >
             {greeting}, {userName}
-          </span>
+          </motion.span>
           <motion.span
             className="inline-block ml-1"
             animate={{ rotate: [0, 14, -8, 14, 0] }}
@@ -626,7 +631,14 @@ export function DashboardView() {
             onClick={handleContinue}
             className="mt-4 w-full py-3 rounded-xl bg-[var(--grad-btn)] text-white font-semibold text-sm flex items-center justify-center gap-2 hover:opacity-90 transition"
           >
-            {phaseProg.done === 0 ? "Start Phase →" : "Continue →"}
+            {phaseProg.done === 0 ? "Start Phase" : "Continue"}
+            <motion.span
+              animate={{ x: [0, 5, 0] }}
+              transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
+              className="inline-block"
+            >
+              →
+            </motion.span>
           </button>
         </div>
       </motion.div>
@@ -652,17 +664,23 @@ export function DashboardView() {
                     initial={{ height: 0 }}
                     animate={{ height: `${(d.score / maxScore) * 100}%` }}
                     transition={{ delay: i * 0.05, duration: 0.6, type: "spring" }}
-                    className={`w-full rounded-t-md relative ${d.isToday ? "animate-pulse-glow" : ""}`}
+                    className="w-full rounded-t-md relative"
                     style={{
                       background: d.isToday
-                        ? "linear-gradient(180deg, #6366f1, #22d3ee)"
+                        ? "linear-gradient(180deg, #6366f1, #8b5cf6, #22d3ee)"
                         : d.score > 0
-                        ? "linear-gradient(180deg, rgba(99,102,241,0.5), rgba(99,102,241,0.2))"
+                        ? "linear-gradient(180deg, rgba(99,102,241,0.6), rgba(139,92,246,0.3), rgba(99,102,241,0.15))"
                         : "var(--overlay-1)",
                       minHeight: d.score > 0 ? 8 : 2,
-                      boxShadow: d.isToday ? "0 0 12px rgba(99,102,241,0.4)" : "none",
                     }}
                   >
+                    {d.isToday && d.score > 0 && (
+                      <motion.div
+                        className="absolute inset-0 rounded-t-md"
+                        animate={{ boxShadow: ["0 0 8px rgba(99,102,241,0.3)", "0 0 18px rgba(99,102,241,0.6), 0 0 30px rgba(139,92,246,0.3)", "0 0 8px rgba(99,102,241,0.3)"] }}
+                        transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                      />
+                    )}
                     {d.score > 0 && (
                       <motion.span
                         initial={{ opacity: 0, y: 5 }}

@@ -9,6 +9,35 @@ import { ALL_LESSONS, getLessonsForPhase } from "@/lib/lessons";
 
 type FilterMode = "all" | "completed" | "in-progress" | "not-started" | "bookmarked";
 
+/** Check if a completed lesson needs review (>2 days since completion or last review) */
+function needsReview(completedAt: number | null, lastReviewedAt: number | null): boolean {
+  if (!completedAt) return false;
+  const referenceTime = lastReviewedAt && lastReviewedAt > completedAt ? lastReviewedAt : completedAt;
+  const twoDaysMs = 2 * 24 * 60 * 60 * 1000;
+  return Date.now() - referenceTime > twoDaysMs;
+}
+
+/** Animated "🔄 Review" badge */
+function ReviewBadge() {
+  return (
+    <motion.span
+      initial={{ opacity: 0, scale: 0.6 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ type: "spring", stiffness: 300, damping: 18 }}
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[rgba(245,158,11,0.12)] border border-[rgba(245,158,11,0.3)] text-[9px] font-bold text-[#f59e0b] shrink-0"
+    >
+      <motion.span
+        animate={{ rotate: [0, 360] }}
+        transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+        className="inline-block text-[10px]"
+      >
+        🔄
+      </motion.span>
+      Review
+    </motion.span>
+  );
+}
+
 export function JourneyView() {
   const lessons = useAppStore((s) => s.lessons);
   const expandedPhase = useAppStore((s) => s.expandedPhase);
@@ -155,6 +184,7 @@ export function JourneyView() {
               const prog = lessons[lesson.id];
               const isLessonDone = status === "completed";
               const isLessonInProgress = status === "in-progress";
+              const showReviewBadge = isLessonDone && needsReview(prog?.completedAt ?? null, prog?.lastReviewedAt ?? null);
               return (
                 <motion.div
                   key={lesson.id}
@@ -177,8 +207,9 @@ export function JourneyView() {
                     onClick={() => setActiveLesson(lesson.id)}
                     className="flex-1 min-w-0 text-left"
                   >
-                    <div className="text-sm font-medium text-[var(--t1)] truncate">
-                      {lesson.title}
+                    <div className="text-sm font-medium text-[var(--t1)] truncate flex items-center gap-2">
+                      <span className="truncate">{lesson.title}</span>
+                      {showReviewBadge && <ReviewBadge />}
                     </div>
                     <div className="text-[10px] text-[var(--t3)] flex items-center gap-2">
                       <span>Phase {phaseIdx + 1}</span>
@@ -349,6 +380,7 @@ export function JourneyView() {
                               const isLessonDone = prog?.completed;
                               const isLessonInProgress = prog && !prog.completed;
                               const isBookmarked = bookmarkedLessons.includes(lesson.id);
+                              const showReviewBadge = isLessonDone && needsReview(prog?.completedAt ?? null, prog?.lastReviewedAt ?? null);
                               return (
                                 <motion.div
                                   key={lesson.id}
@@ -381,8 +413,9 @@ export function JourneyView() {
                                     onClick={() => setActiveLesson(lesson.id)}
                                     className="flex-1 min-w-0"
                                   >
-                                    <div className="text-sm font-medium text-[var(--t1)] truncate">
-                                      {lesson.title}
+                                    <div className="text-sm font-medium text-[var(--t1)] truncate flex items-center gap-2">
+                                      <span className="truncate">{lesson.title}</span>
+                                      {showReviewBadge && <ReviewBadge />}
                                     </div>
                                     <div className="text-[10px] text-[var(--t3)] flex items-center gap-2">
                                       <span>⏱ {lesson.duration} min</span>

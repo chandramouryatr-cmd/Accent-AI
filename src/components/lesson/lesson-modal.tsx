@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, X, Check, RotateCcw, NotebookPen } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, Check, RotateCcw, NotebookPen, Gauge } from "lucide-react";
 import type { Lesson, LessonStep } from "@/lib/types";
 import { useAppStore } from "@/lib/store";
 import { speak, stopSpeaking, loadVoices } from "@/lib/tts";
@@ -59,6 +59,46 @@ function getPrimaryAudioText(step: LessonStep | undefined): string | null {
   }
 }
 
+/** Step transition variants — direction: 1 = forward, −1 = backward.
+ *  Uses `custom` prop so exiting components receive the *latest*
+ *  direction value (fixes stale-closure bug with inline objects). */
+const stepVariants = {
+  enter: (direction: number) => ({
+    x: direction * 80,
+    opacity: 0,
+    scale: 0.97,
+  }),
+  center: {
+    x: 0,
+    opacity: 1,
+    scale: 1,
+  },
+  exit: (direction: number) => ({
+    x: direction * -80,
+    opacity: 0,
+    scale: 0.97,
+  }),
+};
+
+const stepTransition = {
+  duration: 0.25,
+  ease: [0.25, 0.46, 0.45, 0.94], // ease-out-quad — snappy feel
+};
+
+/** Brief fade overlay that appears between step transitions.
+ *  Mounts with a subtle bg tint and fades out, giving a
+ *  polished cross-fade feel without blocking interaction. */
+function StepTransitionOverlay() {
+  return (
+    <motion.div
+      initial={{ opacity: 0.1 }}
+      animate={{ opacity: 0 }}
+      transition={{ duration: 0.2, ease: "easeOut" }}
+      className="absolute inset-0 bg-[var(--bg)] z-[5] pointer-events-none"
+    />
+  );
+}
+
 const VISUAL_EMOJI: Record<string, string> = {
   wave: "🌊",
   mouth: "👄",
@@ -74,6 +114,59 @@ const VISUAL_EMOJI: Record<string, string> = {
   "emoji-burst": "✨",
 };
 
+/** Step type → emoji icon mapping */
+const STEP_ICON: Record<string, string> = {
+  intro: "👋", concept: "📖", example: "💬", "mouth-diagram": "👄",
+  "vowel-chart": "🎯", compare: "📊", "stress-bars": "📈", rhythm: "🎵",
+  linking: "🔗", shadow: "🪞", intonation: "📐", "tap-pronounce": "👆",
+  tip: "💡", practice: "🎙", quiz: "❓", completion: "🏆"
+};
+
+/** Step type → category for background tint */
+type StepCategory = "intro" | "concept" | "visual" | "practice" | "completion";
+function getStepCategory(type: string): StepCategory {
+  switch (type) {
+    case "intro": return "intro";
+    case "concept": return "concept";
+    case "mouth-diagram": case "vowel-chart": case "stress-bars":
+    case "rhythm": case "linking": case "intonation":
+      return "visual";
+    case "example": case "compare": case "shadow":
+    case "tap-pronounce": case "tip": case "practice": case "quiz":
+      return "practice";
+    case "completion": return "completion";
+    default: return "practice";
+  }
+}
+
+/** Step category → background tint color (RGBA) */
+const CATEGORY_TINT: Record<StepCategory, string> = {
+  intro:     "rgba(99,102,241,0.06)",   // indigo
+  concept:   "rgba(139,92,246,0.06)",   // violet
+  visual:    "rgba(34,211,238,0.05)",   // cyan
+  practice:  "rgba(245,158,11,0.05)",   // amber
+  completion:"rgba(16,185,129,0.06)",   // green
+};
+
+/** Step category → accent glow color for current dot */
+const CATEGORY_GLOW: Record<StepCategory, string> = {
+  intro:     "rgba(99,102,241,0.6)",
+  concept:   "rgba(139,92,246,0.6)",
+  visual:    "rgba(34,211,238,0.6)",
+  practice:  "rgba(245,158,11,0.6)",
+  completion:"rgba(16,185,129,0.6)",
+};
+
+// Module-level map to persist timer state across modal mount/unmount cycles
+const lessonTimerAccumulated: Map<string, number> = new Map();
+
+/** Format seconds as mm:ss */
+function formatTimer(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
 export function LessonModal({ lesson, onClose, onNext }: Props) {
   const [stepIdx, setStepIdx] = useState(0);
   const [direction, setDirection] = useState(1);
@@ -88,8 +181,16 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
   // pattern instead of setState-in-effect (react-hooks/set-state-in-effect).
   const [prevStepIdx, setPrevStepIdx] = useState(stepIdx);
   const [showNotesPanel, setShowNotesPanel] = useState(false);
+  const [ttsSpeed, setTtsSpeed] = useState(1);
+
+  // ── Lesson Timer ──
+  const [timerDisplay, setTimerDisplay] = useState("0:00");
+  const timerStartRef = useRef<number>(Date.now());
+  const timerAccumulatedRef = useRef<number>(lessonTimerAccumulated.get(lesson.id) ?? 0);
+
   const accent = useAppStore((s) => s.accent);
   const completeLesson = useAppStore((s) => s.completeLesson);
+  const markReviewed = useAppStore((s) => s.markReviewed);
   const lessons = useAppStore((s) => s.lessons);
   const addSpeakingTime = useAppStore((s) => s.addSpeakingTime);
   const hasLessonNote = useAppStore((s) => (s.lessonNotes[lesson.id] ?? "").trim().length > 0);
@@ -104,6 +205,24 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
   useEffect(() => {
     loadVoices();
   }, []);
+
+  // ── Timer tick effect ──
+  useEffect(() => {
+    timerStartRef.current = Date.now();
+    const tick = () => {
+      const elapsed = timerAccumulatedRef.current + (Date.now() - timerStartRef.current) / 1000;
+      setTimerDisplay(formatTimer(elapsed));
+    };
+    tick(); // initial tick
+    const id = setInterval(tick, 1000);
+    return () => {
+      clearInterval(id);
+      // Save accumulated time for this lesson when modal unmounts (pause)
+      const elapsed = timerAccumulatedRef.current + (Date.now() - timerStartRef.current) / 1000;
+      timerAccumulatedRef.current = elapsed;
+      lessonTimerAccumulated.set(lesson.id, elapsed);
+    };
+  }, [lesson.id]);
 
   // Reset per-step interactive state when stepIdx changes.
   // Official React pattern: adjust state during render based on a tracked
@@ -134,9 +253,9 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
 
   const handleSpeak = useCallback(
     (text: string) => {
-      speak(text, { accent, rate: 0.95 });
+      speak(text, { accent, rate: ttsSpeed });
     },
-    [accent]
+    [accent, ttsSpeed]
   );
 
   const goNext = useCallback(() => {
@@ -161,17 +280,24 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
   const handleComplete = useCallback(() => {
     if (alreadyCompleted) return;
     if (completionStep?.type === "completion") {
+      // Calculate total time spent
+      const elapsed = timerAccumulatedRef.current + (Date.now() - timerStartRef.current) / 1000;
       completeLesson(
         lesson.id,
         practiceScore ?? 85,
         completionStep.xp,
-        completionStep.badge
+        completionStep.badge,
+        Math.floor(elapsed)
       );
+      // Mark as reviewed since they just completed it
+      markReviewed(lesson.id);
       addSpeakingTime(8);
       setShowConfetti(true);
       setTimeout(() => setShowConfetti(false), 4000);
+      // Clear timer state for this lesson
+      lessonTimerAccumulated.delete(lesson.id);
     }
-  }, [alreadyCompleted, completionStep, completeLesson, lesson.id, practiceScore, addSpeakingTime]);
+  }, [alreadyCompleted, completionStep, completeLesson, markReviewed, lesson.id, practiceScore, addSpeakingTime]);
 
   // Auto-trigger completion when user reaches the completion step.
   // handleComplete calls setState (setShowConfetti + store actions), so we
@@ -249,13 +375,29 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [goNext, goPrev, onClose, step, handleSpeak, showNotesPanel]);
 
+  const currentCategory = getStepCategory(step?.type ?? "");
+  const currentTint = CATEGORY_TINT[currentCategory];
+  const currentGlow = CATEGORY_GLOW[currentCategory];
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[200] bg-[var(--bg)] flex flex-col"
+      className="fixed inset-0 z-[200] bg-[var(--bg)] flex flex-col relative overflow-hidden"
     >
+      {/* Animated step-type background tint */}
+      <motion.div
+        key={currentCategory}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.6 }}
+        className="absolute inset-0 pointer-events-none z-0"
+        style={{ background: `radial-gradient(ellipse at 50% 0%, ${currentTint} 0%, transparent 70%)` }}
+      />
+      {/* Content sits above the tint */}
+      <div className="relative z-10 flex flex-col flex-1 min-h-0">
       {showConfetti && <Confetti count={100} />}
 
       {/* Header */}
@@ -297,81 +439,131 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
               )}
             </AnimatePresence>
           </motion.button>
+          {/* Timer display */}
+          <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[var(--card)]/60 border border-[var(--border2)] text-[11px] font-mono text-[var(--t2)]">
+            <span className="text-[10px]">⏱</span>
+            <span>{timerDisplay}</span>
+          </div>
           <span className="text-xs font-mono text-[var(--t2)]">{stepIdx + 1}/{totalSteps}</span>
           <ProgressRing pct={pct} size={36} stroke={3} />
         </div>
       </div>
 
-      {/* Progress bar with glow */}
-      <div className="h-1.5 bg-[var(--bg2)] relative">
-        <motion.div
-          className="h-full"
-          style={{ background: "var(--grad-btn)", boxShadow: "0 0 8px rgba(99,102,241,0.6)" }}
-          initial={{ width: 0 }}
-          animate={{ width: `${pct}%` }}
-          transition={{ duration: 0.4 }}
-        />
-        {/* Shimmer on progress bar */}
-        <motion.div
-          className="absolute top-0 h-full w-8 bg-gradient-to-r from-transparent via-white/30 to-transparent"
-          animate={{ x: ["-100%", "500%"] }}
-          transition={{ duration: 2, repeat: Infinity, repeatDelay: 3, ease: "easeInOut" }}
-          style={{ left: `${pct - 5}%` }}
-        />
-      </div>
+      {/* ── Enhanced animated step progress bar ── */}
+      <div className="px-3 py-2 bg-[var(--bg2)]/70 border-b border-[var(--border)]">
+        <div className="relative max-w-2xl mx-auto" style={{ height: 44 }}>
+          {/* Gradient connecting line (background track) */}
+          <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-[3px] rounded-full bg-[var(--border)]" />
 
-      {/* Step progress dots */}
-      <div className="px-4 py-2 bg-[var(--bg2)]/60 border-b border-[var(--border)]">
-        <div className="flex items-center gap-1 max-w-2xl mx-auto overflow-x-auto scrollbar-none">
-          {lesson.steps.map((s, i) => {
-            const isCurrent = i === stepIdx;
-            const isPast = i < stepIdx;
-            const stepIcon: Record<string, string> = {
-              intro: "👋", concept: "📖", example: "💬", "mouth-diagram": "👄",
-              "vowel-chart": "🎯", compare: "📊", "stress-bars": "📈", rhythm: "🎵",
-              linking: "🔗", shadow: "🪞", intonation: "📐", "tap-pronounce": "👆",
-              tip: "💡", practice: "🎙", quiz: "❓", completion: "🏆"
-            };
-            return (
-              <motion.button
-                key={i}
-                onClick={() => { setDirection(i > stepIdx ? 1 : -1); setStepIdx(i); }}
-                className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-[10px] transition-all relative ${
-                  isCurrent
-                    ? "bg-[var(--grad-btn)] text-white scale-110 shadow-[0_0_12px_rgba(99,102,241,0.5)]"
-                    : isPast
-                    ? "bg-[rgba(16,185,129,0.2)] text-[#10b981]"
-                    : "bg-[var(--card)] text-[var(--t3)] border border-[var(--border)]"
-                }`
-                }
-                whileHover={{ scale: 1.15 }}
-                whileTap={{ scale: 0.9 }}
-                title={`${s.type}: ${s.title || s.type}`}
-              >
-                <span className="relative z-10">{stepIcon[s.type] || "•"}</span>
-                {isCurrent && (
-                  <motion.span
-                    className="absolute inset-0 rounded-full border-2 border-[var(--p)]"
-                    animate={{ scale: [1, 1.3, 1], opacity: [0.5, 0, 0.5] }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                  />
-                )}
-              </motion.button>
-            );
-          })}
+          {/* Animated gradient fill line — draws from left to the current step */}
+          <motion.div
+            className="absolute top-1/2 -translate-y-1/2 h-[3px] rounded-full"
+            style={{
+              left: 0,
+              width: `calc(${(stepIdx / Math.max(totalSteps - 1, 1)) * 100}% + 0px)`,
+              background: "linear-gradient(90deg, var(--p), var(--p2))",
+              boxShadow: "0 0 8px rgba(99,102,241,0.4)",
+            }}
+            initial={{ scaleX: 0, transformOrigin: "left" }}
+            animate={{ scaleX: 1 }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+          />
+
+          {/* Shimmer sweep on the filled line */}
+          <motion.div
+            className="absolute top-1/2 -translate-y-1/2 h-[3px] rounded-full"
+            style={{
+              left: 0,
+              width: `calc(${(stepIdx / Math.max(totalSteps - 1, 1)) * 100}% + 0px)`,
+              background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent)",
+              backgroundSize: "200% 100%",
+            }}
+            animate={{ backgroundPosition: ["200% 0", "-200% 0"] }}
+            transition={{ duration: 2.5, repeat: Infinity, repeatDelay: 3, ease: "easeInOut" }}
+          />
+
+          {/* Step dots row */}
+          <div className="absolute inset-0 flex items-center justify-between">
+            {lesson.steps.map((s, i) => {
+              const isCurrent = i === stepIdx;
+              const isPast = i < stepIdx;
+              const isUpcoming = i > stepIdx;
+              const cat = getStepCategory(s.type);
+              const glow = CATEGORY_GLOW[cat];
+              const icon = STEP_ICON[s.type] || "•";
+              const stepTitle = s.title || s.type.replace(/-/g, " ");
+
+              return (
+                <motion.button
+                  key={i}
+                  onClick={() => { setDirection(i > stepIdx ? 1 : -1); setStepIdx(i); }}
+                  className="relative flex items-center justify-center rounded-full cursor-pointer group"
+                  style={{
+                    width: isCurrent ? 32 : isPast ? 24 : 22,
+                    height: isCurrent ? 32 : isPast ? 24 : 22,
+                    fontSize: isCurrent ? 13 : isPast ? 10 : 9,
+                    background: isCurrent
+                      ? "linear-gradient(135deg, #6366f1, #8b5cf6)"
+                      : isPast
+                      ? "linear-gradient(135deg, rgba(99,102,241,0.25), rgba(139,92,246,0.25))"
+                      : "var(--card)",
+                    border: isUpcoming ? "1px solid var(--border)" : "none",
+                    color: isCurrent ? "#fff" : isPast ? "var(--p3)" : "var(--t3)",
+                    boxShadow: isCurrent
+                      ? `0 0 14px ${glow}, 0 0 4px ${glow}`
+                      : "none",
+                  }}
+                  initial={false}
+                  animate={{
+                    scale: isCurrent ? 1 : 1,
+                    opacity: isUpcoming ? 0.45 : 1,
+                  }}
+                  transition={{ type: "spring", stiffness: 350, damping: 22 }}
+                  whileHover={{ scale: 1.18, opacity: 1 }}
+                  whileTap={{ scale: 0.88 }}
+                  aria-label={`Step ${i + 1}: ${stepTitle}`}
+                >
+                  <span className="relative z-10 leading-none select-none">{icon}</span>
+
+                  {/* Pulsing glow ring for current step */}
+                  {isCurrent && (
+                    <motion.span
+                      className="absolute inset-[-4px] rounded-full"
+                      style={{ border: `2px solid ${glow.replace("0.6", "0.5")}` }}
+                      animate={{
+                        scale: [1, 1.25, 1],
+                        opacity: [0.6, 0, 0.6],
+                      }}
+                      transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                    />
+                  )}
+
+                  {/* Hover tooltip */}
+                  <span className="absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-md bg-[var(--bg3)] border border-[var(--border2)] text-[9px] text-[var(--t2)] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none font-mono z-20">
+                    {stepTitle}
+                  </span>
+                </motion.button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
       {/* Step content */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto relative">
+        {/* Subtle fade overlay between steps */}
+        <AnimatePresence>
+          <StepTransitionOverlay key={stepIdx} />
+        </AnimatePresence>
         <AnimatePresence mode="wait" custom={direction}>
           <motion.div
             key={stepIdx}
             custom={direction}
-            initial={{ opacity: 0, x: direction * 40, scale: 0.97 }}
-            animate={{ opacity: 1, x: 0, scale: 1 }}
-            exit={{ opacity: 0, x: direction * -40, scale: 0.97 }}
-            transition={{ duration: 0.32, ease: [0.34, 1.2, 0.64, 1] }}
+            variants={stepVariants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={stepTransition}
             className="max-w-2xl mx-auto px-5 py-6 pb-32"
           >
             {/* Step-type chip with icon + label, animated entrance */}
@@ -383,15 +575,7 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
             >
               <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--card)] border border-[var(--border2)] text-[10px] uppercase tracking-wider font-mono text-[var(--t3)]">
                 <span className="text-sm leading-none">
-                  {(() => {
-                    const ico: Record<string, string> = {
-                      intro: "👋", concept: "📖", example: "💬", "mouth-diagram": "👄",
-                      "vowel-chart": "🎯", compare: "📊", "stress-bars": "📈", rhythm: "🎵",
-                      linking: "🔗", shadow: "🪞", intonation: "📐", "tap-pronounce": "👆",
-                      tip: "💡", practice: "🎙", quiz: "❓", completion: "🏆"
-                    };
-                    return ico[step?.type || ""] || "•";
-                  })()}
+                  {STEP_ICON[step?.type || ""] || "•"}
                 </span>
                 <span>{step?.type?.replace("-", " ")}</span>
                 <span className="opacity-50">·</span>
@@ -401,6 +585,8 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
             <StepRenderer
               step={step}
               speak={handleSpeak}
+              ttsSpeed={ttsSpeed}
+              setTtsSpeed={setTtsSpeed}
               quizAnswer={quizAnswer}
               setQuizAnswer={setQuizAnswer}
               practiceScore={practiceScore}
@@ -410,6 +596,7 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
               isLast={isLast}
               onComplete={handleComplete}
               onNext={onNext}
+              timeSpentSeconds={timerAccumulatedRef.current + (Date.now() - timerStartRef.current) / 1000}
             />
           </motion.div>
         </AnimatePresence>
@@ -532,6 +719,7 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
           </motion.div>
         )}
       </AnimatePresence>
+      </div>{/* end z-10 inner wrapper */}
     </motion.div>
   );
 }
@@ -541,6 +729,8 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
 interface StepRendererProps {
   step: LessonStep;
   speak: (text: string) => void;
+  ttsSpeed: number;
+  setTtsSpeed: (s: number) => void;
   quizAnswer: number | null;
   setQuizAnswer: (n: number | null) => void;
   practiceScore: number | null;
@@ -550,14 +740,15 @@ interface StepRendererProps {
   isLast: boolean;
   onComplete: () => void;
   onNext?: () => void;
+  timeSpentSeconds: number;
 }
 
 function StepRenderer(props: StepRendererProps) {
-  const { step, speak } = props;
+  const { step, speak, ttsSpeed, setTtsSpeed } = props;
 
   switch (step.type) {
     case "intro":
-      return <IntroStepView step={step} speak={speak} />;
+      return <IntroStepView step={step} speak={speak} ttsSpeed={ttsSpeed} setTtsSpeed={setTtsSpeed} />;
     case "concept":
       return <ConceptStepView step={step} />;
     case "example":
@@ -587,7 +778,7 @@ function StepRenderer(props: StepRendererProps) {
     case "quiz":
       return <QuizStepView {...props} />;
     case "completion":
-      return <CompletionStepView step={step} onNext={props.onNext} />;
+      return <CompletionStepView step={step} onNext={props.onNext} timeSpentSeconds={props.timeSpentSeconds} practiceScore={props.practiceScore} />;
     default:
       return <div>Unknown step type</div>;
   }
@@ -595,7 +786,14 @@ function StepRenderer(props: StepRendererProps) {
 
 // ─── Individual step views ───
 
-function IntroStepView({ step, speak }: { step: Extract<LessonStep, { type: "intro" }>; speak: (t: string) => void }) {
+const TTS_SPEEDS = [0.6, 0.8, 1, 1.2] as const;
+
+function IntroStepView({ step, speak, ttsSpeed, setTtsSpeed }: {
+  step: Extract<LessonStep, { type: "intro" }>;
+  speak: (t: string) => void;
+  ttsSpeed: number;
+  setTtsSpeed: (s: number) => void;
+}) {
   return (
     <div className="space-y-5 text-center relative">
       {/* Subtle background glow */}
@@ -650,6 +848,36 @@ function IntroStepView({ step, speak }: { step: Extract<LessonStep, { type: "int
       >
         ▶ Hear the title
       </motion.button>
+
+      {/* TTS Speed Control */}
+      <motion.div
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.6 }}
+        className="flex items-center justify-center gap-1.5 relative z-10"
+      >
+        <Gauge className="w-3.5 h-3.5 text-[var(--t3)] shrink-0" />
+        {TTS_SPEEDS.map((speed) => {
+          const isSelected = ttsSpeed === speed;
+          return (
+            <motion.button
+              key={speed}
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.92 }}
+              onClick={() => setTtsSpeed(speed)}
+              className={`px-2.5 py-1 rounded-full text-[11px] font-mono font-semibold transition-all ${
+                isSelected
+                  ? "bg-[var(--grad-btn)] text-white shadow-[0_0_10px_rgba(99,102,241,0.5)]"
+                  : "bg-[var(--card)] text-[var(--t3)] border border-[var(--border)] hover:border-[var(--p3)] hover:text-[var(--t2)]"
+              }`}
+              aria-label={`Set speed to ${speed}x`}
+              aria-pressed={isSelected}
+            >
+              {speed}×
+            </motion.button>
+          );
+        })}
+      </motion.div>
     </div>
   );
 }
@@ -1071,72 +1299,144 @@ function QuizStepView({
 function CompletionStepView({
   step,
   onNext,
+  timeSpentSeconds,
+  practiceScore,
 }: {
   step: Extract<LessonStep, { type: "completion" }>;
   onNext?: () => void;
+  timeSpentSeconds: number;
+  practiceScore: number | null;
 }) {
   const [displayXp, setDisplayXp] = useState(0);
+  const [displayScore, setDisplayScore] = useState(0);
   const targetXp = step.xp;
+  const score = practiceScore ?? 85;
 
-  // Animated XP counter
+  // Animated XP counter with ease-out over 800ms
   useEffect(() => {
     if (targetXp <= 0) return;
-    const duration = 1200; // ms
-    const steps = 30;
-    const interval = duration / steps;
-    let current = 0;
-    const increment = targetXp / steps;
-    const timer = setInterval(() => {
-      current += increment;
-      if (current >= targetXp) {
-        setDisplayXp(targetXp);
-        clearInterval(timer);
-      } else {
-        setDisplayXp(Math.round(current));
+    const duration = 800;
+    const startTime = performance.now();
+    let raf: number;
+    const tick = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(1, elapsed / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplayXp(Math.round(eased * targetXp));
+      if (progress < 1) {
+        raf = requestAnimationFrame(tick);
       }
-    }, interval);
-    return () => clearInterval(timer);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
   }, [targetXp]);
 
+  // Animated score counter
+  useEffect(() => {
+    const duration = 1000;
+    const startTime = performance.now();
+    let raf: number;
+    const tick = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(1, elapsed / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplayScore(Math.round(eased * score));
+      if (progress < 1) {
+        raf = requestAnimationFrame(tick);
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [score]);
+
+  // Star particles — explode outward from badge center
+  const starParticles = useMemo(() => {
+    const colors = ["#6366f1", "#8b5cf6", "#22d3ee", "#f59e0b", "#10b981", "#a78bfa", "#67e8f9", "#fb923c", "#34d399"];
+    return Array.from({ length: 9 }, (_, i) => {
+      const angle = (i / 9) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
+      const distance = 60 + Math.random() * 50;
+      return {
+        id: i,
+        x: Math.cos(angle) * distance,
+        y: Math.sin(angle) * distance,
+        char: i % 3 === 0 ? "✦" : "•",
+        size: i % 3 === 0 ? 14 : 10,
+        delay: 0.15 + i * 0.03,
+        color: colors[i],
+      };
+    });
+  }, []);
+
   return (
-    <div className="text-center space-y-6 py-8 relative">
-      {/* Background celebration particles */}
-      {[...Array(12)].map((_, i) => (
-        <motion.div
-          key={i}
-          className="absolute w-2 h-2 rounded-full"
+    <div className="text-center space-y-5 py-8 relative overflow-hidden">
+      {/* Background celebration glow — pulsing radial gradient */}
+      <motion.div
+        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 rounded-full pointer-events-none"
+        style={{
+          background: "radial-gradient(circle, rgba(99,102,241,0.2) 0%, rgba(139,92,246,0.12) 35%, rgba(34,211,238,0.06) 65%, transparent 100%)",
+        }}
+        animate={{
+          scale: [0.8, 1.2, 0.95, 1.1, 1],
+          opacity: [0, 0.7, 0.4, 0.6, 0.5],
+        }}
+        transition={{
+          duration: 3,
+          repeat: Infinity,
+          repeatType: "reverse",
+          ease: "easeInOut",
+        }}
+      />
+
+      {/* Star particles exploding outward */}
+      {starParticles.map((p) => (
+        <motion.span
+          key={p.id}
+          className="absolute pointer-events-none z-20"
           style={{
-            background: ["#f59e0b", "#22d3ee", "#a78bfa", "#10b981", "#6366f1", "#ef4444", "#8b5cf6", "#67e8f9", "#fb923c", "#34d399", "#818cf8", "#f472b6"][i],
-            top: "40%",
+            top: "38%",
             left: "50%",
+            fontSize: p.size,
+            color: p.color,
+            textShadow: `0 0 6px ${p.color}88`,
           }}
           initial={{ x: 0, y: 0, opacity: 0, scale: 0 }}
           animate={{
-            x: Math.cos((i / 12) * Math.PI * 2) * (80 + Math.random() * 40),
-            y: Math.sin((i / 12) * Math.PI * 2) * (60 + Math.random() * 30),
-            opacity: [0, 1, 1, 0],
-            scale: [0, 1.2, 1, 0.5],
+            x: p.x,
+            y: p.y,
+            opacity: [0, 1, 0.8, 0],
+            scale: [0, 1.3, 1, 0.2],
           }}
           transition={{
-            duration: 1.5,
-            delay: 0.3 + i * 0.04,
+            duration: 1.2,
+            delay: p.delay,
             ease: "easeOut",
           }}
-        />
+        >
+          {p.char}
+        </motion.span>
       ))}
 
+      {/* Badge with spring bounce + continuous float — staggered 0ms */}
       <motion.div
-        initial={{ scale: 0, rotate: -30 }}
-        animate={{ scale: 1, rotate: 0 }}
-        transition={{ type: "spring", stiffness: 200, damping: 12 }}
-        className="text-8xl relative z-10"
+        initial={{ scale: 0 }}
+        animate={{ scale: 1 }}
+        transition={{ type: "spring", stiffness: 260, damping: 14, delay: 0 }}
+        className="relative z-10 inline-block"
       >
-        🏆
+        <motion.div
+          animate={{ y: [-3, 3, -3] }}
+          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+          className="text-8xl"
+        >
+          🏆
+        </motion.div>
       </motion.div>
+
+      {/* Title + subtitle */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
+        transition={{ delay: 0.1, duration: 0.5 }}
       >
         <h1 className="font-d text-3xl font-bold mb-2">
           <span className="grad-text">{step.title}</span>
@@ -1144,11 +1444,11 @@ function CompletionStepView({
         <p className="text-[var(--t2)] text-base max-w-md mx-auto">{step.subtitle}</p>
       </motion.div>
 
-      {/* Animated XP counter with glow */}
+      {/* Animated XP counter with glow — staggered 200ms */}
       <motion.div
         initial={{ scale: 0.8, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        transition={{ delay: 0.5, type: "spring" }}
+        transition={{ delay: 0.2, type: "spring" }}
         className="inline-flex items-center gap-2 px-6 py-3 rounded-full relative overflow-hidden"
         style={{
           background: "var(--grad-btn)",
@@ -1168,16 +1468,31 @@ function CompletionStepView({
         </span>
       </motion.div>
 
+      {/* Score ring — staggered 400ms */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ delay: 0.4, type: "spring", stiffness: 200 }}
+        className="flex flex-col items-center gap-2"
+      >
+        <div className="relative">
+          <ProgressRing pct={score} size={80} stroke={5} label={`${displayScore}%`} />
+        </div>
+        <div className="text-[10px] uppercase tracking-wider text-[var(--t3)] font-mono">
+          Accuracy Score
+        </div>
+      </motion.div>
+
       {step.badge && (
         <motion.div
           initial={{ opacity: 0, y: 10, scale: 0.9 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ delay: 0.7, type: "spring", stiffness: 200 }}
+          transition={{ delay: 0.5, type: "spring", stiffness: 200 }}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[rgba(245,158,11,0.12)] border border-[rgba(245,158,11,0.3)] text-sm font-semibold text-[#f59e0b] animate-achievement-burst"
         >
           <motion.span
             animate={{ rotate: [0, -10, 10, -5, 0] }}
-            transition={{ delay: 0.9, duration: 0.5 }}
+            transition={{ delay: 0.6, duration: 0.5 }}
           >
             🏅
           </motion.span>
@@ -1185,17 +1500,48 @@ function CompletionStepView({
         </motion.div>
       )}
 
+      {/* Time spent on lesson */}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.5 }}
+        className="flex flex-col items-center gap-2"
+      >
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--card)] border border-[var(--border)] text-sm text-[var(--t2)]">
+          <span className="text-base">⏱</span>
+          <span className="font-mono font-semibold">{formatTimer(timeSpentSeconds)}</span>
+          <span className="text-[var(--t3)]">spent</span>
+        </div>
+        <div className="text-[10px] text-[var(--t3)] font-mono flex items-center gap-1">
+          <span>🔄</span> Next review suggested in 2 days
+        </div>
+      </motion.div>
+
+      {/* Next lesson preview + button — staggered 600ms */}
       {step.nextLessonTitle && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: 1 }}
-          className="pt-4"
+          transition={{ delay: 0.6 }}
+          className="pt-2"
         >
           <div className="text-[10px] uppercase tracking-wider text-[var(--t3)] font-mono mb-1">
             Up Next
           </div>
           <div className="font-d text-lg text-[var(--t1)]">{step.nextLessonTitle}</div>
+          {onNext && (
+            <motion.button
+              onClick={onNext}
+              className="mt-3 px-8 py-3 rounded-xl bg-[var(--grad-btn)] text-white font-semibold text-sm hover:opacity-90 transition"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.7, type: "spring" }}
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+            >
+              Next Lesson
+            </motion.button>
+          )}
         </motion.div>
       )}
     </div>

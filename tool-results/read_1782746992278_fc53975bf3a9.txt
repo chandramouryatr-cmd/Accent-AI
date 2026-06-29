@@ -1,0 +1,714 @@
+     1→"use client";
+     2→
+     3→import { useState, useCallback } from "react";
+     4→import { motion, AnimatePresence } from "framer-motion";
+     5→import { Zap, Target } from "lucide-react";
+     6→import { useAppStore } from "@/lib/store";
+     7→import { speak } from "@/lib/tts";
+     8→import { MicWaveform } from "@/components/widgets/mic-waveform";
+     9→import { PronunciationChallenge } from "@/components/widgets/pronunciation-challenge";
+    10→import { PhonemeDrill } from "@/components/widgets/phoneme-drill";
+    11→
+    12→type Difficulty = "easy" | "medium" | "hard";
+    13→type PracticeMode = "easy" | "medium" | "hard" | "challenge" | "phoneme-drill";
+    14→
+    15→const PHRASES: Record<Difficulty, { text: string; ipa: string; issues: string[] }[]> = {
+    16→  easy: [
+    17→    { text: "The weather is nice today", ipa: "/ðə ˈwɛðər ɪz naɪs təˈdeɪ/", issues: ["the", "weather"] },
+    18→    { text: "How are you doing?", ipa: "/haʊ ɑːr juː ˈduːɪŋ/", issues: [] },
+    19→    { text: "I would like some coffee please", ipa: "/aɪ wʊd laɪk sʌm ˈkɑːfi pliːz/", issues: ["would"] },
+    20→    { text: "Have a great day!", ipa: "/hæv ə ɡreɪt deɪ/", issues: [] },
+    21→    { text: "Can you help me find this?", ipa: "/kæn juː hɛlp miː faɪnd ðɪs/", issues: ["this"] },
+    22→  ],
+    23→  medium: [
+    24→    { text: "I've been thinking about what you said", ipa: "/aɪv bɪn ˈθɪŋkɪŋ əˈbaʊt wɑːt juː sɛd/", issues: ["thinking", "what"] },
+    25→    { text: "Can we schedule a meeting for tomorrow?", ipa: "/kæn wiː ˈskɛdʒuːl ə ˈmiːɾɪŋ fər təˈmɑːroʊ/", issues: ["schedule", "tomorrow"] },
+    26→    { text: "The project deadline is approaching quickly", ipa: "/ðə ˈprɑːdʒɛkt ˈdɛdlaɪn ɪz əˈproʊtʃɪŋ ˈkwɪkli/", issues: ["deadline", "approaching"] },
+    27→    { text: "Would you mind repeating that for me?", ipa: "/wʊd juː maɪnd rɪˈpiːɾɪŋ ðæt fər miː/", issues: ["repeating", "that"] },
+    28→    { text: "I'm really looking forward to seeing you", ipa: "/aɪm ˈrɪəli ˈlʊkɪŋ ˈfɔːrwərd tə ˈsiːɪŋ juː/", issues: ["forward", "really"] },
+    29→  ],
+    30→  hard: [
+    31→    { text: "Whadya think about that whole situation?", ipa: "/ˈwɑːdʒə θɪŋk əˈbaʊt ðæt hoʊl sɪtʃuˈeɪʃən/", issues: ["Whadya", "situation", "that"] },
+    32→    { text: "I couldn't care less about the bureaucratic red tape", ipa: "/aɪ ˈkʊdnt kɛr lɛs əˈbaʊt ðə bjʊˈrɑːkrætɪk rɛd teɪp/", issues: ["couldn't", "bureaucratic", "the"] },
+    33→    { text: "She sells seashells by the seashore", ipa: "/ʃiː sɛlz ˈsiːʃɛlz baɪ ðə ˈsiːʃɔːr/", issues: ["seashells", "seashore", "the"] },
+    34→    { text: "Thirty-three thieves thought they thrilled the throne", ipa: "/ˈθɜːrɾiˈθriː θiːvz θɑːt ðeɪ θrɪld ðə θroʊn/", issues: ["Thirty-three", "thieves", "thought", "they", "thrilled", "the", "throne"] },
+    35→    { text: "You've gotta be kidding me right now honestly", ipa: "/juːv ˈɡɑːɾə biː ˈkɪɾɪŋ miː raɪt naʊ ˈɑːnɪstli/", issues: ["gotta", "honestly"] },
+    36→  ],
+    37→};
+    38→
+    39→const TIPS: Record<Difficulty, string[]> = {
+    40→  easy: [
+    41→    "Speak slowly and clearly — there is no rush",
+    42→    "Focus on the 'th' sound: put tongue between teeth",
+    43→    "Relax your jaw for better vowel sounds",
+    44→  ],
+    45→  medium: [
+    46→    "Link words together naturally: 'want to' → 'wanna'",
+    47→    "Stress the right syllable: to-MOR-row not TO-mor-row",
+    48→    "Reduce unstressed vowels to schwa /ə/",
+    49→  ],
+    50→  hard: [
+    51→    "Practice fast speech by starting slow then building up",
+    52→    "Use elision: drop sounds in fast natural speech",
+    53→    "Match the native speaker's rhythm, not just pronunciation",
+    54→  ],
+    55→};
+    56→
+    57→function PracticeContent() {
+    58→  const accent = useAppStore((s) => s.accent);
+    59→  const addSpeakingTime = useAppStore((s) => s.addSpeakingTime);
+    60→  const [diff, setDiff] = useState<Difficulty>("medium");
+    61→  const [phraseIdx, setPhraseIdx] = useState(0);
+    62→  const [speed, setSpeed] = useState<number>(1);
+    63→  const [step, setStep] = useState<"listen" | "speak" | "results">("listen");
+    64→  const [recording, setRecording] = useState(false);
+    65→  const [score, setScore] = useState<number | null>(null);
+    66→  // Track previous difficulty so we can reset the practice flow when it
+    67→  // changes — using the official "adjust state during render" pattern
+    68→  // instead of setState-in-effect (react-hooks/set-state-in-effect).
+    69→  const [prevDiff, setPrevDiff] = useState<Difficulty>(diff);
+    70→
+    71→  const phrases = PHRASES[diff];
+    72→  const phrase = phrases[phraseIdx];
+    73→  const tip = TIPS[diff][phraseIdx % TIPS[diff].length];
+    74→
+    75→  const nextPhrase = () => {
+    76→    setPhraseIdx((i) => (i + 1) % phrases.length);
+    77→    setStep("listen");
+    78→    setScore(null);
+    79→    setRecording(false);
+    80→  };
+    81→
+    82→  const handleSpeak = useCallback(() => {
+    83→    speak(phrase.text, { accent, rate: speed });
+    84→    setStep("speak");
+    85→  }, [phrase, accent, speed]);
+    86→
+    87→  const SPEED_PRESETS: { label: string; value: number }[] = [
+    88→    { label: "0.6×", value: 0.6 },
+    89→    { label: "0.75×", value: 0.75 },
+    90→    { label: "Normal", value: 1 },
+    91→    { label: "1.2×", value: 1.2 },
+    92→  ];
+    93→
+    94→  const handleRecord = () => {
+    95→    if (recording) {
+    96→      setRecording(false);
+    97→      const s = 65 + Math.floor(Math.random() * 30);
+    98→      setScore(s);
+    99→      setStep("results");
+   100→      addSpeakingTime(5);
+   101→    } else {
+   102→      setRecording(true);
+   103→      setTimeout(() => {
+   104→        setRecording(false);
+   105→        const s = 65 + Math.floor(Math.random() * 30);
+   106→        setScore(s);
+   107→        setStep("results");
+   108→        addSpeakingTime(5);
+   109→      }, 4000);
+   110→    }
+   111→  };
+   112→
+   113→  // Reset the practice flow when difficulty changes.
+   114→  // Official React pattern: adjust state during render based on a tracked
+   115→  // previous value (avoids setState-in-effect cascades).
+   116→  if (diff !== prevDiff) {
+   117→    setPrevDiff(diff);
+   118→    setStep("listen");
+   119→    setScore(null);
+   120→    setRecording(false);
+   121→  }
+   122→
+   123→  const stepLabels = ["Listen", "Speak", "Results"];
+   124→
+   125→  return (
+   126→    <>
+   127→      {/* Step flow */}
+   128→      <div className="flex items-center justify-between px-2">
+   129→        {stepLabels.map((lbl, i) => {
+   130→          const stepIdx = ["listen", "speak", "results"].indexOf(step);
+   131→          const isActive = i === stepIdx;
+   132→          const isDone = i < stepIdx;
+   133→          return (
+   134→            <div key={lbl} className="flex items-center flex-1 last:flex-none">
+   135→              <div className="flex flex-col items-center gap-1">
+   136→                <div
+   137→                  className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition ${
+   138→                    isActive
+   139→                      ? "bg-[var(--grad-btn)] text-white"
+   140→                      : isDone
+   141→                      ? "bg-[rgba(16,185,129,0.2)] text-[#10b981]"
+   142→                      : "bg-[var(--card)] text-[var(--t3)] border border-[var(--border)]"
+   143→                  }`}
+   144→                >
+   145→                  {isDone ? "✓" : i + 1}
+   146→                </div>
+   147→                <span className={`text-[10px] ${isActive ? "text-[var(--p3)] font-bold" : "text-[var(--t3)]"}`}>
+   148→                  {lbl}
+   149→                </span>
+   150→              </div>
+   151→              {i < 2 && (
+   152→                <div className="flex-1 h-0.5 mx-2 bg-[var(--border)] relative overflow-hidden">
+   153→                  {i < stepIdx && (
+   154→                    <motion.div
+   155→                      className="absolute inset-0 bg-[#10b981]"
+   156→                      initial={{ width: 0 }}
+   157→                      animate={{ width: "100%" }}
+   158→                    />
+   159→                  )}
+   160→                </div>
+   161→              )}
+   162→            </div>
+   163→          );
+   164→        })}
+   165→      </div>
+   166→
+   167→      {/* Phrase card */}
+   168→      <div className={`rounded-2xl p-5 bg-[rgba(99,102,241,0.06)] border border-[var(--border)] ${step === "listen" ? "animate-border-pulse" : ""}`}>
+   169→        <div className="text-[10px] uppercase tracking-wider text-[var(--t3)] font-mono mb-2">
+   170→          {accent === "usa" ? "🇺🇸" : "🇬🇧"} {accent.toUpperCase()} · {diff}
+   171→        </div>
+   172→        <div className="font-d text-xl text-[var(--t1)] mb-2">{phrase.text}</div>
+   173→        <div className="font-mono text-sm text-[var(--t3)] mb-4">{phrase.ipa}</div>
+   174→
+   175→        {/* Speed control — segmented slider */}
+   176→        <div className="mb-4">
+   177→          <div className="flex items-center justify-between mb-1.5">
+   178→            <span className="text-xs text-[var(--t3)] font-mono uppercase tracking-wider">Speed</span>
+   179→            <span className="text-[10px] font-mono font-bold text-[var(--p3)]">
+   180→              {speed < 1 ? `${speed}× slower` : speed > 1 ? `${speed}× faster` : "Native"}
+   181→            </span>
+   182→          </div>
+   183→          <div className="flex p-0.5 rounded-lg bg-[var(--bg2)] border border-[var(--border)]">
+   184→            {SPEED_PRESETS.map((p) => (
+   185→              <button
+   186→                key={p.value}
+   187→                onClick={() => setSpeed(p.value)}
+   188→                className={`relative flex-1 py-1.5 rounded-md text-[11px] font-semibold transition ${
+   189→                  speed === p.value ? "text-white" : "text-[var(--t3)] hover:text-[var(--t2)]"
+   190→                }`}
+   191→              >
+   192→                {speed === p.value && (
+   193→                  <motion.div
+   194→                    layoutId="speed-pill"
+   195→                    className="absolute inset-0 rounded-md bg-[var(--grad-btn)]"
+   196→                    style={{ boxShadow: "0 0 10px rgba(99,102,241,0.35)" }}
+   197→                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+   198→                  />
+   199→                )}
+   200→                <span className="relative">{p.label}</span>
+   201→              </button>
+   202→            ))}
+   203→          </div>
+   204→        </div>
+   205→
+   206→        {/* Listen button */}
+   207→        <button
+   208→          onClick={handleSpeak}
+   209→          className="w-full py-3 rounded-xl bg-[var(--grad-btn)] text-white font-semibold text-sm flex items-center justify-center gap-2 hover:opacity-90 transition mb-3"
+   210→        >
+   211→          <span className="text-lg">▶</span> Play Native Audio
+   212→        </button>
+   213→
+   214→        {/* Mic + waveform */}
+   215→        <div className="rounded-xl overflow-hidden border border-[var(--border)] bg-[var(--bg2)] mb-3">
+   216→          <MicWaveform height={80} active={recording} />
+   217→        </div>
+   218→
+   219→        <button
+   220→          onClick={handleRecord}
+   221→          className={`w-full py-3 rounded-xl text-white font-semibold text-sm flex items-center justify-center gap-2 transition ${recording ? "animate-red-pulse" : ""}`}
+   222→          style={{
+   223→            background: recording
+   224→              ? "radial-gradient(circle, #ef4444, #dc2626)"
+   225→              : "var(--card-h)",
+   226→            border: recording ? "none" : "1px solid var(--border2)",
+   227→          }}
+   228→        >
+   229→          {recording ? "■ Stop Recording" : "🎙 Record Yourself"}
+   230→        </button>
+   231→
+   232→        {score !== null && (
+   233→          <motion.div
+   234→            initial={{ opacity: 0, scale: 0.5 }}
+   235→            animate={{ opacity: 1, scale: 1 }}
+   236→            transition={{ type: "spring", stiffness: 300, damping: 15 }}
+   237→            className="mt-3 rounded-xl p-4 text-center bg-[rgba(16,185,129,0.1)] border border-[rgba(16,185,129,0.3)] relative overflow-hidden"
+   238→          >
+   239→            {/* Celebration particles when score >= 80 */}
+   240→            {score >= 80 && (
+   241→              <>
+   242→                {[...Array(8)].map((_, pi) => (
+   243→                  <motion.div
+   244→                    key={pi}
+   245→                    className="absolute w-1.5 h-1.5 rounded-full"
+   246→                    style={{
+   247→                      background: ["#f59e0b", "#22d3ee", "#a78bfa", "#10b981", "#6366f1", "#ef4444", "#8b5cf6", "#67e8f9"][pi],
+   248→                      top: "50%",
+   249→                      left: "50%",
+   250→                    }}
+   251→                    initial={{ x: 0, y: 0, opacity: 1, scale: 1 }}
+   252→                    animate={{
+   253→                      x: [0, (Math.cos((pi / 8) * Math.PI * 2) * 60)],
+   254→                      y: [0, (Math.sin((pi / 8) * Math.PI * 2) * 40)],
+   255→                      opacity: [1, 0],
+   256→                      scale: [1, 0.5],
+   257→                    }}
+   258→                    transition={{ duration: 0.8, ease: "easeOut" }}
+   259→                  />
+   260→                ))}
+   261→              </>
+   262→            )}
+   263→            <motion.div
+   264→              animate={score >= 80 ? { scale: [1, 1.15, 1] } : {}}
+   265→              transition={{ duration: 0.4, ease: "easeOut" }}
+   266→            >
+   267→              <div className="font-d text-2xl font-bold text-[#10b981]">{score}%</div>
+   268→            </motion.div>
+   269→            <div className="text-xs text-[var(--t2)] mt-1">
+   270→              {score >= 80 ? "Excellent! Native-like." : score >= 70 ? "Good job — keep practicing." : "Keep going, you'll get there!"}
+   271→            </div>
+   272→            {phrase.issues.length > 0 && (
+   273→              <div className="mt-2 text-[10px] text-[var(--t3)]">
+   274→                Watch: {phrase.issues.join(", ")}
+   275→              </div>
+   276→            )}
+   277→          </motion.div>
+   278→        )}
+   279→
+   280→        {/* Tip */}
+   281→        <div className="mt-3 rounded-xl p-3 bg-[rgba(245,158,11,0.08)] border border-[rgba(245,158,11,0.25)] text-xs text-[var(--t2)]">
+   282→          <strong className="text-[#f59e0b]">💡 Tip:</strong> {tip}
+   283→        </div>
+   284→
+   285→        {/* Next phrase */}
+   286→        <button
+   287→          onClick={nextPhrase}
+   288→          className="mt-3 w-full py-2.5 rounded-xl bg-[var(--card-h)] border border-[var(--border)] text-xs font-semibold text-[var(--t2)] hover:bg-[var(--card)] transition"
+   289→        >
+   290→          → Next Phrase
+   291→        </button>
+   292→      </div>
+   293→    </>
+   294→  );
+   295→}
+   296→
+   297→export function PracticeView() {
+   298→  const [mode, setMode] = useState<PracticeMode>("medium");
+   299→
+   300→  const TABS: {
+   301→    id: PracticeMode;
+   302→    label: string;
+   303→    icon?: React.ReactNode;
+   304→    isChallenge?: boolean;
+   305→    isDrill?: boolean;
+   306→  }[] = [
+   307→    { id: "easy", label: "Easy" },
+   308→    { id: "medium", label: "Medium" },
+   309→    { id: "hard", label: "Hard" },
+   310→    {
+   311→      id: "phoneme-drill",
+   312→      label: "Drill",
+   313→      icon: <Target className="w-3 h-3" />,
+   314→      isDrill: true,
+   315→    },
+   316→    {
+   317→      id: "challenge",
+   318→      label: "Challenge",
+   319→      icon: <Zap className="w-3 h-3" />,
+   320→      isChallenge: true,
+   321→    },
+   322→  ];
+   323→
+   324→  return (
+   325→    <div className="space-y-5">
+   326→      <div className="text-center">
+   327→        <h1 className="font-d text-3xl font-bold mb-1">
+   328→          Infinite <span className="grad-text">Practice</span>
+   329→        </h1>
+   330→        <p className="text-sm text-[var(--t2)]">
+   331→          {mode === "challenge"
+   332→            ? "Timed drills with combo multipliers"
+   333→            : mode === "phoneme-drill"
+   334→            ? "Targeted practice for stubborn sounds"
+   335→            : "Listen to the native speaker, then record yourself"}
+   336→        </p>
+   337→      </div>
+   338→
+   339→      {/* Mode toggle — Easy / Medium / Hard / 🎯 Drill / ⚡ Challenge */}
+   340→      <div className="flex p-1 rounded-xl bg-[var(--card)] border border-[var(--border)]">
+   341→        {TABS.map((t) => (
+   342→          <button
+   343→            key={t.id}
+   344→            onClick={() => setMode(t.id)}
+   345→            className={`relative flex-1 py-2 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1 ${
+   346→              mode === t.id
+   347→                ? "text-white"
+   348→                : t.isChallenge
+   349→                ? "text-[#f59e0b]"
+   350→                : t.isDrill
+   351→                ? "text-[var(--c)]"
+   352→                : "text-[var(--t2)]"
+   353→            }`}
+   354→          >
+   355→            {mode === t.id && (
+   356→              <motion.div
+   357→                layoutId="diff-pill"
+   358→                className="absolute inset-0 rounded-lg"
+   359→                style={{
+   360→                  background: t.isChallenge
+   361→                    ? "linear-gradient(135deg, #f59e0b, #f97316)"
+   362→                    : t.isDrill
+   363→                    ? "linear-gradient(135deg, #22d3ee, #6366f1)"
+   364→                    : "var(--grad-btn)",
+   365→                  boxShadow: t.isChallenge
+   366→                    ? "0 0 16px rgba(245,158,11,0.4)"
+   367→                    : t.isDrill
+   368→                    ? "0 0 16px rgba(34,211,238,0.4)"
+   369→                    : "0 0 16px rgba(99,102,241,0.4)",
+   370→                }}
+   371→                transition={{ type: "spring", stiffness: 400, damping: 30 }}
+   372→              />
+   373→            )}
+   374→            <span className="relative flex items-center gap-1">
+   375→              {t.icon}
+   376→              {t.label}
+   377→            </span>
+   378→          </button>
+   379→        ))}
+   380→      </div>
+   381→
+   382→      {/* Content */}
+   383→      <AnimatePresence mode="wait">
+   384→        {mode === "challenge" ? (
+   385→          <motion.div
+   386→            key="challenge"
+   387→            initial={{ opacity: 0, y: 10 }}
+   388→            animate={{ opacity: 1, y: 0 }}
+   389→            exit={{ opacity: 0, y: -10 }}
+   390→            transition={{ duration: 0.2 }}
+   391→          >
+   392→            <PronunciationChallenge />
+   393→          </motion.div>
+   394→        ) : mode === "phoneme-drill" ? (
+   395→          <motion.div
+   396→            key="phoneme-drill"
+   397→            initial={{ opacity: 0, y: 10 }}
+   398→            animate={{ opacity: 1, y: 0 }}
+   399→            exit={{ opacity: 0, y: -10 }}
+   400→            transition={{ duration: 0.2 }}
+   401→          >
+   402→            <PhonemeDrill />
+   403→          </motion.div>
+   404→        ) : (
+   405→          <motion.div
+   406→            key={`practice-${mode}`}
+   407→            initial={{ opacity: 0, y: 10 }}
+   408→            animate={{ opacity: 1, y: 0 }}
+   409→            exit={{ opacity: 0, y: -10 }}
+   410→            transition={{ duration: 0.2 }}
+   411→            className="space-y-5"
+   412→          >
+   413→            <PracticeContentWithDiff diff={mode as Difficulty} />
+   414→          </motion.div>
+   415→        )}
+   416→      </AnimatePresence>
+   417→    </div>
+   418→  );
+   419→}
+   420→
+   421→// Wrapper that injects difficulty into PracticeContent
+   422→function PracticeContentWithDiff({ diff: initialDiff }: { diff: Difficulty }) {
+   423→  const accent = useAppStore((s) => s.accent);
+   424→  const addSpeakingTime = useAppStore((s) => s.addSpeakingTime);
+   425→  const [diff, setDiff] = useState<Difficulty>(initialDiff);
+   426→  const [phraseIdx, setPhraseIdx] = useState(0);
+   427→  const [speed, setSpeed] = useState<number>(1);
+   428→  const [step, setStep] = useState<"listen" | "speak" | "results">("listen");
+   429→  const [recording, setRecording] = useState(false);
+   430→  const [score, setScore] = useState<number | null>(null);
+   431→  const [prevDiff, setPrevDiff] = useState<Difficulty>(diff);
+   432→
+   433→  const phrases = PHRASES[diff];
+   434→  const phrase = phrases[phraseIdx];
+   435→  const tip = TIPS[diff][phraseIdx % TIPS[diff].length];
+   436→
+   437→  // Reset when initial diff changes (from parent tab)
+   438→  if (initialDiff !== diff) {
+   439→    setDiff(initialDiff);
+   440→    setStep("listen");
+   441→    setScore(null);
+   442→    setRecording(false);
+   443→    setPhraseIdx(0);
+   444→  }
+   445→
+   446→  // Reset when internal diff changes
+   447→  if (diff !== prevDiff) {
+   448→    setPrevDiff(diff);
+   449→    setStep("listen");
+   450→    setScore(null);
+   451→    setRecording(false);
+   452→  }
+   453→
+   454→  const nextPhrase = () => {
+   455→    setPhraseIdx((i) => (i + 1) % phrases.length);
+   456→    setStep("listen");
+   457→    setScore(null);
+   458→    setRecording(false);
+   459→  };
+   460→
+   461→  const handleSpeak = useCallback(() => {
+   462→    speak(phrase.text, { accent, rate: speed });
+   463→    setStep("speak");
+   464→  }, [phrase, accent, speed]);
+   465→
+   466→  const SPEED_PRESETS: { label: string; value: number }[] = [
+   467→    { label: "0.6×", value: 0.6 },
+   468→    { label: "0.75×", value: 0.75 },
+   469→    { label: "Normal", value: 1 },
+   470→    { label: "1.2×", value: 1.2 },
+   471→  ];
+   472→
+   473→  const handleRecord = () => {
+   474→    if (recording) {
+   475→      setRecording(false);
+   476→      const s = 65 + Math.floor(Math.random() * 30);
+   477→      setScore(s);
+   478→      setStep("results");
+   479→      addSpeakingTime(5);
+   480→    } else {
+   481→      setRecording(true);
+   482→      setTimeout(() => {
+   483→        setRecording(false);
+   484→        const s = 65 + Math.floor(Math.random() * 30);
+   485→        setScore(s);
+   486→        setStep("results");
+   487→        addSpeakingTime(5);
+   488→      }, 4000);
+   489→    }
+   490→  };
+   491→
+   492→  const stepLabels = ["Listen", "Speak", "Results"];
+   493→
+   494→  return (
+   495→    <>
+   496→      {/* Step flow */}
+   497→      <div className="flex items-center justify-between px-2">
+   498→        {stepLabels.map((lbl, i) => {
+   499→          const stepIdx = ["listen", "speak", "results"].indexOf(step);
+   500→          const isActive = i === stepIdx;
+   501→          const isDone = i < stepIdx;
+   502→          return (
+   503→            <div key={lbl} className="flex items-center flex-1 last:flex-none">
+   504→              <div className="flex flex-col items-center gap-1">
+   505→                <div
+   506→                  className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition ${
+   507→                    isActive
+   508→                      ? "bg-[var(--grad-btn)] text-white"
+   509→                      : isDone
+   510→                      ? "bg-[rgba(16,185,129,0.2)] text-[#10b981]"
+   511→                      : "bg-[var(--card)] text-[var(--t3)] border border-[var(--border)]"
+   512→                  }`}
+   513→                >
+   514→                  {isDone ? "✓" : i + 1}
+   515→                </div>
+   516→                <span className={`text-[10px] ${isActive ? "text-[var(--p3)] font-bold" : "text-[var(--t3)]"}`}>
+   517→                  {lbl}
+   518→                </span>
+   519→              </div>
+   520→              {i < 2 && (
+   521→                <div className="flex-1 h-0.5 mx-2 bg-[var(--border)] relative overflow-hidden">
+   522→                  {i < stepIdx && (
+   523→                    <motion.div
+   524→                      className="absolute inset-0 bg-[#10b981]"
+   525→                      initial={{ width: 0 }}
+   526→                      animate={{ width: "100%" }}
+   527→                    />
+   528→                  )}
+   529→                </div>
+   530→              )}
+   531→            </div>
+   532→          );
+   533→        })}
+   534→      </div>
+   535→
+   536→      {/* Phrase card */}
+   537→      <div className={`rounded-2xl p-5 bg-[rgba(99,102,241,0.06)] border border-[var(--border)] ${step === "listen" ? "animate-border-pulse" : ""}`}>
+   538→        <div className="text-[10px] uppercase tracking-wider text-[var(--t3)] font-mono mb-2">
+   539→          {accent === "usa" ? "🇺🇸" : "🇬🇧"} {accent.toUpperCase()} · {diff}
+   540→        </div>
+   541→        <div className="font-d text-xl text-[var(--t1)] mb-2">{phrase.text}</div>
+   542→        <div className="font-mono text-sm text-[var(--t3)] mb-4">{phrase.ipa}</div>
+   543→
+   544→        {/* Speed control */}
+   545→        <div className="mb-4">
+   546→          <div className="flex items-center justify-between mb-1.5">
+   547→            <span className="text-xs text-[var(--t3)] font-mono uppercase tracking-wider">Speed</span>
+   548→            <span className="text-[10px] font-mono font-bold text-[var(--p3)]">
+   549→              {speed < 1 ? `${speed}× slower` : speed > 1 ? `${speed}× faster` : "Native"}
+   550→            </span>
+   551→          </div>
+   552→          <div className="flex p-0.5 rounded-lg bg-[var(--bg2)] border border-[var(--border)]">
+   553→            {SPEED_PRESETS.map((p) => (
+   554→              <button
+   555→                key={p.value}
+   556→                onClick={() => setSpeed(p.value)}
+   557→                className={`relative flex-1 py-1.5 rounded-md text-[11px] font-semibold transition ${
+   558→                  speed === p.value ? "text-white" : "text-[var(--t3)] hover:text-[var(--t2)]"
+   559→                }`}
+   560→              >
+   561→                {speed === p.value && (
+   562→                  <motion.div
+   563→                    layoutId="speed-pill"
+   564→                    className="absolute inset-0 rounded-md bg-[var(--grad-btn)]"
+   565→                    style={{ boxShadow: "0 0 10px rgba(99,102,241,0.35)" }}
+   566→                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+   567→                  />
+   568→                )}
+   569→                <span className="relative">{p.label}</span>
+   570→              </button>
+   571→            ))}
+   572→          </div>
+   573→        </div>
+   574→
+   575→        {/* Listen button */}
+   576→        <button
+   577→          onClick={handleSpeak}
+   578→          className="w-full py-3 rounded-xl bg-[var(--grad-btn)] text-white font-semibold text-sm flex items-center justify-center gap-2 hover:opacity-90 transition mb-3"
+   579→        >
+   580→          <span className="text-lg">▶</span> Play Native Audio
+   581→        </button>
+   582→
+   583→        {/* Mic + waveform */}
+   584→        <div className="rounded-xl overflow-hidden border border-[var(--border)] bg-[var(--bg2)] mb-3">
+   585→          <MicWaveform height={80} active={recording} />
+   586→        </div>
+   587→
+   588→        <button
+   589→          onClick={handleRecord}
+   590→          className={`w-full py-3 rounded-xl text-white font-semibold text-sm flex items-center justify-center gap-2 transition ${recording ? "animate-red-pulse" : ""}`}
+   591→          style={{
+   592→            background: recording
+   593→              ? "radial-gradient(circle, #ef4444, #dc2626)"
+   594→              : "var(--card-h)",
+   595→            border: recording ? "none" : "1px solid var(--border2)",
+   596→          }}
+   597→        >
+   598→          {recording ? "■ Stop Recording" : "🎙 Record Yourself"}
+   599→        </button>
+   600→
+   601→        {score !== null && (
+   602→          <motion.div
+   603→            initial={{ opacity: 0, scale: 0.5 }}
+   604→            animate={{ opacity: 1, scale: 1 }}
+   605→            transition={{ type: "spring", stiffness: 300, damping: 15 }}
+   606→            className="mt-3 rounded-2xl p-5 text-center relative overflow-hidden"
+   607→            style={{
+   608→              background: score >= 80
+   609→                ? "linear-gradient(135deg, rgba(16,185,129,0.12), rgba(34,211,238,0.08))"
+   610→                : score >= 70
+   611→                ? "linear-gradient(135deg, rgba(245,158,11,0.12), rgba(251,191,36,0.08))"
+   612→                : "linear-gradient(135deg, rgba(239,68,68,0.1), rgba(245,158,11,0.08))",
+   613→              border: `1px solid ${score >= 80 ? "rgba(16,185,129,0.35)" : score >= 70 ? "rgba(245,158,11,0.35)" : "rgba(239,68,68,0.35)"}`,
+   614→            }}
+   615→          >
+   616→            {/* Celebration particles when score >= 80 */}
+   617→            {score >= 80 && (
+   618→              <>
+   619→                {[...Array(8)].map((_, pi) => (
+   620→                  <motion.div
+   621→                    key={pi}
+   622→                    className="absolute w-2 h-2 rounded-full"
+   623→                    style={{
+   624→                      background: ["#f59e0b", "#22d3ee", "#a78bfa", "#10b981", "#6366f1", "#ef4444", "#8b5cf6", "#67e8f9"][pi],
+   625→                      top: "50%",
+   626→                      left: "50%",
+   627→                    }}
+   628→                    initial={{ x: 0, y: 0, opacity: 1, scale: 1 }}
+   629→                    animate={{
+   630→                      x: [0, (Math.cos((pi / 8) * Math.PI * 2) * 70)],
+   631→                      y: [0, (Math.sin((pi / 8) * Math.PI * 2) * 45)],
+   632→                      opacity: [1, 0],
+   633→                      scale: [1, 0.3],
+   634→                    }}
+   635→                    transition={{ duration: 1, ease: "easeOut" }}
+   636→                  />
+   637→                ))}
+   638→              </>
+   639→            )}
+   640→
+   641→            {/* Score ring */}
+   642→            <div className="flex items-center justify-center mb-3">
+   643→              <div className="relative w-24 h-24">
+   644→                <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+   645→                  <circle cx="50" cy="50" r="42" fill="none" stroke="var(--overlay-1)" strokeWidth="6" />
+   646→                  <motion.circle
+   647→                    cx="50" cy="50" r="42" fill="none"
+   648→                    stroke={score >= 80 ? "#10b981" : score >= 70 ? "#f59e0b" : "#ef4444"}
+   649→                    strokeWidth="6"
+   650→                    strokeLinecap="round"
+   651→                    strokeDasharray={`${2 * Math.PI * 42}`}
+   652→                    initial={{ strokeDashoffset: 2 * Math.PI * 42 }}
+   653→                    animate={{ strokeDashoffset: 2 * Math.PI * 42 * (1 - score / 100) }}
+   654→                    transition={{ duration: 1, ease: "easeOut" }}
+   655→                    style={{ filter: `drop-shadow(0 0 6px ${score >= 80 ? "#10b98188" : score >= 70 ? "#f59e0b88" : "#ef444488"})` }}
+   656→                  />
+   657→                </svg>
+   658→                <div className="absolute inset-0 flex items-center justify-center">
+   659→                  <motion.div
+   660→                    initial={{ scale: 0 }}
+   661→                    animate={{ scale: 1, ...(score >= 80 ? { scale: [0, 1.2, 1] } : {}) }}
+   662→                    transition={{ type: "spring", stiffness: 300, damping: 15, delay: 0.3 }}
+   663→                  >
+   664→                    <span className="font-d text-2xl font-bold" style={{ color: score >= 80 ? "#10b981" : score >= 70 ? "#f59e0b" : "#ef4444" }}>
+   665→                      {score}%
+   666→                    </span>
+   667→                  </motion.div>
+   668→                </div>
+   669→              </div>
+   670→            </div>
+   671→
+   672→            <div className="text-sm font-semibold text-[var(--t1)]">
+   673→              {score >= 80 ? "🎉 Excellent! Native-like." : score >= 70 ? "👍 Good job — keep practicing." : "💪 Keep going, you'll get there!"}
+   674→            </div>
+   675→            {phrase.issues.length > 0 && (
+   676→              <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
+   677→                <span className="text-[10px] text-[var(--t3)]">Watch:</span>
+   678→                {phrase.issues.map((issue, ii) => (
+   679→                  <span key={ii} className="text-[10px] px-2 py-0.5 rounded-full bg-[rgba(239,68,68,0.12)] border border-[rgba(239,68,68,0.25)] text-[#f87171] font-mono">
+   680→                    {issue}
+   681→                  </span>
+   682→                ))}
+   683→              </div>
+   684→            )}
+   685→          </motion.div>
+   686→        )}
+   687→
+   688→        {/* Tip */}
+   689→        <div className="mt-3 rounded-xl p-3 bg-[rgba(245,158,11,0.08)] border border-[rgba(245,158,11,0.25)] text-xs text-[var(--t2)] relative overflow-hidden">
+   690→          <div className="absolute inset-0 pointer-events-none">
+   691→            <motion.div
+   692→              className="absolute inset-y-0 w-1/4"
+   693→              style={{ background: "linear-gradient(90deg, transparent, rgba(245,158,11,0.08), transparent)" }}
+   694→              animate={{ x: ["-100%", "400%"] }}
+   695→              transition={{ duration: 3, repeat: Infinity, repeatDelay: 5, ease: "easeInOut" }}
+   696→            />
+   697→          </div>
+   698→          <strong className="text-[#f59e0b]">💡 Tip:</strong> {tip}
+   699→        </div>
+   700→
+   701→        {/* Next phrase */}
+   702→        <motion.button
+   703→          whileHover={{ scale: 1.02 }}
+   704→          whileTap={{ scale: 0.98 }}
+   705→          onClick={nextPhrase}
+   706→          className="mt-3 w-full py-2.5 rounded-xl bg-[var(--card-h)] border border-[var(--border)] text-xs font-semibold text-[var(--t2)] hover:bg-[var(--card)] transition flex items-center justify-center gap-2"
+   707→        >
+   708→          → Next Phrase
+   709→        </motion.button>
+   710→      </div>
+   711→    </>
+   712→  );
+   713→}
+   714→

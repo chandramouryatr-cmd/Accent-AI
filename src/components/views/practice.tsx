@@ -2,12 +2,13 @@
 
 import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Zap, Target } from "lucide-react";
+import { Zap, Target, Piano, Volume2 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { speak } from "@/lib/tts";
 import { MicWaveform } from "@/components/widgets/mic-waveform";
 import { PronunciationChallenge } from "@/components/widgets/pronunciation-challenge";
 import { PhonemeDrill } from "@/components/widgets/phoneme-drill";
+import { PhonemeKeyboard } from "@/components/widgets/phoneme-keyboard";
 
 type Difficulty = "easy" | "medium" | "hard";
 type PracticeMode = "easy" | "medium" | "hard" | "challenge" | "phoneme-drill";
@@ -429,6 +430,7 @@ function PracticeContentWithDiff({ diff: initialDiff }: { diff: Difficulty }) {
   const [recording, setRecording] = useState(false);
   const [score, setScore] = useState<number | null>(null);
   const [prevDiff, setPrevDiff] = useState<Difficulty>(diff);
+  const [showPhonemes, setShowPhonemes] = useState(false);
 
   const phrases = PHRASES[diff];
   const phrase = phrases[phraseIdx];
@@ -539,7 +541,46 @@ function PracticeContentWithDiff({ diff: initialDiff }: { diff: Difficulty }) {
           {accent === "usa" ? "🇺🇸" : "🇬🇧"} {accent.toUpperCase()} · {diff}
         </div>
         <div className="font-d text-xl text-[var(--t1)] mb-2">{phrase.text}</div>
-        <div className="font-mono text-sm text-[var(--t3)] mb-4">{phrase.ipa}</div>
+        <div className="font-mono text-sm text-[var(--t3)] mb-2">{phrase.ipa}</div>
+
+        {/* Phoneme keyboard toggle */}
+        <motion.button
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.97 }}
+          onClick={() => setShowPhonemes((v) => !v)}
+          className="w-full mb-3 py-2 rounded-xl flex items-center justify-center gap-2 text-xs font-semibold transition"
+          style={{
+            background: showPhonemes
+              ? "linear-gradient(135deg, rgba(99,102,241,0.15), rgba(34,211,238,0.12))"
+              : "var(--card-h)",
+            border: showPhonemes
+              ? "1px solid rgba(99,102,241,0.3)"
+              : "1px solid var(--border)",
+            color: showPhonemes ? "var(--p3)" : "var(--t3)",
+            boxShadow: showPhonemes ? "0 0 12px rgba(99,102,241,0.2)" : "none",
+          }}
+          aria-label={showPhonemes ? "Hide phoneme keyboard" : "Show phoneme keyboard"}
+          aria-expanded={showPhonemes}
+        >
+          <Piano className="w-3.5 h-3.5" />
+          <span>Phonemes</span>
+          <Volume2 className="w-3 h-3 opacity-50" />
+        </motion.button>
+
+        {/* Phoneme keyboard */}
+        <AnimatePresence>
+          {showPhonemes && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.25, ease: "easeInOut" }}
+              className="overflow-hidden mb-3"
+            >
+              <PhonemeKeyboard />
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Speed control */}
         <div className="mb-4">

@@ -1,0 +1,714 @@
+     1→     1→"use client";
+     2→     2→
+     3→     3→import { useState, useCallback } from "react";
+     4→     4→import { motion, AnimatePresence } from "framer-motion";
+     5→     5→import { Zap, Target } from "lucide-react";
+     6→     6→import { useAppStore } from "@/lib/store";
+     7→     7→import { speak } from "@/lib/tts";
+     8→     8→import { MicWaveform } from "@/components/widgets/mic-waveform";
+     9→     9→import { PronunciationChallenge } from "@/components/widgets/pronunciation-challenge";
+    10→    10→import { PhonemeDrill } from "@/components/widgets/phoneme-drill";
+    11→    11→
+    12→    12→type Difficulty = "easy" | "medium" | "hard";
+    13→    13→type PracticeMode = "easy" | "medium" | "hard" | "challenge" | "phoneme-drill";
+    14→    14→
+    15→    15→const PHRASES: Record<Difficulty, { text: string; ipa: string; issues: string[] }[]> = {
+    16→    16→  easy: [
+    17→    17→    { text: "The weather is nice today", ipa: "/ðə ˈwɛðər ɪz naɪs təˈdeɪ/", issues: ["the", "weather"] },
+    18→    18→    { text: "How are you doing?", ipa: "/haʊ ɑːr juː ˈduːɪŋ/", issues: [] },
+    19→    19→    { text: "I would like some coffee please", ipa: "/aɪ wʊd laɪk sʌm ˈkɑːfi pliːz/", issues: ["would"] },
+    20→    20→    { text: "Have a great day!", ipa: "/hæv ə ɡreɪt deɪ/", issues: [] },
+    21→    21→    { text: "Can you help me find this?", ipa: "/kæn juː hɛlp miː faɪnd ðɪs/", issues: ["this"] },
+    22→    22→  ],
+    23→    23→  medium: [
+    24→    24→    { text: "I've been thinking about what you said", ipa: "/aɪv bɪn ˈθɪŋkɪŋ əˈbaʊt wɑːt juː sɛd/", issues: ["thinking", "what"] },
+    25→    25→    { text: "Can we schedule a meeting for tomorrow?", ipa: "/kæn wiː ˈskɛdʒuːl ə ˈmiːɾɪŋ fər təˈmɑːroʊ/", issues: ["schedule", "tomorrow"] },
+    26→    26→    { text: "The project deadline is approaching quickly", ipa: "/ðə ˈprɑːdʒɛkt ˈdɛdlaɪn ɪz əˈproʊtʃɪŋ ˈkwɪkli/", issues: ["deadline", "approaching"] },
+    27→    27→    { text: "Would you mind repeating that for me?", ipa: "/wʊd juː maɪnd rɪˈpiːɾɪŋ ðæt fər miː/", issues: ["repeating", "that"] },
+    28→    28→    { text: "I'm really looking forward to seeing you", ipa: "/aɪm ˈrɪəli ˈlʊkɪŋ ˈfɔːrwərd tə ˈsiːɪŋ juː/", issues: ["forward", "really"] },
+    29→    29→  ],
+    30→    30→  hard: [
+    31→    31→    { text: "Whadya think about that whole situation?", ipa: "/ˈwɑːdʒə θɪŋk əˈbaʊt ðæt hoʊl sɪtʃuˈeɪʃən/", issues: ["Whadya", "situation", "that"] },
+    32→    32→    { text: "I couldn't care less about the bureaucratic red tape", ipa: "/aɪ ˈkʊdnt kɛr lɛs əˈbaʊt ðə bjʊˈrɑːkrætɪk rɛd teɪp/", issues: ["couldn't", "bureaucratic", "the"] },
+    33→    33→    { text: "She sells seashells by the seashore", ipa: "/ʃiː sɛlz ˈsiːʃɛlz baɪ ðə ˈsiːʃɔːr/", issues: ["seashells", "seashore", "the"] },
+    34→    34→    { text: "Thirty-three thieves thought they thrilled the throne", ipa: "/ˈθɜːrɾiˈθriː θiːvz θɑːt ðeɪ θrɪld ðə θroʊn/", issues: ["Thirty-three", "thieves", "thought", "they", "thrilled", "the", "throne"] },
+    35→    35→    { text: "You've gotta be kidding me right now honestly", ipa: "/juːv ˈɡɑːɾə biː ˈkɪɾɪŋ miː raɪt naʊ ˈɑːnɪstli/", issues: ["gotta", "honestly"] },
+    36→    36→  ],
+    37→    37→};
+    38→    38→
+    39→    39→const TIPS: Record<Difficulty, string[]> = {
+    40→    40→  easy: [
+    41→    41→    "Speak slowly and clearly — there is no rush",
+    42→    42→    "Focus on the 'th' sound: put tongue between teeth",
+    43→    43→    "Relax your jaw for better vowel sounds",
+    44→    44→  ],
+    45→    45→  medium: [
+    46→    46→    "Link words together naturally: 'want to' → 'wanna'",
+    47→    47→    "Stress the right syllable: to-MOR-row not TO-mor-row",
+    48→    48→    "Reduce unstressed vowels to schwa /ə/",
+    49→    49→  ],
+    50→    50→  hard: [
+    51→    51→    "Practice fast speech by starting slow then building up",
+    52→    52→    "Use elision: drop sounds in fast natural speech",
+    53→    53→    "Match the native speaker's rhythm, not just pronunciation",
+    54→    54→  ],
+    55→    55→};
+    56→    56→
+    57→    57→function PracticeContent() {
+    58→    58→  const accent = useAppStore((s) => s.accent);
+    59→    59→  const addSpeakingTime = useAppStore((s) => s.addSpeakingTime);
+    60→    60→  const [diff, setDiff] = useState<Difficulty>("medium");
+    61→    61→  const [phraseIdx, setPhraseIdx] = useState(0);
+    62→    62→  const [speed, setSpeed] = useState<number>(1);
+    63→    63→  const [step, setStep] = useState<"listen" | "speak" | "results">("listen");
+    64→    64→  const [recording, setRecording] = useState(false);
+    65→    65→  const [score, setScore] = useState<number | null>(null);
+    66→    66→  // Track previous difficulty so we can reset the practice flow when it
+    67→    67→  // changes — using the official "adjust state during render" pattern
+    68→    68→  // instead of setState-in-effect (react-hooks/set-state-in-effect).
+    69→    69→  const [prevDiff, setPrevDiff] = useState<Difficulty>(diff);
+    70→    70→
+    71→    71→  const phrases = PHRASES[diff];
+    72→    72→  const phrase = phrases[phraseIdx];
+    73→    73→  const tip = TIPS[diff][phraseIdx % TIPS[diff].length];
+    74→    74→
+    75→    75→  const nextPhrase = () => {
+    76→    76→    setPhraseIdx((i) => (i + 1) % phrases.length);
+    77→    77→    setStep("listen");
+    78→    78→    setScore(null);
+    79→    79→    setRecording(false);
+    80→    80→  };
+    81→    81→
+    82→    82→  const handleSpeak = useCallback(() => {
+    83→    83→    speak(phrase.text, { accent, rate: speed });
+    84→    84→    setStep("speak");
+    85→    85→  }, [phrase, accent, speed]);
+    86→    86→
+    87→    87→  const SPEED_PRESETS: { label: string; value: number }[] = [
+    88→    88→    { label: "0.6×", value: 0.6 },
+    89→    89→    { label: "0.75×", value: 0.75 },
+    90→    90→    { label: "Normal", value: 1 },
+    91→    91→    { label: "1.2×", value: 1.2 },
+    92→    92→  ];
+    93→    93→
+    94→    94→  const handleRecord = () => {
+    95→    95→    if (recording) {
+    96→    96→      setRecording(false);
+    97→    97→      const s = 65 + Math.floor(Math.random() * 30);
+    98→    98→      setScore(s);
+    99→    99→      setStep("results");
+   100→   100→      addSpeakingTime(5);
+   101→   101→    } else {
+   102→   102→      setRecording(true);
+   103→   103→      setTimeout(() => {
+   104→   104→        setRecording(false);
+   105→   105→        const s = 65 + Math.floor(Math.random() * 30);
+   106→   106→        setScore(s);
+   107→   107→        setStep("results");
+   108→   108→        addSpeakingTime(5);
+   109→   109→      }, 4000);
+   110→   110→    }
+   111→   111→  };
+   112→   112→
+   113→   113→  // Reset the practice flow when difficulty changes.
+   114→   114→  // Official React pattern: adjust state during render based on a tracked
+   115→   115→  // previous value (avoids setState-in-effect cascades).
+   116→   116→  if (diff !== prevDiff) {
+   117→   117→    setPrevDiff(diff);
+   118→   118→    setStep("listen");
+   119→   119→    setScore(null);
+   120→   120→    setRecording(false);
+   121→   121→  }
+   122→   122→
+   123→   123→  const stepLabels = ["Listen", "Speak", "Results"];
+   124→   124→
+   125→   125→  return (
+   126→   126→    <>
+   127→   127→      {/* Step flow */}
+   128→   128→      <div className="flex items-center justify-between px-2">
+   129→   129→        {stepLabels.map((lbl, i) => {
+   130→   130→          const stepIdx = ["listen", "speak", "results"].indexOf(step);
+   131→   131→          const isActive = i === stepIdx;
+   132→   132→          const isDone = i < stepIdx;
+   133→   133→          return (
+   134→   134→            <div key={lbl} className="flex items-center flex-1 last:flex-none">
+   135→   135→              <div className="flex flex-col items-center gap-1">
+   136→   136→                <div
+   137→   137→                  className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition ${
+   138→   138→                    isActive
+   139→   139→                      ? "bg-[var(--grad-btn)] text-white"
+   140→   140→                      : isDone
+   141→   141→                      ? "bg-[rgba(16,185,129,0.2)] text-[#10b981]"
+   142→   142→                      : "bg-[var(--card)] text-[var(--t3)] border border-[var(--border)]"
+   143→   143→                  }`}
+   144→   144→                >
+   145→   145→                  {isDone ? "✓" : i + 1}
+   146→   146→                </div>
+   147→   147→                <span className={`text-[10px] ${isActive ? "text-[var(--p3)] font-bold" : "text-[var(--t3)]"}`}>
+   148→   148→                  {lbl}
+   149→   149→                </span>
+   150→   150→              </div>
+   151→   151→              {i < 2 && (
+   152→   152→                <div className="flex-1 h-0.5 mx-2 bg-[var(--border)] relative overflow-hidden">
+   153→   153→                  {i < stepIdx && (
+   154→   154→                    <motion.div
+   155→   155→                      className="absolute inset-0 bg-[#10b981]"
+   156→   156→                      initial={{ width: 0 }}
+   157→   157→                      animate={{ width: "100%" }}
+   158→   158→                    />
+   159→   159→                  )}
+   160→   160→                </div>
+   161→   161→              )}
+   162→   162→            </div>
+   163→   163→          );
+   164→   164→        })}
+   165→   165→      </div>
+   166→   166→
+   167→   167→      {/* Phrase card */}
+   168→   168→      <div className={`rounded-2xl p-5 bg-[rgba(99,102,241,0.06)] border border-[var(--border)] ${step === "listen" ? "animate-border-pulse" : ""}`}>
+   169→   169→        <div className="text-[10px] uppercase tracking-wider text-[var(--t3)] font-mono mb-2">
+   170→   170→          {accent === "usa" ? "🇺🇸" : "🇬🇧"} {accent.toUpperCase()} · {diff}
+   171→   171→        </div>
+   172→   172→        <div className="font-d text-xl text-[var(--t1)] mb-2">{phrase.text}</div>
+   173→   173→        <div className="font-mono text-sm text-[var(--t3)] mb-4">{phrase.ipa}</div>
+   174→   174→
+   175→   175→        {/* Speed control — segmented slider */}
+   176→   176→        <div className="mb-4">
+   177→   177→          <div className="flex items-center justify-between mb-1.5">
+   178→   178→            <span className="text-xs text-[var(--t3)] font-mono uppercase tracking-wider">Speed</span>
+   179→   179→            <span className="text-[10px] font-mono font-bold text-[var(--p3)]">
+   180→   180→              {speed < 1 ? `${speed}× slower` : speed > 1 ? `${speed}× faster` : "Native"}
+   181→   181→            </span>
+   182→   182→          </div>
+   183→   183→          <div className="flex p-0.5 rounded-lg bg-[var(--bg2)] border border-[var(--border)]">
+   184→   184→            {SPEED_PRESETS.map((p) => (
+   185→   185→              <button
+   186→   186→                key={p.value}
+   187→   187→                onClick={() => setSpeed(p.value)}
+   188→   188→                className={`relative flex-1 py-1.5 rounded-md text-[11px] font-semibold transition ${
+   189→   189→                  speed === p.value ? "text-white" : "text-[var(--t3)] hover:text-[var(--t2)]"
+   190→   190→                }`}
+   191→   191→              >
+   192→   192→                {speed === p.value && (
+   193→   193→                  <motion.div
+   194→   194→                    layoutId="speed-pill"
+   195→   195→                    className="absolute inset-0 rounded-md bg-[var(--grad-btn)]"
+   196→   196→                    style={{ boxShadow: "0 0 10px rgba(99,102,241,0.35)" }}
+   197→   197→                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+   198→   198→                  />
+   199→   199→                )}
+   200→   200→                <span className="relative">{p.label}</span>
+   201→   201→              </button>
+   202→   202→            ))}
+   203→   203→          </div>
+   204→   204→        </div>
+   205→   205→
+   206→   206→        {/* Listen button */}
+   207→   207→        <button
+   208→   208→          onClick={handleSpeak}
+   209→   209→          className="w-full py-3 rounded-xl bg-[var(--grad-btn)] text-white font-semibold text-sm flex items-center justify-center gap-2 hover:opacity-90 transition mb-3"
+   210→   210→        >
+   211→   211→          <span className="text-lg">▶</span> Play Native Audio
+   212→   212→        </button>
+   213→   213→
+   214→   214→        {/* Mic + waveform */}
+   215→   215→        <div className="rounded-xl overflow-hidden border border-[var(--border)] bg-[var(--bg2)] mb-3">
+   216→   216→          <MicWaveform height={80} active={recording} />
+   217→   217→        </div>
+   218→   218→
+   219→   219→        <button
+   220→   220→          onClick={handleRecord}
+   221→   221→          className={`w-full py-3 rounded-xl text-white font-semibold text-sm flex items-center justify-center gap-2 transition ${recording ? "animate-red-pulse" : ""}`}
+   222→   222→          style={{
+   223→   223→            background: recording
+   224→   224→              ? "radial-gradient(circle, #ef4444, #dc2626)"
+   225→   225→              : "var(--card-h)",
+   226→   226→            border: recording ? "none" : "1px solid var(--border2)",
+   227→   227→          }}
+   228→   228→        >
+   229→   229→          {recording ? "■ Stop Recording" : "🎙 Record Yourself"}
+   230→   230→        </button>
+   231→   231→
+   232→   232→        {score !== null && (
+   233→   233→          <motion.div
+   234→   234→            initial={{ opacity: 0, scale: 0.5 }}
+   235→   235→            animate={{ opacity: 1, scale: 1 }}
+   236→   236→            transition={{ type: "spring", stiffness: 300, damping: 15 }}
+   237→   237→            className="mt-3 rounded-xl p-4 text-center bg-[rgba(16,185,129,0.1)] border border-[rgba(16,185,129,0.3)] relative overflow-hidden"
+   238→   238→          >
+   239→   239→            {/* Celebration particles when score >= 80 */}
+   240→   240→            {score >= 80 && (
+   241→   241→              <>
+   242→   242→                {[...Array(8)].map((_, pi) => (
+   243→   243→                  <motion.div
+   244→   244→                    key={pi}
+   245→   245→                    className="absolute w-1.5 h-1.5 rounded-full"
+   246→   246→                    style={{
+   247→   247→                      background: ["#f59e0b", "#22d3ee", "#a78bfa", "#10b981", "#6366f1", "#ef4444", "#8b5cf6", "#67e8f9"][pi],
+   248→   248→                      top: "50%",
+   249→   249→                      left: "50%",
+   250→   250→                    }}
+   251→   251→                    initial={{ x: 0, y: 0, opacity: 1, scale: 1 }}
+   252→   252→                    animate={{
+   253→   253→                      x: [0, (Math.cos((pi / 8) * Math.PI * 2) * 60)],
+   254→   254→                      y: [0, (Math.sin((pi / 8) * Math.PI * 2) * 40)],
+   255→   255→                      opacity: [1, 0],
+   256→   256→                      scale: [1, 0.5],
+   257→   257→                    }}
+   258→   258→                    transition={{ duration: 0.8, ease: "easeOut" }}
+   259→   259→                  />
+   260→   260→                ))}
+   261→   261→              </>
+   262→   262→            )}
+   263→   263→            <motion.div
+   264→   264→              animate={score >= 80 ? { scale: [1, 1.15, 1] } : {}}
+   265→   265→              transition={{ duration: 0.4, ease: "easeOut" }}
+   266→   266→            >
+   267→   267→              <div className="font-d text-2xl font-bold text-[#10b981]">{score}%</div>
+   268→   268→            </motion.div>
+   269→   269→            <div className="text-xs text-[var(--t2)] mt-1">
+   270→   270→              {score >= 80 ? "Excellent! Native-like." : score >= 70 ? "Good job — keep practicing." : "Keep going, you'll get there!"}
+   271→   271→            </div>
+   272→   272→            {phrase.issues.length > 0 && (
+   273→   273→              <div className="mt-2 text-[10px] text-[var(--t3)]">
+   274→   274→                Watch: {phrase.issues.join(", ")}
+   275→   275→              </div>
+   276→   276→            )}
+   277→   277→          </motion.div>
+   278→   278→        )}
+   279→   279→
+   280→   280→        {/* Tip */}
+   281→   281→        <div className="mt-3 rounded-xl p-3 bg-[rgba(245,158,11,0.08)] border border-[rgba(245,158,11,0.25)] text-xs text-[var(--t2)]">
+   282→   282→          <strong className="text-[#f59e0b]">💡 Tip:</strong> {tip}
+   283→   283→        </div>
+   284→   284→
+   285→   285→        {/* Next phrase */}
+   286→   286→        <button
+   287→   287→          onClick={nextPhrase}
+   288→   288→          className="mt-3 w-full py-2.5 rounded-xl bg-[var(--card-h)] border border-[var(--border)] text-xs font-semibold text-[var(--t2)] hover:bg-[var(--card)] transition"
+   289→   289→        >
+   290→   290→          → Next Phrase
+   291→   291→        </button>
+   292→   292→      </div>
+   293→   293→    </>
+   294→   294→  );
+   295→   295→}
+   296→   296→
+   297→   297→export function PracticeView() {
+   298→   298→  const [mode, setMode] = useState<PracticeMode>("medium");
+   299→   299→
+   300→   300→  const TABS: {
+   301→   301→    id: PracticeMode;
+   302→   302→    label: string;
+   303→   303→    icon?: React.ReactNode;
+   304→   304→    isChallenge?: boolean;
+   305→   305→    isDrill?: boolean;
+   306→   306→  }[] = [
+   307→   307→    { id: "easy", label: "Easy" },
+   308→   308→    { id: "medium", label: "Medium" },
+   309→   309→    { id: "hard", label: "Hard" },
+   310→   310→    {
+   311→   311→      id: "phoneme-drill",
+   312→   312→      label: "Drill",
+   313→   313→      icon: <Target className="w-3 h-3" />,
+   314→   314→      isDrill: true,
+   315→   315→    },
+   316→   316→    {
+   317→   317→      id: "challenge",
+   318→   318→      label: "Challenge",
+   319→   319→      icon: <Zap className="w-3 h-3" />,
+   320→   320→      isChallenge: true,
+   321→   321→    },
+   322→   322→  ];
+   323→   323→
+   324→   324→  return (
+   325→   325→    <div className="space-y-5">
+   326→   326→      <div className="text-center">
+   327→   327→        <h1 className="font-d text-3xl font-bold mb-1">
+   328→   328→          Infinite <span className="grad-text">Practice</span>
+   329→   329→        </h1>
+   330→   330→        <p className="text-sm text-[var(--t2)]">
+   331→   331→          {mode === "challenge"
+   332→   332→            ? "Timed drills with combo multipliers"
+   333→   333→            : mode === "phoneme-drill"
+   334→   334→            ? "Targeted practice for stubborn sounds"
+   335→   335→            : "Listen to the native speaker, then record yourself"}
+   336→   336→        </p>
+   337→   337→      </div>
+   338→   338→
+   339→   339→      {/* Mode toggle — Easy / Medium / Hard / 🎯 Drill / ⚡ Challenge */}
+   340→   340→      <div className="flex p-1 rounded-xl bg-[var(--card)] border border-[var(--border)]">
+   341→   341→        {TABS.map((t) => (
+   342→   342→          <button
+   343→   343→            key={t.id}
+   344→   344→            onClick={() => setMode(t.id)}
+   345→   345→            className={`relative flex-1 py-2 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1 ${
+   346→   346→              mode === t.id
+   347→   347→                ? "text-white"
+   348→   348→                : t.isChallenge
+   349→   349→                ? "text-[#f59e0b]"
+   350→   350→                : t.isDrill
+   351→   351→                ? "text-[var(--c)]"
+   352→   352→                : "text-[var(--t2)]"
+   353→   353→            }`}
+   354→   354→          >
+   355→   355→            {mode === t.id && (
+   356→   356→              <motion.div
+   357→   357→                layoutId="diff-pill"
+   358→   358→                className="absolute inset-0 rounded-lg"
+   359→   359→                style={{
+   360→   360→                  background: t.isChallenge
+   361→   361→                    ? "linear-gradient(135deg, #f59e0b, #f97316)"
+   362→   362→                    : t.isDrill
+   363→   363→                    ? "linear-gradient(135deg, #22d3ee, #6366f1)"
+   364→   364→                    : "var(--grad-btn)",
+   365→   365→                  boxShadow: t.isChallenge
+   366→   366→                    ? "0 0 16px rgba(245,158,11,0.4)"
+   367→   367→                    : t.isDrill
+   368→   368→                    ? "0 0 16px rgba(34,211,238,0.4)"
+   369→   369→                    : "0 0 16px rgba(99,102,241,0.4)",
+   370→   370→                }}
+   371→   371→                transition={{ type: "spring", stiffness: 400, damping: 30 }}
+   372→   372→              />
+   373→   373→            )}
+   374→   374→            <span className="relative flex items-center gap-1">
+   375→   375→              {t.icon}
+   376→   376→              {t.label}
+   377→   377→            </span>
+   378→   378→          </button>
+   379→   379→        ))}
+   380→   380→      </div>
+   381→   381→
+   382→   382→      {/* Content */}
+   383→   383→      <AnimatePresence mode="wait">
+   384→   384→        {mode === "challenge" ? (
+   385→   385→          <motion.div
+   386→   386→            key="challenge"
+   387→   387→            initial={{ opacity: 0, y: 10 }}
+   388→   388→            animate={{ opacity: 1, y: 0 }}
+   389→   389→            exit={{ opacity: 0, y: -10 }}
+   390→   390→            transition={{ duration: 0.2 }}
+   391→   391→          >
+   392→   392→            <PronunciationChallenge />
+   393→   393→          </motion.div>
+   394→   394→        ) : mode === "phoneme-drill" ? (
+   395→   395→          <motion.div
+   396→   396→            key="phoneme-drill"
+   397→   397→            initial={{ opacity: 0, y: 10 }}
+   398→   398→            animate={{ opacity: 1, y: 0 }}
+   399→   399→            exit={{ opacity: 0, y: -10 }}
+   400→   400→            transition={{ duration: 0.2 }}
+   401→   401→          >
+   402→   402→            <PhonemeDrill />
+   403→   403→          </motion.div>
+   404→   404→        ) : (
+   405→   405→          <motion.div
+   406→   406→            key={`practice-${mode}`}
+   407→   407→            initial={{ opacity: 0, y: 10 }}
+   408→   408→            animate={{ opacity: 1, y: 0 }}
+   409→   409→            exit={{ opacity: 0, y: -10 }}
+   410→   410→            transition={{ duration: 0.2 }}
+   411→   411→            className="space-y-5"
+   412→   412→          >
+   413→   413→            <PracticeContentWithDiff diff={mode as Difficulty} />
+   414→   414→          </motion.div>
+   415→   415→        )}
+   416→   416→      </AnimatePresence>
+   417→   417→    </div>
+   418→   418→  );
+   419→   419→}
+   420→   420→
+   421→   421→// Wrapper that injects difficulty into PracticeContent
+   422→   422→function PracticeContentWithDiff({ diff: initialDiff }: { diff: Difficulty }) {
+   423→   423→  const accent = useAppStore((s) => s.accent);
+   424→   424→  const addSpeakingTime = useAppStore((s) => s.addSpeakingTime);
+   425→   425→  const [diff, setDiff] = useState<Difficulty>(initialDiff);
+   426→   426→  const [phraseIdx, setPhraseIdx] = useState(0);
+   427→   427→  const [speed, setSpeed] = useState<number>(1);
+   428→   428→  const [step, setStep] = useState<"listen" | "speak" | "results">("listen");
+   429→   429→  const [recording, setRecording] = useState(false);
+   430→   430→  const [score, setScore] = useState<number | null>(null);
+   431→   431→  const [prevDiff, setPrevDiff] = useState<Difficulty>(diff);
+   432→   432→
+   433→   433→  const phrases = PHRASES[diff];
+   434→   434→  const phrase = phrases[phraseIdx];
+   435→   435→  const tip = TIPS[diff][phraseIdx % TIPS[diff].length];
+   436→   436→
+   437→   437→  // Reset when initial diff changes (from parent tab)
+   438→   438→  if (initialDiff !== diff) {
+   439→   439→    setDiff(initialDiff);
+   440→   440→    setStep("listen");
+   441→   441→    setScore(null);
+   442→   442→    setRecording(false);
+   443→   443→    setPhraseIdx(0);
+   444→   444→  }
+   445→   445→
+   446→   446→  // Reset when internal diff changes
+   447→   447→  if (diff !== prevDiff) {
+   448→   448→    setPrevDiff(diff);
+   449→   449→    setStep("listen");
+   450→   450→    setScore(null);
+   451→   451→    setRecording(false);
+   452→   452→  }
+   453→   453→
+   454→   454→  const nextPhrase = () => {
+   455→   455→    setPhraseIdx((i) => (i + 1) % phrases.length);
+   456→   456→    setStep("listen");
+   457→   457→    setScore(null);
+   458→   458→    setRecording(false);
+   459→   459→  };
+   460→   460→
+   461→   461→  const handleSpeak = useCallback(() => {
+   462→   462→    speak(phrase.text, { accent, rate: speed });
+   463→   463→    setStep("speak");
+   464→   464→  }, [phrase, accent, speed]);
+   465→   465→
+   466→   466→  const SPEED_PRESETS: { label: string; value: number }[] = [
+   467→   467→    { label: "0.6×", value: 0.6 },
+   468→   468→    { label: "0.75×", value: 0.75 },
+   469→   469→    { label: "Normal", value: 1 },
+   470→   470→    { label: "1.2×", value: 1.2 },
+   471→   471→  ];
+   472→   472→
+   473→   473→  const handleRecord = () => {
+   474→   474→    if (recording) {
+   475→   475→      setRecording(false);
+   476→   476→      const s = 65 + Math.floor(Math.random() * 30);
+   477→   477→      setScore(s);
+   478→   478→      setStep("results");
+   479→   479→      addSpeakingTime(5);
+   480→   480→    } else {
+   481→   481→      setRecording(true);
+   482→   482→      setTimeout(() => {
+   483→   483→        setRecording(false);
+   484→   484→        const s = 65 + Math.floor(Math.random() * 30);
+   485→   485→        setScore(s);
+   486→   486→        setStep("results");
+   487→   487→        addSpeakingTime(5);
+   488→   488→      }, 4000);
+   489→   489→    }
+   490→   490→  };
+   491→   491→
+   492→   492→  const stepLabels = ["Listen", "Speak", "Results"];
+   493→   493→
+   494→   494→  return (
+   495→   495→    <>
+   496→   496→      {/* Step flow */}
+   497→   497→      <div className="flex items-center justify-between px-2">
+   498→   498→        {stepLabels.map((lbl, i) => {
+   499→   499→          const stepIdx = ["listen", "speak", "results"].indexOf(step);
+   500→   500→          const isActive = i === stepIdx;
+   501→   501→          const isDone = i < stepIdx;
+   502→   502→          return (
+   503→   503→            <div key={lbl} className="flex items-center flex-1 last:flex-none">
+   504→   504→              <div className="flex flex-col items-center gap-1">
+   505→   505→                <div
+   506→   506→                  className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition ${
+   507→   507→                    isActive
+   508→   508→                      ? "bg-[var(--grad-btn)] text-white"
+   509→   509→                      : isDone
+   510→   510→                      ? "bg-[rgba(16,185,129,0.2)] text-[#10b981]"
+   511→   511→                      : "bg-[var(--card)] text-[var(--t3)] border border-[var(--border)]"
+   512→   512→                  }`}
+   513→   513→                >
+   514→   514→                  {isDone ? "✓" : i + 1}
+   515→   515→                </div>
+   516→   516→                <span className={`text-[10px] ${isActive ? "text-[var(--p3)] font-bold" : "text-[var(--t3)]"}`}>
+   517→   517→                  {lbl}
+   518→   518→                </span>
+   519→   519→              </div>
+   520→   520→              {i < 2 && (
+   521→   521→                <div className="flex-1 h-0.5 mx-2 bg-[var(--border)] relative overflow-hidden">
+   522→   522→                  {i < stepIdx && (
+   523→   523→                    <motion.div
+   524→   524→                      className="absolute inset-0 bg-[#10b981]"
+   525→   525→                      initial={{ width: 0 }}
+   526→   526→                      animate={{ width: "100%" }}
+   527→   527→                    />
+   528→   528→                  )}
+   529→   529→                </div>
+   530→   530→              )}
+   531→   531→            </div>
+   532→   532→          );
+   533→   533→        })}
+   534→   534→      </div>
+   535→   535→
+   536→   536→      {/* Phrase card */}
+   537→   537→      <div className={`rounded-2xl p-5 bg-[rgba(99,102,241,0.06)] border border-[var(--border)] ${step === "listen" ? "animate-border-pulse" : ""}`}>
+   538→   538→        <div className="text-[10px] uppercase tracking-wider text-[var(--t3)] font-mono mb-2">
+   539→   539→          {accent === "usa" ? "🇺🇸" : "🇬🇧"} {accent.toUpperCase()} · {diff}
+   540→   540→        </div>
+   541→   541→        <div className="font-d text-xl text-[var(--t1)] mb-2">{phrase.text}</div>
+   542→   542→        <div className="font-mono text-sm text-[var(--t3)] mb-4">{phrase.ipa}</div>
+   543→   543→
+   544→   544→        {/* Speed control */}
+   545→   545→        <div className="mb-4">
+   546→   546→          <div className="flex items-center justify-between mb-1.5">
+   547→   547→            <span className="text-xs text-[var(--t3)] font-mono uppercase tracking-wider">Speed</span>
+   548→   548→            <span className="text-[10px] font-mono font-bold text-[var(--p3)]">
+   549→   549→              {speed < 1 ? `${speed}× slower` : speed > 1 ? `${speed}× faster` : "Native"}
+   550→   550→            </span>
+   551→   551→          </div>
+   552→   552→          <div className="flex p-0.5 rounded-lg bg-[var(--bg2)] border border-[var(--border)]">
+   553→   553→            {SPEED_PRESETS.map((p) => (
+   554→   554→              <button
+   555→   555→                key={p.value}
+   556→   556→                onClick={() => setSpeed(p.value)}
+   557→   557→                className={`relative flex-1 py-1.5 rounded-md text-[11px] font-semibold transition ${
+   558→   558→                  speed === p.value ? "text-white" : "text-[var(--t3)] hover:text-[var(--t2)]"
+   559→   559→                }`}
+   560→   560→              >
+   561→   561→                {speed === p.value && (
+   562→   562→                  <motion.div
+   563→   563→                    layoutId="speed-pill"
+   564→   564→                    className="absolute inset-0 rounded-md bg-[var(--grad-btn)]"
+   565→   565→                    style={{ boxShadow: "0 0 10px rgba(99,102,241,0.35)" }}
+   566→   566→                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+   567→   567→                  />
+   568→   568→                )}
+   569→   569→                <span className="relative">{p.label}</span>
+   570→   570→              </button>
+   571→   571→            ))}
+   572→   572→          </div>
+   573→   573→        </div>
+   574→   574→
+   575→   575→        {/* Listen button */}
+   576→   576→        <button
+   577→   577→          onClick={handleSpeak}
+   578→   578→          className="w-full py-3 rounded-xl bg-[var(--grad-btn)] text-white font-semibold text-sm flex items-center justify-center gap-2 hover:opacity-90 transition mb-3"
+   579→   579→        >
+   580→   580→          <span className="text-lg">▶</span> Play Native Audio
+   581→   581→        </button>
+   582→   582→
+   583→   583→        {/* Mic + waveform */}
+   584→   584→        <div className="rounded-xl overflow-hidden border border-[var(--border)] bg-[var(--bg2)] mb-3">
+   585→   585→          <MicWaveform height={80} active={recording} />
+   586→   586→        </div>
+   587→   587→
+   588→   588→        <button
+   589→   589→          onClick={handleRecord}
+   590→   590→          className={`w-full py-3 rounded-xl text-white font-semibold text-sm flex items-center justify-center gap-2 transition ${recording ? "animate-red-pulse" : ""}`}
+   591→   591→          style={{
+   592→   592→            background: recording
+   593→   593→              ? "radial-gradient(circle, #ef4444, #dc2626)"
+   594→   594→              : "var(--card-h)",
+   595→   595→            border: recording ? "none" : "1px solid var(--border2)",
+   596→   596→          }}
+   597→   597→        >
+   598→   598→          {recording ? "■ Stop Recording" : "🎙 Record Yourself"}
+   599→   599→        </button>
+   600→   600→
+   601→   601→        {score !== null && (
+   602→   602→          <motion.div
+   603→   603→            initial={{ opacity: 0, scale: 0.5 }}
+   604→   604→            animate={{ opacity: 1, scale: 1 }}
+   605→   605→            transition={{ type: "spring", stiffness: 300, damping: 15 }}
+   606→   606→            className="mt-3 rounded-2xl p-5 text-center relative overflow-hidden"
+   607→   607→            style={{
+   608→   608→              background: score >= 80
+   609→   609→                ? "linear-gradient(135deg, rgba(16,185,129,0.12), rgba(34,211,238,0.08))"
+   610→   610→                : score >= 70
+   611→   611→                ? "linear-gradient(135deg, rgba(245,158,11,0.12), rgba(251,191,36,0.08))"
+   612→   612→                : "linear-gradient(135deg, rgba(239,68,68,0.1), rgba(245,158,11,0.08))",
+   613→   613→              border: `1px solid ${score >= 80 ? "rgba(16,185,129,0.35)" : score >= 70 ? "rgba(245,158,11,0.35)" : "rgba(239,68,68,0.35)"}`,
+   614→   614→            }}
+   615→   615→          >
+   616→   616→            {/* Celebration particles when score >= 80 */}
+   617→   617→            {score >= 80 && (
+   618→   618→              <>
+   619→   619→                {[...Array(8)].map((_, pi) => (
+   620→   620→                  <motion.div
+   621→   621→                    key={pi}
+   622→   622→                    className="absolute w-2 h-2 rounded-full"
+   623→   623→                    style={{
+   624→   624→                      background: ["#f59e0b", "#22d3ee", "#a78bfa", "#10b981", "#6366f1", "#ef4444", "#8b5cf6", "#67e8f9"][pi],
+   625→   625→                      top: "50%",
+   626→   626→                      left: "50%",
+   627→   627→                    }}
+   628→   628→                    initial={{ x: 0, y: 0, opacity: 1, scale: 1 }}
+   629→   629→                    animate={{
+   630→   630→                      x: [0, (Math.cos((pi / 8) * Math.PI * 2) * 70)],
+   631→   631→                      y: [0, (Math.sin((pi / 8) * Math.PI * 2) * 45)],
+   632→   632→                      opacity: [1, 0],
+   633→   633→                      scale: [1, 0.3],
+   634→   634→                    }}
+   635→   635→                    transition={{ duration: 1, ease: "easeOut" }}
+   636→   636→                  />
+   637→   637→                ))}
+   638→   638→              </>
+   639→   639→            )}
+   640→   640→
+   641→   641→            {/* Score ring */}
+   642→   642→            <div className="flex items-center justify-center mb-3">
+   643→   643→              <div className="relative w-24 h-24">
+   644→   644→                <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+   645→   645→                  <circle cx="50" cy="50" r="42" fill="none" stroke="var(--overlay-1)" strokeWidth="6" />
+   646→   646→                  <motion.circle
+   647→   647→                    cx="50" cy="50" r="42" fill="none"
+   648→   648→                    stroke={score >= 80 ? "#10b981" : score >= 70 ? "#f59e0b" : "#ef4444"}
+   649→   649→                    strokeWidth="6"
+   650→   650→                    strokeLinecap="round"
+   651→   651→                    strokeDasharray={`${2 * Math.PI * 42}`}
+   652→   652→                    initial={{ strokeDashoffset: 2 * Math.PI * 42 }}
+   653→   653→                    animate={{ strokeDashoffset: 2 * Math.PI * 42 * (1 - score / 100) }}
+   654→   654→                    transition={{ duration: 1, ease: "easeOut" }}
+   655→   655→                    style={{ filter: `drop-shadow(0 0 6px ${score >= 80 ? "#10b98188" : score >= 70 ? "#f59e0b88" : "#ef444488"})` }}
+   656→   656→                  />
+   657→   657→                </svg>
+   658→   658→                <div className="absolute inset-0 flex items-center justify-center">
+   659→   659→                  <motion.div
+   660→   660→                    initial={{ scale: 0 }}
+   661→   661→                    animate={{ scale: 1, ...(score >= 80 ? { scale: [0, 1.2, 1] } : {}) }}
+   662→   662→                    transition={{ type: "spring", stiffness: 300, damping: 15, delay: 0.3 }}
+   663→   663→                  >
+   664→   664→                    <span className="font-d text-2xl font-bold" style={{ color: score >= 80 ? "#10b981" : score >= 70 ? "#f59e0b" : "#ef4444" }}>
+   665→   665→                      {score}%
+   666→   666→                    </span>
+   667→   667→                  </motion.div>
+   668→   668→                </div>
+   669→   669→              </div>
+   670→   670→            </div>
+   671→   671→
+   672→   672→            <div className="text-sm font-semibold text-[var(--t1)]">
+   673→   673→              {score >= 80 ? "🎉 Excellent! Native-like." : score >= 70 ? "👍 Good job — keep practicing." : "💪 Keep going, you'll get there!"}
+   674→   674→            </div>
+   675→   675→            {phrase.issues.length > 0 && (
+   676→   676→              <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
+   677→   677→                <span className="text-[10px] text-[var(--t3)]">Watch:</span>
+   678→   678→                {phrase.issues.map((issue, ii) => (
+   679→   679→                  <span key={ii} className="text-[10px] px-2 py-0.5 rounded-full bg-[rgba(239,68,68,0.12)] border border-[rgba(239,68,68,0.25)] text-[#f87171] font-mono">
+   680→   680→                    {issue}
+   681→   681→                  </span>
+   682→   682→                ))}
+   683→   683→              </div>
+   684→   684→            )}
+   685→   685→          </motion.div>
+   686→   686→        )}
+   687→   687→
+   688→   688→        {/* Tip */}
+   689→   689→        <div className="mt-3 rounded-xl p-3 bg-[rgba(245,158,11,0.08)] border border-[rgba(245,158,11,0.25)] text-xs text-[var(--t2)] relative overflow-hidden">
+   690→   690→          <div className="absolute inset-0 pointer-events-none">
+   691→   691→            <motion.div
+   692→   692→              className="absolute inset-y-0 w-1/4"
+   693→   693→              style={{ background: "linear-gradient(90deg, transparent, rgba(245,158,11,0.08), transparent)" }}
+   694→   694→              animate={{ x: ["-100%", "400%"] }}
+   695→   695→              transition={{ duration: 3, repeat: Infinity, repeatDelay: 5, ease: "easeInOut" }}
+   696→   696→            />
+   697→   697→          </div>
+   698→   698→          <strong className="text-[#f59e0b]">💡 Tip:</strong> {tip}
+   699→   699→        </div>
+   700→   700→
+   701→   701→        {/* Next phrase */}
+   702→   702→        <motion.button
+   703→   703→          whileHover={{ scale: 1.02 }}
+   704→   704→          whileTap={{ scale: 0.98 }}
+   705→   705→          onClick={nextPhrase}
+   706→   706→          className="mt-3 w-full py-2.5 rounded-xl bg-[var(--card-h)] border border-[var(--border)] text-xs font-semibold text-[var(--t2)] hover:bg-[var(--card)] transition flex items-center justify-center gap-2"
+   707→   707→        >
+   708→   708→          → Next Phrase
+   709→   709→        </motion.button>
+   710→   710→      </div>
+   711→   711→    </>
+   712→   712→  );
+   713→   713→}
+   714→   714→

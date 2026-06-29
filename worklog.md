@@ -1300,3 +1300,381 @@ Stage Summary:
 - 3 major new features: Lesson Notes (personal notebook per lesson), Achievement Share Card (downloadable PNG with 3 themes), Phoneme Drill Mode (targeted single-phoneme practice with combo multiplier)
 - Lint: PASS (exit 0). Dev server: HTTP 200. All features verified working via agent-browser end-to-end QA.
 - App remains stable, feature-rich, visually polished, and fully functional. Round 8 complete.
+
+---
+
+## Task 4-b — Enhanced Step Progress Bar
+**Task ID:** 4-b
+**Agent:** frontend-styling-expert
+**Task:** Replace the step progress indicator in LessonModal with a beautiful animated progress bar with step-type-based background tinting.
+
+**Work Log:**
+1. Read current lesson-modal.tsx — identified two separate sections: "Progress bar with glow" (simple gradient fill bar) and "Step progress dots" (row of emoji dots with basic styling)
+2. Extracted `STEP_ICON` mapping to a top-level constant (was duplicated in 3 places: step dots, step-type chip, and header)
+3. Added `StepCategory` type system — maps each of 16 step types to 5 categories (intro/concept/visual/practice/completion)
+4. Added `CATEGORY_TINT` — background tint colors per category (indigo/violet/cyan/amber/green radial gradient)
+5. Added `CATEGORY_GLOW` — accent glow colors per category for the current step dot's pulsing ring
+6. Replaced the old progress bar + dots sections with a unified 44px-height animated progress bar:
+   - Background track line (3px, `var(--border)`)
+   - Animated gradient fill line (indigo→violet) that scales from left as steps progress
+   - Shimmer sweep animation on the filled line
+   - Step dots positioned with `justify-between` for even spacing
+   - Current step: 32px dot with gradient fill + category-colored pulsing glow ring + category-colored box-shadow
+   - Past steps: 24px dots with subtle indigo→violet gradient fill
+   - Upcoming steps: 22px dots dimmed at 0.45 opacity with card background + border
+   - Hover tooltips showing step title (CSS opacity transition, no JS state)
+   - `whileHover` scale-up + opacity restoration for upcoming steps
+7. Added animated background tint overlay — a `motion.div` with `key={currentCategory}` that cross-fades a radial gradient based on the current step's category
+8. Wrapped main content in a `z-10` inner div so the background tint sits behind all interactive content
+9. Refactored step-type chip to use shared `STEP_ICON` constant instead of inline IIFE
+10. Lint: PASS (exit 0)
+
+**Files Modified:**
+- `src/components/lesson/lesson-modal.tsx` — Added STEP_ICON, StepCategory system, CATEGORY_TINT/CATEGORY_GLOW mappings; replaced progress bar + dots sections with unified animated progress bar; added step-type background tint overlay; refactored step-type chip
+
+**Stage Summary:**
+- Single file modified with significant UX enhancement
+- New animated progress bar: gradient connecting line with shimmer, category-aware glow rings, hover tooltips, size-differentiated dots
+- Step-type background tint: radial gradient that cross-fades based on current step category (indigo→violet→cyan→amber→green)
+- All animations use Framer Motion; no custom CSS keyframes added
+- Compact 44px height (within the 40-48px target)
+- Lint passes cleanly
+
+---
+
+### Task 4-a — Styling: Lesson Step Transitions
+**Agent:** frontend-styling-expert
+**Task:** Add smooth animated step transitions in the lesson modal using Framer Motion AnimatePresence with directional slide and fade overlay.
+
+**Work Log:**
+1. Analyzed existing `lesson-modal.tsx` — found it already had `direction` state, `AnimatePresence`, and basic slide animation, but used **inline animation objects** (stale-closure bug: exit animations captured the OLD direction value instead of the latest one).
+2. Created `stepVariants` constant with `enter`/`center`/`exit` **variant functions** that accept `custom` (direction). This ensures Framer Motion passes the **latest** direction to exiting components via AnimatePresence `custom` prop.
+3. Created `stepTransition` constant — 250ms duration with ease-out-quad curve for snappy responsive feel.
+4. Created `StepTransitionOverlay` component — a brief 10%-opacity bg overlay that fades to 0 over 200ms on each step change, giving a polished cross-fade feel without blocking interaction (`pointer-events-none`).
+5. Replaced inline `initial`/`animate`/`exit` objects with `variants={stepVariants}` + `initial="enter"` `animate="center"` `exit="exit"` pattern.
+6. Added `relative` class to the scrollable content container so the absolute-positioned overlay is scoped correctly.
+7. Verified `bun run lint` passes cleanly.
+
+**Files Modified:**
+- `src/components/lesson/lesson-modal.tsx`
+
+**Stage Summary:**
+- Replaced stale-closure inline animations with proper Framer Motion variants using `custom` direction prop
+- Added directional slide transitions (80px slide, 250ms duration, ease-out-quad)
+- Added subtle fade overlay between steps (10% opacity → 0 over 200ms)
+- No business logic or state management changes
+- Lint: PASS (exit 0)
+
+---
+
+## Task 5-a: TTS Speed Control in Lesson Modal
+
+**Task ID:** 5-a  
+**Agent:** Main Agent  
+**Task:** Add TTS speed control feature to the lesson modal with pill-style speed selector near the "Hear the title" button.
+
+**Work Log:**
+1. Read `worklog.md`, `lesson-modal.tsx`, and `tts.ts` to understand current implementation
+2. Confirmed `tts.ts` already supports `rate` parameter via `SpeakOptions` interface — no changes needed to TTS module
+3. Added `ttsSpeed` state (default `1`) to `LessonModal` component — resets naturally when lesson changes (component remounts)
+4. Updated `handleSpeak` callback to use `ttsSpeed` instead of hardcoded `0.95` rate
+5. Extended `StepRendererProps` interface with `ttsSpeed: number` and `setTtsSpeed: (s: number) => void`
+6. Passed `ttsSpeed`/`setTtsSpeed` through `StepRenderer` → `IntroStepView`
+7. Added `TTS_SPEEDS` constant: `[0.6, 0.8, 1, 1.2]`
+8. Built speed control UI in `IntroStepView`:
+   - Compact pill buttons with `Gauge` icon from Lucide
+   - Selected pill gets gradient background + glow shadow
+   - Unselected pills have card background with border
+   - Framer Motion `whileHover`/`whileTap` animations
+   - ARIA labels and `aria-pressed` for accessibility
+9. Imported `Gauge` icon from `lucide-react`
+10. Ran `bun run lint` — PASS (exit 0)
+
+**Files modified:**
+- `src/components/lesson/lesson-modal.tsx` (added ttsSpeed state, updated handleSpeak, added TTS_SPEEDS constant, updated IntroStepView with speed control UI, updated StepRendererProps interface, passed new props through StepRenderer)
+
+**Stage Summary:**
+- TTS speed control feature fully implemented with 4 speed options (0.6×, 0.8×, 1×, 1.2×)
+- Speed persists within lesson session, resets when lesson changes
+- All TTS calls (hear button, tap words, Space key) respect the selected speed
+- Compact, animated pill UI with Gauge icon
+- Lint: PASS. Dev server: compiling successfully.
+
+---
+
+## Task 5-b: Spaced Repetition Review Reminders & Lesson Timer
+
+**Task ID:** 5-b  
+**Agent:** Main Agent  
+**Task:** Add spaced repetition review reminders (🔄 Review badge on journey) and lesson timer (⏱ mm:ss in header + time spent on completion screen).
+
+**Work Log:**
+
+### Feature 1: Spaced Repetition Review Reminders
+
+1. Read `store.ts` and `journey.tsx` to understand current LessonProgress and Journey view structure.
+2. Added `lastReviewedAt: number | null` and `timeSpentSeconds: number` fields to `LessonProgress` interface in store.
+3. Added `markReviewed(lessonId: string)` action to AppState — sets `lastReviewedAt` to `Date.now()` only if lesson is completed.
+4. Updated all places where `LessonProgress` objects are created (`markStepViewed`, `consumeLessonRetry`) to include new fields with defaults (`lastReviewedAt: null`, `timeSpentSeconds: 0`).
+5. Updated `completeLesson` to accept optional `timeSpentSeconds` parameter and accumulate it into the lesson progress.
+6. In `journey.tsx`, created helper function `needsReview(completedAt, lastReviewedAt)` — returns true if the reference time (lastReviewedAt if set and after completedAt, otherwise completedAt) is >2 days ago.
+7. Created `ReviewBadge` component — animated "🔄 Review" badge with Framer Motion spring entrance + continuous rotate animation on the emoji.
+8. Added `showReviewBadge` logic in both flat list view (search/filter) and expanded phase lesson list.
+9. Badge appears inline next to lesson title in a flex row with `truncate` on the title text.
+
+### Feature 2: Lesson Timer
+
+1. Added `useRef` import to lesson-modal.tsx.
+2. Created module-level `lessonTimerAccumulated: Map<string, number>` to persist timer state across modal mount/unmount cycles (pause/resume).
+3. Created `formatTimer(seconds)` utility — formats as `m:ss`.
+4. Added timer state: `timerDisplay` (state), `timerStartRef` (ref), `timerAccumulatedRef` (ref initialized from map).
+5. Added timer tick effect: starts interval on mount, ticks every second, saves accumulated time on unmount (pause behavior).
+6. Added timer display in header: small `⏱ mm:ss` pill between notes button and step counter, styled with card bg + border.
+7. Updated `handleComplete` to calculate total elapsed time and pass `Math.floor(elapsed)` to `completeLesson`. Also calls `markReviewed` on completion and clears timer map entry.
+8. Updated `StepRendererProps` with `timeSpentSeconds: number`.
+9. Updated `CompletionStepView` to accept `timeSpentSeconds` prop and display:
+   - "⏱ X:XX spent" badge with card styling and animated entrance
+   - "🔄 Next review suggested in 2 days" subtle note below
+10. Ran `bun run lint` — PASS (exit 0). Dev server compiling successfully.
+
+**Files Modified:**
+- `src/lib/store.ts` (added lastReviewedAt + timeSpentSeconds to LessonProgress, added markReviewed action, updated completeLesson signature, updated all LessonProgress object creation sites, partialize unchanged as lessons already included)
+- `src/components/views/journey.tsx` (added needsReview helper, ReviewBadge component, showReviewBadge logic in both list views)
+- `src/components/lesson/lesson-modal.tsx` (added useRef import, formatTimer utility, lessonTimerAccumulated map, timer state/refs, timer tick effect, timer display in header, updated handleComplete with time + markReviewed, added timeSpentSeconds to StepRendererProps, updated CompletionStepView with time spent display + review suggestion note)
+
+**Stage Summary:**
+- Spaced repetition review badge shows on completed lessons that haven't been reviewed in >2 days (animated 🔄 with Framer Motion)
+- Lesson timer tracks time in mm:ss format, pauses on modal close, resumes on reopen via module-level Map
+- Timer display appears in lesson modal header
+- Time spent saved to store on completion and shown on completion screen
+- "Next review suggested in 2 days" note on completion screen
+- `markReviewed` called automatically on lesson completion
+- All new fields properly persisted via existing partialize config (lessons object already included)
+- Lint: PASS. Dev server: compiling successfully.
+
+---
+
+## Task 5-c: Interactive Phoneme Keyboard
+
+**Task ID:** 5-c
+**Agent:** code
+**Task:** Add Interactive Phoneme Keyboard widget to the Practice view
+
+**Work Log:**
+
+1. Read `practice.tsx` to understand current Practice view structure (PracticeContentWithDiff component with phrase card, speed control, listen/mic/record buttons, score display, tip).
+2. Read `tts.ts` to understand TTS API — `speak(text, opts)` with accent, rate, pitch, volume, onEnd callback.
+3. Created `/home/z/my-project/src/components/widgets/phoneme-keyboard.tsx`:
+   - Defined phoneme data for 3 categories: Vowels (11), Diphthongs (8), Consonants (24)
+   - Each phoneme has: IPA symbol, name (for accessibility), example word
+   - Category color system: Vowels=indigo/violet, Diphthongs=cyan, Consonants=emerald
+   - Category tabs with layoutId animated pill (Framer Motion spring transition)
+   - PhonemeButton component with:
+     - `whileHover` scale + glow shadow effect
+     - `whileTap` scale-down animation
+     - Playing state with multi-keyframe scale/shadow animation
+     - Volume2 icon appears during playback
+     - Radix Tooltip showing phoneme symbol → example word
+     - `aria-label` for accessibility: "Play phoneme {name}, as in {example}"
+   - PhonemeKeyboard component with:
+     - Category tab bar with animated active pill
+     - Scrollable phoneme grid (maxHeight: 160px inner, 210px outer)
+     - AnimatePresence mode="wait" for category transitions
+     - Staggered entrance animation for phoneme buttons (delay: i * 0.02s)
+     - Bottom accent line colored by active category
+   - TTS playback: speaks the example word at rate 0.7 for clear phoneme demonstration
+4. Integrated into `practice.tsx` (PracticeContentWithDiff):
+   - Added `showPhonemes` state
+   - Added toggle button with Piano + "Phonemes" + Volume2 icons
+   - Toggle has active/inactive styling with gradient background and glow when active
+   - AnimatePresence for smooth expand/collapse with height + opacity animation
+   - Keyboard placed below IPA line, above speed control
+   - aria-label and aria-expanded on toggle button for accessibility
+5. Imported Piano and Volume2 from lucide-react, PhonemeKeyboard from widgets
+6. Ran `bun run lint` — PASS (exit 0). Dev server compiling successfully.
+
+**Files Created:**
+- `src/components/widgets/phoneme-keyboard.tsx`
+
+**Files Modified:**
+- `src/components/views/practice.tsx` (added imports: Piano, Volume2, PhonemeKeyboard; added showPhonemes state; added toggle button + AnimatePresence keyboard section in PracticeContentWithDiff JSX)
+
+**Stage Summary:**
+- Interactive phoneme keyboard with 43 phonemes across 3 categories
+- Category tabs with animated active pill and color-coded buttons
+- Each phoneme button plays its example word via TTS at slow rate
+- Hover glow + tap scale animations via Framer Motion
+- Tooltips show phoneme → example word mapping
+- Full accessibility: aria-labels on all buttons, aria-expanded on toggle
+- Toggle button "🎹 Phonemes" in practice view with smooth expand/collapse
+- Compact design (~200px max height) with scrollable grid
+- Staggered entrance animations when switching categories
+- Lint: PASS. Dev server: compiling successfully.
+
+---
+
+## Task 4-d — Styling: Rhythm/Intonation/Linking Widgets Enhancement
+
+**Task ID:** 4-d
+**Agent:** frontend-styling-expert
+**Task:** Enhance visual quality and animations of RhythmBeats, IntonationContour, and LinkingDiagram widgets
+
+**Work Log:**
+
+1. **RhythmBeats** (`src/components/widgets/rhythm-beats.tsx`):
+   - Replaced bar-based beat visualization with SVG circle-based beat layout
+   - Added beat numbers (1, 2, 3…) inside each circle with dynamic font sizing based on circle radius
+   - Added `radialGradient` SVG glow behind stressed beats that pulses when playing
+   - Added `feDropShadow` SVG filter for depth/shadow on all beat circles
+   - Added `feGaussianBlur` + `feMerge` filter for active beat glow
+   - Added expanding ripple effect on active beat using AnimatePresence — two concentric rings animate outward and fade
+   - Added metronome sweep line that tracks across the SVG in sync with playhead progress
+   - Circles scale dynamically based on beat duration relative to max duration
+   - Stressed beat indicator dots above circles pulse during playback
+
+2. **IntonationContour** (`src/components/widgets/intonation-contour.tsx`):
+   - Added labeled axis markers: "High pitch" at top and "Low pitch" at bottom with subtle arrow paths
+   - Added vertical axis line with tick marks at 25%, 50%, 75% pitch positions
+   - Added key point detection algorithm (local extrema + endpoints) to identify contour peaks and valleys
+   - Added fade-in point labels at key positions with background pills, showing "↑H" for high, "↓L" for low, or numeric pitch value
+   - Labels appear after the draw animation completes (via `drawComplete` state + `onAnimationComplete`)
+   - Added `label-shadow` SVG filter for readable text over the contour
+   - Changed moving dot to follow playhead position during playback (interpolating contour Y values)
+   - Enhanced viewBox to 100×65 for better axis label spacing
+
+3. **LinkingDiagram** (`src/components/widgets/linking-diagram.tsx`):
+   - Added 3 staggered animated particles per link line that travel along the curve path with offset delays
+   - Added proper arrowhead polygons at destination endpoints (calculated from quadratic bezier control point angle)
+   - Added subtle wave pattern paths between linked words (12-segment sine wave along the arc)
+   - Added highlight glow overlay on word cards when they're part of an active link (gradient sweep with opacity animation)
+   - Added arrow indicators (▸) on word cards showing incoming/outgoing link directions
+   - Enhanced staggered entrance animation: spring physics with y: 30, opacity: 0, scale: 0.8
+   - Added active link cycling that highlights each link in sequence during playback
+   - Added SVG glow filter for the currently active link's flow line
+   - Fixed lint error: avoided synchronous setState in useEffect by using setTimeout wrapper
+
+**Files Modified:**
+- `src/components/widgets/rhythm-beats.tsx`
+- `src/components/widgets/intonation-contour.tsx`
+- `src/components/widgets/linking-diagram.tsx`
+
+**Stage Summary:**
+- RhythmBeats: Circle-based beat visualization with numbers, gradient glow, shadow, ripple effects, and metronome sweep
+- IntonationContour: Axis labels with arrows, fade-in point labels at key contour positions, moving dot follows playhead during playback
+- LinkingDiagram: Multi-particle flow lines, arrowheads, wave patterns, highlight glow on linked words, direction indicators, enhanced staggered entrance
+- All animations use Framer Motion; SVG filters for glow/blur; existing functionality preserved
+- `bun run lint` — PASS; `bun run build` — PASS
+
+
+---
+
+## Task 4-c — Styling: Completion Screen + Dashboard
+**Agent:** frontend-styling-expert
+**Task:** Enhanced celebration animations on lesson completion screen + visual polish on dashboard
+
+### Work Log
+
+**Part 1: Enhanced Completion Screen** (`src/components/lesson/lesson-modal.tsx`)
+
+1. **Animated badge reveal**: Trophy emoji starts at scale 0, springs to scale 1 (stiffness 260, damping 14), then continuously floats translateY between -3 and 3px in a 3s loop
+2. **Star particles**: 9 star particles (✦ and •) explode outward from badge center at random angles/distances (60-110px), each with a different color from the indigo/violet/cyan/amber/emerald palette, fading out over 1.2s with staggered delays (0.15s + i*0.03s). Each has a matching text-shadow glow
+3. **XP counter animation**: Replaced the old setInterval-based counter with a requestAnimationFrame approach that counts up from 0 to the actual XP value over 800ms with a cubic ease-out curve (`1 - (1-t)³`)
+4. **Score ring animation**: Added a ProgressRing component (80px, stroke 5) that animates from 0% to the practice score (or fallback 85%). The score percentage counts up inside via a separate animated counter (1000ms ease-out)
+5. **Staggered content entrance**: Badge at 0ms → Title at 100ms → XP badge at 200ms → Score ring at 400ms → Badge unlock at 500ms → Next lesson/button at 600ms
+6. **Background celebration glow**: Pulsing radial gradient (indigo→violet→cyan→transparent) positioned behind the badge, animating scale and opacity in a 3s oscillating loop
+7. Passed `practiceScore` prop from StepRenderer to CompletionStepView for the score ring
+
+**Part 2: Dashboard Visual Polish** (`src/components/views/dashboard.tsx`)
+
+1. **Greeting gradient animation**: Changed the greeting `<span>` to `<motion.span>` with Framer Motion `animate={{ backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"] }}` for smooth 6s infinite gradient shift, combined with existing CSS `animate-gradient-text` class
+2. **Stat card colored borders**: Updated the `stats` array colors to match spec:
+   - Streak: amber `#f59e0b` (unchanged)
+   - Speaking Today: emerald `#10b981` (was cyan `#22d3ee`)
+   - Accuracy: cyan `#22d3ee` (was emerald, swapped to differentiate)
+   - Total XP: indigo `#6366f1` (was violet `#a78bfa`)
+   The 4px left border (`borderLeft: 4px solid ${s.color}`) was already in place
+3. **Weekly chart gradient fills + pulsing glow**:
+   - Today bar: 3-stop gradient `#6366f1 → #8b5cf6 → #22d3ee` (indigo→violet→cyan)
+   - Other bars with data: 3-stop gradient `rgba(99,102,241,0.6) → rgba(139,92,246,0.3) → rgba(99,102,241,0.15)` (indigo→violet→faded)
+   - Today bar: Framer Motion `boxShadow` pulsing glow animation cycling between subtle and bright (8px → 18px+30px → 8px) over 2s infinite
+   - Removed CSS `animate-pulse-glow` class in favor of Framer Motion approach
+4. **Continue button bouncing arrow**: Replaced static "→" text with a `<motion.span>` that animates `x: [0, 5, 0]` over 1.2s infinite, creating a left-right bounce effect
+
+**Files Modified:**
+- `src/components/lesson/lesson-modal.tsx` (CompletionStepView: added practiceScore prop, spring badge, star particles, rAF XP counter, score ring with ProgressRing, staggered delays, celebration glow background)
+- `src/components/views/dashboard.tsx` (stats color update, motion.span greeting, weekly chart gradient+glow enhancements, bouncing continue arrow)
+
+**Stage Summary:**
+- Completion screen now has rich celebration: spring-bouncing floating trophy, 9 star particles exploding outward, smooth XP count-up (800ms ease-out), animated score ring, staggered content entrance (0→200→400→600ms), pulsing celebration glow
+- Dashboard polished: gradient text greeting shifts smoothly, stat cards have correct themed left borders (amber/emerald/cyan/indigo), weekly chart bars have multi-stop gradients with Framer Motion pulsing glow on today, continue button arrow bounces
+- Lint: PASS. No business logic changes.
+
+---
+
+## ═══════════════════════════════════════════════════════════════
+## ROUND 9 — QA + Style Improvements + New Features (Current Round)
+## ═══════════════════════════════════════════════════════════════
+
+### 1. Current Project Status Assessment
+
+AccentAI is a feature-rich English accent learning Next.js 16 SPA with:
+- **8 phases × 4 lessons = 32 lessons**, each with 9-12 interactive steps
+- **16 step types**: intro, concept, mouth-diagram, vowel-chart, compare, stress-bars, rhythm, linking, shadow, intonation, tap-pronounce, tip, practice, quiz, completion
+- **5 views**: Dashboard, Journey, Practice, Progress, More
+- **Existing features**: AI Coach (LLM chat), Daily Challenge, Achievement Toasts, XP Shop, Lesson Notes, Achievement Share Card, Phoneme Drill Mode, Spaced Repetition, Keyboard Shortcuts, Recent Lessons Carousel, Coach Insights
+- **Tech**: Next.js 16, Zustand + persist, Framer Motion, Web Speech API TTS, Web Audio API mic
+- **Stability**: Lint passes (exit 0), no browser errors, all HTTP 200 responses, all views functional
+
+### 2. Round 9 — Completed Modifications & Verification
+
+**QA Testing (agent-browser):**
+- ✅ App loads at / (onboarding already completed → Dashboard)
+- ✅ Dashboard: greeting, daily goal, weekly chart, tips, daily challenge, sound profile, coach insights, quick actions
+- ✅ Journey: 8 phases, search/filter, expandable phases, lesson cards with bookmarks
+- ✅ Practice: Easy/Medium/Hard/Drill/Challenge modes, speed slider, phoneme keyboard
+- ✅ Progress: calendar, achievements, phoneme mastery, recent activity
+- ✅ More: profile, accent, theme, XP Shop, all phases, bookmarks, lesson notes
+- ✅ Lesson modal: step navigation, quiz, completion, next lesson
+- ✅ No browser errors, no console errors, lint passes
+
+**Styling Improvements (Task 4-a through 4-d):**
+
+1. **Lesson Step Transitions** (4-a): Fixed stale-closure bug in directional slide animations; added proper Framer Motion variants with `custom` direction prop; added 250ms ease-out slide + fade overlay between steps
+
+2. **Enhanced Step Progress Bar** (4-b): Replaced simple progress indicator with unified animated progress bar (44px height) featuring gradient connecting line with shimmer, category-aware pulsing glow rings on current dot, hover tooltips, step-type background tint overlay (indigo/violet/cyan/amber/green)
+
+3. **Completion Screen + Dashboard Polish** (4-c): Completion screen now has spring-bouncing floating trophy, 9 star particles exploding outward, smooth XP count-up (800ms ease-out via requestAnimationFrame), animated score ring, staggered content entrance (0→200→400→600ms), pulsing celebration glow. Dashboard: gradient text greeting animation, themed stat card borders (amber/emerald/cyan/indigo), weekly chart multi-stop gradient bars with Framer Motion pulsing glow on today, bouncing continue arrow
+
+4. **Widget Enhancements** (4-d): RhythmBeats: circle-based beats with numbers, gradient glow, shadow, ripple effects, metronome sweep. IntonationContour: axis labels with arrows, fade-in point labels at key positions, moving dot follows playhead. LinkingDiagram: multi-particle flow lines, arrowheads, wave patterns, highlight glow on linked words, direction indicators
+
+**New Features (Task 5-a through 5-c):**
+
+1. **TTS Speed Control** (5-a): 4 speed options (0.6×, 0.8×, 1×, 1.2×) in lesson modal with compact pill UI, Gauge icon, Framer Motion hover/tap animations, ARIA accessibility. All TTS calls respect selected speed.
+
+2. **Spaced Repetition + Lesson Timer** (5-b): Review badge (🔄) shows on completed lessons >2 days old in Journey view with spring animation. Lesson timer (⏱ mm:ss) in modal header, pauses on close/resumes on reopen via module-level Map. Time spent shown on completion screen with "Next review suggested in 2 days" note. New store fields: `lastReviewedAt`, `timeSpentSeconds`.
+
+3. **Interactive Phoneme Keyboard** (5-c): 43 phonemes across 3 categories (Vowels/Diphthongs/Consonants) in Practice view. Category tabs with animated active pill. Each button plays example word at 0.7× rate. Hover glow + tap scale animations. Radix Tooltips. Full ARIA accessibility. Toggle button "🎹 Phonemes" with smooth AnimatePresence expand/collapse.
+
+**Verification:**
+- Lint: PASS (exit 0)
+- Dev server: all compiles succeed, GET / 200
+- Agent-browser QA: all features verified working
+- No browser errors, no console errors
+
+### 3. Unresolved Issues & Next Phase Priority Recommendations
+
+**Current Known Issues:**
+- AI Coach backend response time ~2-6s on cold start — could add streaming for perceived performance
+- Light theme could use more polish for consistency with new dark-theme-first features
+- Some lesson step types could have more varied content (e.g., compare step waveforms are basic)
+- Mic recording/practice scoring is simulated — no real speech recognition
+
+**Priority Recommendations for Next Phase:**
+1. **HIGH**: Add real speech recognition scoring using Web Speech API (SpeechRecognition) to replace simulated practice scores
+2. **HIGH**: Implement streaming responses for AI Coach to reduce perceived latency
+3. **MEDIUM**: Add more visual variety to lesson intro steps (animated SVG illustrations per phase theme)
+4. **MEDIUM**: Add lesson difficulty indicators (Easy/Medium/Hard badges on lesson cards)
+5. **MEDIUM**: Add "Practice History" detailed view showing score trends over time with sparkline charts
+6. **LOW**: Add light theme polish for all new components
+7. **LOW**: Add social sharing features (share progress, leaderboard)
+8. **LOW**: Add more granular XP animations (e.g., floating "+120 XP" animation on lesson complete)

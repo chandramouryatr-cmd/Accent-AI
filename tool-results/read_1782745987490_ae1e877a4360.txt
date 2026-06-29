@@ -1,0 +1,502 @@
+   500→  - dev.log: all compiles succeed, GET / 200, POST /api/ai-coach 200 in 2.5s
+   501→  - agent-browser QA confirms: Daily Challenge card visible, Mark Done fires toast, AI Coach FAB opens chat, IPA renders in `<code>` tags, Next Lesson correctly resets to step 1, all 5 views functional
+   502→
+   503→Stage Summary:
+   504→- 1 bug fixed (LessonModal stepIdx reset on lesson change)
+   505→- 3 new features added:
+   506→  1. Achievement Toasts (6 variants, watches state transitions, fires on lesson/badge/streak/goal events)
+   507→  2. Daily Challenge (30 hand-crafted phrases, daily rotation, TTS hear+slow buttons, completion persistence)
+   508→  3. AI Pronunciation Coach (LLM-powered chat with IPA rendering, FAB hidden during lessons, suggested prompts, mobile-friendly)
+   509→- Onboarding polished with floating phonemes, animated logo orb, feature pills, trust signals, secondary background glow
+   510→- 7 new files created: toast-store.ts, toaster.tsx, toast-watcher.tsx, daily-challenges.ts, daily-challenge-card.tsx, ai-coach/route.ts, ai-coach-fab.tsx, ai-coach-chat.tsx
+   511→- 2 files modified: app-shell.tsx (key prop on LessonModal + import Toaster/ToastWatcher/AICoachFAB), dashboard.tsx (import + render DailyChallengeCard), onboarding.tsx (full polish)
+   512→- Lint passes cleanly (exit 0); dev server compiles successfully; all routes return HTTP 200; all interactive features verified working
+   513→
+   514→Unresolved issues / next steps:
+   515→- AI Coach backend has a 6.9s response time on cold start (cached at 2.6s after) — could add streaming response for perceived performance
+   516→- Could add a "Recent Lessons" carousel on Dashboard showing in-progress lessons for quick resume
+   517→- Could add more granular XP animations (e.g., +120 XP floating number animation when completing a lesson)
+   518→- Could add pronunciation challenge sharing (share daily challenge to social)
+   519→- Could add a "Coach Insights" panel that uses AI Coach to analyze the user's weakest phonemes from completed lesson scores
+   520→- Could add light theme polish for consistency with new features (Daily Challenge card, AI Coach chat modal — both designed dark-first)
+   521→- Could add keyboard shortcuts (e.g., Cmd+K to open AI Coach, Space to play audio in lessons)
+   522→
+   523→---
+   524→Task ID: QA-round-4
+   525→Agent: main
+   526→Task: QA + style polish + new features (XP burst, recent lessons carousel, achievement gallery, phoneme mastery, keyboard shortcuts, sparklines, speed slider)
+   527→
+   528→Work Log:
+   529→- Read /home/z/my-project/worklog.md to absorb context from previous rounds (32 lessons, AI Coach, Daily Challenge, Achievement Toasts, onboarding polish, all stable)
+   530→- Performed full QA pass with agent-browser:
+   531→  - Verified app loads at / (onboarding already completed → Dashboard renders)
+   532→  - Verified all 5 views: Dashboard, Journey (8 phases, all expandable), Practice (Easy/Medium/Hard), Progress (rank ladder, calendar heatmap, badges, recent activity), More
+   533→  - Opened lesson "Listening Recognition" (Phase 1, Lesson 4), advanced through all 11 steps (intro → concept → vowel-chart → mouth-diagram → example → tap-pronounce → tip → practice → quiz → completion), verified completion screen shows +130 XP and badge unlock
+   534→  - Verified "Next Lesson" button correctly resets to step 1 of the next lesson (Phase 2 Lesson 1 "100 Core Words" opened at "1/10" not "10/10")
+   535→  - Completed Phase 2 Lessons 1-4 (100 Core Words, Syllable Stress Rules, Silent Letters, Slow Repetition Drills) — all unlocked Phase 3
+   536→  - Tested AI Coach FAB: opens chat, suggested prompt chip "How do I pronounce 'three'?" returned response with 7 IPA code blocks including /θriː/
+   537→  - Verified lint: `bun run lint` → EXIT 0 (clean)
+   538→  - Verified dev.log: all GET / 200, POST /api/ai-coach 200, no errors
+   539→- No bugs found during QA — app was stable on entry. Proceeded to style + feature work.
+   540→
+   541→NEW FEATURES ADDED (7 new files, 4 files modified):
+   542→
+   543→1. XP Burst Animation (`src/components/widgets/xp-burst.tsx`):
+   544→   - Watches global `xp` value via Zustand; emits floating "+N XP" badge when XP increases
+   545→   - Badge rises from top-right (near header XP pill) with spring scale-in, floats up 60px over 1.6s, fades out
+   546→   - Glow halo behind badge (radial gradient, blur), gradient bg (indigo→violet→amber), white border
+   547→   - 5 trailing sparkle particles (alternating violet/cyan) with staggered delay, each drifts outward and fades
+   548→   - Auto-removes after 2.4s; multiple bursts stack via AnimatePresence
+   549→   - Mounted once at app shell level (pointer-events-none, z-60)
+   550→
+   551→2. Recent Lessons Carousel (`src/components/widgets/recent-lessons-carousel.tsx`):
+   552→   - Horizontal snap-scroll carousel showing up to 6 lessons the user has touched (in-progress + completed), most recent first
+   553→   - Falls back to "Start Here" with next 3 incomplete lessons when nothing started
+   554→   - Each card: phase tag (P#·L#), status badge (Resume / ✓ / ▶), title, subtitle, duration, XP, score
+   555→   - In-progress cards show mini progress bar (stepsViewed / total steps)
+   556→   - Completed cards show green score %
+   557→   - Phase color tint overlay per card; hover lift + indigo glow shadow
+   558→   - "All →" button links to Journey view
+   559→   - Inserted at top of Dashboard (between greeting and daily goal)
+   560→
+   561→3. Achievement Gallery (`src/components/widgets/achievement-gallery.tsx`):
+   562→   - Replaces the simple 12-badge grid in Progress view with rich interactive cards
+   563→   - 12 badges total (First Score, 7-Day Streak, 8 Phase badges, Scholar, XP Hunter)
+   564→   - Each badge shows: emoji (or Lock icon if not earned), name, mini progress bar (current/target), "Unlocked" or "% to go" label
+   565→   - Category color coding: lesson=violet, streak=amber, phase=cyan, xp=green
+   566→   - Earned badges have shimmer sweep animation (staggered delays) + colored glow shadow + gentle scale pulse
+   567→   - Click any badge → popout detail card with: emoji, name, description, progress bar, "X / Y" counter, "% to go" or "✓ Unlocked"
+   568→   - Popout dismisses on second click or X button
+   569→   - Header shows "N / 12 earned" counter
+   570→
+   571→4. Phoneme Mastery (`src/components/widgets/phoneme-mastery.tsx`):
+   572→   - Horizontal bar chart showing mastery level per phoneme (12 sounds: ð, θ, æ, ŋ, ɪ, ʊ, ɜː, ʒ, ɑː, iː, uː, r)
+   573→   - Sorted weakest → strongest; each bar colored by level (red <70%, amber 70-84%, green ≥85%)
+   574→   - Spotlight card at top: "Focus Next" — highlights weakest phoneme with big emoji, example words, avg score, and "Practice →" button that opens the most relevant lesson
+   575→   - Each row: phoneme symbol, example words, trend icon (TrendingUp/Down/Minus), avg %, "Train" button
+   576→   - Empty state when no lessons completed: friendly prompt to start lessons
+   577→   - Fixed lesson ID format (p1l2 not p1-l2) — initially had a bug where no phonemes showed; verified fix shows 12 sounds tracked at 85% avg
+   578→   - Inserted into Progress view between Achievements and Recent Activity
+   579→
+   580→5. Keyboard Shortcuts (`src/components/widgets/keyboard-shortcuts.tsx`):
+   581→   - useKeyboardShortcuts hook + ShortcutsOverlay component
+   582→   - Shortcuts: Cmd/Ctrl+K (toggle AI Coach), 1-5 (switch tabs), Esc (close lesson), ? (toggle shortcuts overlay)
+   583→   - Ignores shortcuts when typing in input/textarea/contenteditable (except Cmd+K which works everywhere)
+   584→   - ShortcutsOverlay: modal with 3 groups (Navigation, AI Coach, Help), styled kbd elements, press ? hint at bottom
+   585→   - Wired into app-shell via useKeyboardShortcuts() hook + <ShortcutsOverlay /> render
+   586→   - AI Coach FAB listens for "accentai:toggle-coach" custom events to support Cmd+K
+   587→   - Verified: Ctrl+K opens coach, Esc closes, ? opens overlay, 1-5 switch tabs
+   588→
+   589→6. Dashboard Stat Cards Sparklines (modified `src/components/views/dashboard.tsx`):
+   590→   - Each of the 4 stat cards (Streak, Speaking, Accuracy, XP) now has a mini 7-day sparkline at the bottom
+   591→   - Sparkline data derived from history + practiceCalendar: streak (active days), speaking (lessons/day), accuracy (avg score/day), xp (lessons/day proxy)
+   592→   - 7 vertical bars per card, today's bar highlighted with glow
+   593→   - Background subtle gradient tint per stat color
+   594→   - Animated height entry with staggered delay
+   595→
+   596→7. Practice View 4-Step Speed Slider (modified `src/components/views/practice.tsx`):
+   597→   - Replaced 2-button Normal/Slow toggle with 4-preset segmented slider: 0.6×, 0.75×, Normal, 1.2×
+   598→   - Animated layoutId="speed-pill" slides between presets (spring transition)
+   599→   - Header shows current speed label ("0.6× slower" / "Native" / "1.2× faster")
+   600→   - Speed value type changed from `1 | 0.65` union to `number` for flexibility
+   601→
+   602→STYLE POLISH:
+   603→- Dashboard stat cards: added background gradient tint, mini sparklines, today-highlight glow
+   604→- Achievement gallery: shimmer sweeps, colored glows, popout details with progress bars
+   605→- Phoneme mastery: spotlight card with gradient bg, trend icons, "Train" buttons
+   606→- Practice speed: segmented slider with sliding pill animation
+   607→- All new components use existing palette (indigo/violet/cyan/amber/emerald) — no new colors introduced
+   608→
+   609→VERIFICATION:
+   610→- `bun run lint` → EXIT 0 (clean, zero errors, zero warnings)
+   611→- dev.log: all GET / 200, POST /api/ai-coach 200, no compile errors
+   612→- agent-browser QA confirmed:
+   613→  - Carousel renders ("Continue Learning" visible)
+   614→  - AchievementGallery renders ("Achievements" + "2 / 12 earned" visible, popout works on click)
+   615→  - PhonemeMastery renders ("Phoneme Mastery" + "12 SOUNDS TRACKED" + "FOCUS NEXT" + all 12 phonemes listed)
+   616→  - Keyboard shortcuts: Ctrl+K opens coach, ? opens overlay, Esc closes
+   617→  - Practice speed slider: all 4 presets (0.6×, 0.75×, Normal, 1.2×) visible
+   618→  - Lesson flow: completed 5 lessons (P1L4 + P2L1-L4), XP went 365 → 495 → 625 → 755 → 885 → 1015 (+130 per lesson)
+   619→  - Next Lesson correctly resets to step 1 (verified P2L1 → P2L2 transition)
+   620→
+   621→Stage Summary:
+   622→- 7 new files created: xp-burst.tsx, recent-lessons-carousel.tsx, achievement-gallery.tsx, phoneme-mastery.tsx, keyboard-shortcuts.tsx (hook + overlay in one file)
+   623→- 4 files modified: app-shell.tsx (XPBurst + ShortcutsOverlay + useKeyboardShortcuts), dashboard.tsx (RecentLessonsCarousel + sparklines), progress.tsx (AchievementGallery + PhonemeMastery replacing old badges), practice.tsx (4-step speed slider), ai-coach-fab.tsx (toggle-coach event listener)
+   624→- Lint passes cleanly (exit 0); dev server compiles successfully; all routes return HTTP 200
+   625→- All new features verified working via agent-browser QA
+   626→- App remains stable: 32 lessons load, all 5 views render, lesson navigation works, AI Coach responds with IPA
+   627→
+   628→Unresolved issues / next steps:
+   629→- AI Coach backend response time: 6.9s on cold start, 2.5-3.4s cached — could add streaming response for perceived performance
+   630→- XP Burst animation fires correctly (verified XP increases 885→1015) but auto-removes after 2.4s; could add a longer persistent "recently earned" indicator
+   631→- Could add light theme polish for new components (all designed dark-first; Daily Challenge, AI Coach chat, AchievementGallery popout, ShortcutsOverlay use dark bg variables)
+   632→- Could add a "Streak Freeze" item shop where users spend XP to protect streak on missed days
+   633→- Could add social sharing: share daily challenge or completed lesson to social media with OG image
+   634→- Could add a "Coach Insights" panel that uses AI Coach to analyze the user's weakest phonemes from PhonemeMastery data and generate a personalized practice plan
+   635→- ~~Could add pronunciation challenge mode: timed minimal-pair drills with combo multipliers~~ ✅ DONE (Task 4a)
+   636→- Could add keyboard shortcut for Space (play audio in lessons) and arrow keys (navigate lesson steps)
+   637→- Could persist keyboard shortcuts overlay state to localStorage so it doesn't reappear
+   638→
+   639→---
+   640→
+   641→## Task 4a: Pronunciation Challenge Mode (Completed)
+   642→
+   643→### What was built
+   644→A gamified, timed pronunciation challenge feature with three challenge types, combo multiplier, animated UI, and persistent high scores.
+   645→
+   646→### Files Created
+   647→- **`src/lib/challenge-data.ts`** — Data layer for challenge mode:
+   648→  - 21 minimal pairs across 7 categories (θ/s, ð/d, æ/ɛ, ɪ/iː, ʃ/tʃ, v/w, l/r)
+   649→  - 14 stress words with syllable breakdown and stress index
+   650→  - 20 discrimination pairs (7 same, 13 different)
+   651→  - Challenge config (10 rounds, 5s timer, ×4 max combo, 10 base points, time bonus)
+   652→  - Helper functions: shuffle, pickRandom, round generators for each type
+   653→
+   654→- **`src/components/widgets/pronunciation-challenge.tsx`** — Full challenge UI:
+   655→  - **ChallengeMenu**: Select from 3 challenge types with animated cards and mesh gradient orbs
+   656→  - **Minimal Pair Blitz**: Hear a word via TTS, tap correct phoneme (/θ/ vs /s/, etc.)
+   657→  - **Speed Stress**: Hear a word, tap the stressed syllable
+   658→  - **Sound Discrimination**: Hear two words, tap Same or Different
+   659→  - **TimerRing**: SVG circular countdown (cyan→amber→red color transition)
+   660→  - **ComboBadge**: Spring-animated growing badge (×2, ×3, ×4) with glow
+   661→  - **FlashFeedback**: Green/red radial flash for correct/wrong
+   662→  - **ResultScreen**: Score, max combo, accuracy %, time bonus, new high score banner
+   663→  - Framer Motion animations throughout (spring transitions, scale pulses, slide transitions)
+   664→  - Dark theme with indigo/violet/cyan palette, mesh gradient border
+   665→
+   666→### Files Modified
+   667→- **`src/lib/store.ts`**:
+   668→  - Added `challengeHighScore: number` state field (persisted)
+   669→  - Added `setChallengeHighScore(score)` action (only updates if score > current)
+   670→  - Added to `partialize` for Zustand persistence
+   671→  - Added to `resetAll()`
+   672→
+   673→- **`src/components/views/practice.tsx`**:
+   674→  - Added "⚡ Challenge" tab alongside Easy/Medium/Hard in the mode toggle
+   675→  - Challenge tab has amber/orange gradient pill instead of indigo
+   676→  - Refactored to use AnimatePresence for smooth tab transitions
+   677→  - When Challenge tab is active, shows PronunciationChallenge component
+   678→  - When other tabs are active, shows existing practice flow with difficulty matching tab
+   679→
+   680→---
+   681→
+   682→## Task 4b: Streak Freeze XP Shop
+   683→
+   684→**Date**: 2026-03-05
+   685→
+   686→### Summary
+   687→Built a complete XP Shop where users can spend earned XP on power-ups and cosmetic items. The flagship item is the **Streak Freeze** which protects their streak on missed days.
+   688→
+   689→### Files Created
+   690→- **`src/components/widgets/xp-shop.tsx`** — Full shop UI component with:
+   691→  - 4 purchasable items: Streak Freeze (50 XP), Lesson Retry (30 XP), Double XP (100 XP), Custom Theme (200 XP)
+   692→  - Each item card shows: emoji icon, name, description, cost, buy button
+   693→  - Gold shimmer sweep animation on affordable items
+   694→  - Locked/dimmed appearance on items user can't afford
+   695→  - "Owned ✓" badge for unique items (Double XP, Custom Theme)
+   696→  - "×N" count for stackable items (Streak Freeze, Lesson Retry)
+   697→  - Purchase animation: success overlay with checkmark, XP counter decrement animation
+   698→  - Active Items inventory section showing owned/active items
+   699→  - Empty state when no items are active
+   700→  - Glass morphism cards with gold border accents
+   701→  - Responsive grid layout (1 col mobile, 2 col desktop)
+   702→  - Framer Motion animations: card hover lift, purchase sparkle, emoji bounce on buy
+   703→
+   704→### Files Modified
+   705→- **`src/lib/store.ts`**:
+   706→  - Added `XPShopItems` interface with `streakFreezes`, `doubleXP`, `customTheme`, `lessonRetries`
+   707→  - Added `xpShopItems` state to `AppState` with default values
+   708→  - Added `spendXP(amount)` action — returns false if not enough XP
+   709→  - Added `buyStreakFreeze()`, `buyDoubleXP()`, `buyCustomTheme()`, `buyLessonRetry()` actions
+   710→  - Added `consumeLessonRetry(lessonId)` — resets lesson progress and decrements retries
+   711→  - Modified `completeLesson()` streak logic: if day missed and streakFreezes > 0, consume freeze instead of resetting streak
+   712→  - Double XP buff: when active, multiplies XP earned from lesson, then auto-consumes
+   713→  - Custom events dispatched for toast notifications (`accentai:streak-freeze-used`, `accentai:double-xp-used`)
+   714→  - Added `xpShopItems` to `partialize` for Zustand persistence
+   715→  - Added `xpShopItems` reset in `resetAll()`
+   716→
+   717→- **`src/components/widgets/toast-watcher.tsx`**:
+   718→  - Added event listener for `accentai:streak-freeze-used` → "🛡️ Streak Freeze Used!" toast
+   719→  - Added event listener for `accentai:double-xp-used` → "⚡ Double XP Activated!" toast with earned XP detail
+   720→
+   721→- **`src/components/views/more.tsx`**:
+   722→  - Added import for `XPShop` component
+   723→  - Added XP Shop section between "Appearance" and "All Phases" sections
+   724→
+   725→- **`src/components/app-shell.tsx`**:
+   726→  - Added 🛍️ shop button in header next to XP display
+   727→  - Button navigates to "More" tab (where the shop lives)
+   728→  - Gold/amber styled button with hover/tap animations
+   729→
+   730→### Streak Freeze Logic
+   731→- When `completeLesson()` detects a missed day (lastActiveDate is not today or yesterday)
+   732→- If `streakFreezes > 0`, the freeze is consumed (decremented by 1)
+   733→- Streak continues incrementing as if no day was missed
+   734→- Toast notification fires via custom event → toast-watcher
+   735→- Auto-applies — no manual user action needed
+   736→
+   737→### Visual Style
+   738→- Dark theme with amber/gold accent for shop items
+   739→- Gold shimmer sweep animation on affordable items (infinite, 3s cycle with 2s delay)
+   740→- Locked/dimmed (opacity-60) on unaffordable items
+   741→- Glass morphism cards with `backdrop-filter: blur(12px)`
+   742→- Gold border accents `rgba(245,158,11,0.2)`
+   743→- Green accent for owned items `rgba(16,185,129,...)`
+   744→- Framer Motion: hover lift (-4px), tap scale, purchase sparkle, XP counter decrement
+   745→
+   746→## Task 4c: AI Coach Streaming Response
+   747→
+   748→### Date: 2026-03-05
+   749→
+   750→### Summary
+   751→Added real-time token-by-token streaming to the AI Coach chat, replacing the previous single-response pattern. Users now see responses appear with a typewriter effect, dramatically improving perceived performance.
+   752→
+   753→### Changes Made
+   754→
+   755→#### Backend (`src/app/api/ai-coach/route.ts`)
+   756→- Switched from single JSON response to Server-Sent Events (SSE) streaming
+   757→- Uses native `stream: true` from z-ai-web-dev-sdk when available (SDK returns a ReadableStream for SSE)
+   758→- Reads the upstream SSE stream and re-emits tokens in normalized format: `data: { "token": "..." }` per line
+   759→- Falls back to simulated streaming (word-by-word with 35ms delays) when SDK returns non-streaming response
+   760→- Each stream ends with `data: [DONE]`
+   761→- All validation, sanitization, system prompt, and context injection logic preserved
+   762→- GET endpoint preserved with added `streaming: true` and `streamFormat` schema info
+   763→- Error handling: sends error token + [DONE] if stream is interrupted mid-way
+   764→
+   765→#### Frontend (`src/components/ai-coach/ai-coach-chat.tsx`)
+   766→- Replaced `fetch → res.json()` with `fetch → ReadableStream reader` consuming SSE
+   767→- 3-dot typing indicator shown while waiting for first token
+   768→- On first token arrival: creates assistant message and starts appending tokens
+   769→- Tokens appended in real-time to the last assistant message (typewriter effect)
+   770→- Blinking cursor (CSS `@keyframes blink-cursor`) rendered at end of streaming text via `renderWithIPA(text, showCursor)`
+   771→- Cursor disappears when streaming completes
+   772→- Auto-scroll keeps up with incoming text
+   773→- 30-second timeout: if no first token received, aborts with timeout error
+   774→- AbortController for clean cancellation (close panel, new message, etc.)
+   775→- Partial stream error: shows whatever was received + error indicator with inline retry button
+   776→- Full error: shows error message with retry button and "Press Enter" hint
+   777→- Retry logic: removes last error assistant + user message and re-sends
+   778→- Header status dynamically shows "Thinking…" during loading
+   779→- All existing features preserved: IPA rendering, suggested prompts, Escape to close, etc.
+   780→
+   781→#### CSS (`src/app/globals.css`)
+   782→- Added `@keyframes blink-cursor` animation (0.8s step-end infinite)
+   783→- Added `.animate-blink-cursor` utility class
+   784→
+   785→### Technical Notes
+   786→- The z-ai-web-dev-sdk supports `stream: true` in `CreateChatCompletionBody`
+   787→- When streaming, SDK returns `response.body` (ReadableStream) instead of parsed JSON
+   788→- The SSE format from upstream follows OpenAI-style: `data: {"choices":[{"delta":{"content":"..."}}]}`
+   789→- Backend normalizes this to `data: {"token":"..."}` for simpler frontend parsing
+   790→- Fallback simulated streaming splits text with `(?<=\s)` regex to preserve whitespace
+   791→
+   792→---
+   793→Task ID: QA-round-5
+   794→Agent: main
+   795→Task: QA + bug fix + style improvements + new features (Pronunciation Challenge, XP Shop, AI Coach streaming)
+   796→
+   797→Work Log:
+   798→- Read /home/z/my-project/worklog.md to understand full project context (32 lessons, AI Coach, Daily Challenge, Achievement Toasts, onboarding polish, etc.)
+   799→- Performed full QA pass with agent-browser:
+   800→  - Verified app loads at / (onboarding flow: Try Demo → USA accent → Begin Journey → Dashboard renders)
+   801→  - Verified all 5 views: Dashboard, Journey (8 phases, all expandable, lessons tappable), Practice (Easy/Medium/Hard + new Challenge tab), Progress (rank ladder, calendar heatmap, badges, recent activity, phoneme mastery), More (profile, accent, theme, XP Shop, all phases, bookmarks)
+   802→  - Opened lessons, advanced through steps (intro → concept → vowel-chart → mouth-diagram → example → tap-pronounce → tip → practice → quiz → completion)
+   803→  - Found 1 bug: nested `<button>` in AchievementGallery (`<motion.button>` wrapping a `<button>` close X) — invalid HTML, console error
+   804→  - Confirmed lint passes (exit 0), dev server serves HTTP 200, zero runtime errors
+   805→- Fixed nested button bug in AchievementGallery: Changed outer `<motion.button>` to `<motion.div role="button" tabIndex={0}` with onKeyDown handler for accessibility
+   806→- Dispatched 3 subagents in parallel for new features:
+   807→  1. Task 4a: Pronunciation Challenge mode (timed minimal-pair drills with combo multiplier)
+   808→  2. Task 4b: Streak Freeze XP Shop (4 purchasable items: Streak Freeze, Double XP, Lesson Retry, Custom Theme)
+   809→  3. Task 4c: AI Coach streaming response (SSE token-by-token streaming with typewriter effect)
+   810→- Implemented major style improvements directly:
+   811→  1. **Lesson Step Progress Dots**: Added interactive emoji-based step navigation dots below the progress bar in LessonModal. Each dot shows the step type icon (👋intro, 📖concept, 🎯vowel-chart, 👄mouth-diagram, 💬example, 👆tap-pronounce, 💡tip, 🎙practice, ❓quiz, 🏆completion). Current step has gradient bg + pulsing ring, past steps are green, future steps are bordered. Clicking a dot jumps to that step.
+   812→  2. **Enhanced Progress Bar**: Upgraded from h-1 to h-1.5 with glow shadow on the fill and a shimmer sweep overlay that travels along the progress bar.
+   813→  3. **Completion Step Animated XP Counter**: XP value now counts up from 0 to the target value over 1.2 seconds (30 steps). Added 12 celebration particles exploding outward in a circle. Added shimmer sweep on the XP badge. Badge emoji now has a wiggle animation. Background glow enhanced.
+   814→  4. **Intro Step Enhancement**: Added subtle background glow orb, floating animation on emoji (animate-gentle-float), staggered entrance animations on text and waveform, gradient overlay on waveform, whileHover/whileTap on "Hear the title" button.
+   815→  5. **Concept Step Enhancement**: Added border to "Concept" badge, conditional visualLabel pill, staggered entrance animation on body paragraphs, glowing dot indicators on bullet points, hover border color change on bullet cards.
+   816→  6. **Example Step Enhancement**: Added border to "Example" badge, background glow orb inside phrase card, staggered entrance animation on word buttons, whileHover/whileTap on each word, glow shadow on highlighted words, glow shadow on "Play full phrase" button.
+   817→  7. **Practice Score Ring**: Replaced simple text percentage with animated SVG circular progress ring. Ring fills proportionally with green/amber/red color based on score. Score number springs into view. Improved particle burst effect (more particles, longer duration). Issues now shown as styled pill badges. Tip card now has shimmer sweep overlay.
+   818→  8. **CSS Utilities Added**: scrollbar-none, glass-card, grad-text (extracted), pulse-glow-ring animation, gentle-float animation, blink-cursor animation.
+   819→- Verified all changes via agent-browser:
+   820→  - Dashboard: XP Shop button visible, Daily Challenge, Tip of the Day, Sound Profile all render
+   821→  - Journey: 8 phases, search/filter, expandable phase cards, lessons tappable
+   822→  - Practice: Easy/Medium/Hard/Challenge tabs work, Challenge mode shows 3 challenge types
+   823→  - More: XP Shop with 4 items visible (Streak Freeze, Lesson Retry, Double XP, Custom Theme)
+   824→  - Lesson modal: Step progress dots visible and interactive, progress bar has shimmer
+   825→  - AI Coach: Streaming responses work (tested "How do I pronounce three?" → received response with IPA and tips)
+   826→  - All views load without errors
+   827→- Final lint: `bun run lint` → EXIT 0 (clean)
+   828→- Final dev.log: All compiles succeed, GET / 200 responses, no errors
+   829→
+   830→Stage Summary:
+   831→- 1 bug fixed (nested button in AchievementGallery)
+   832→- 3 major new features added (Pronunciation Challenge, XP Shop, AI Coach streaming)
+   833→- 8 style improvements applied (step progress dots, enhanced progress bar, animated XP counter, enhanced intro/concept/example steps, practice score ring, CSS utilities)
+   834→- Files modified by main agent: lesson-modal.tsx, practice.tsx, achievement-gallery.tsx, globals.css
+   835→- Files created by subagents: challenge-data.ts, pronunciation-challenge.tsx, xp-shop.tsx
+   836→- Files modified by subagents: store.ts, more.tsx, app-shell.tsx, ai-coach/route.ts, ai-coach-chat.tsx, toast-watcher.tsx
+   837→- Lint: PASS (exit 0). Dev server: HTTP 200. All features verified working.
+   838→- App is feature-rich, visually polished, and fully functional
+   839→
+   840→Unresolved issues / next steps:
+   841→- Light theme polish: Many components are dark-first; Daily Challenge, AI Coach chat, AchievementGallery popout, ShortcutsOverlay could use light theme adjustments
+   842→- Could add Space key shortcut for playing audio in lessons
+   843→- Could add arrow key navigation for lesson steps (already works with ESC and arrows in LessonModal)
+   844→- Could add social sharing: share daily challenge or completed lesson
+   845→- Could add Coach Insights panel: AI analysis of weakest phonemes from PhonemeMastery data
+   846→- Could add more challenge types or custom challenge builder
+   847→- Could add lesson difficulty ratings / time tracking per step
+   848→
+   849→---
+   850→Task ID: QA-round-6
+   851→Agent: main
+   852→Task: QA + light theme polish + Coach Insights + keyboard shortcuts + animated dashboard
+   853→
+   854→Work Log:
+   855→- Read /home/z/my-project/worklog.md to understand full project context (previous rounds: 32 lessons, AI Coach streaming, Pronunciation Challenge, XP Shop, step progress dots, etc.)
+   856→- Performed full QA pass with agent-browser:
+   857→  - Verified app loads at / (onboarding: Try Demo → USA accent → Begin Journey → Dashboard renders)
+   858→  - Verified all 5 views: Dashboard, Journey (8 phases, expandable, lessons tappable), Practice (Easy/Medium/Hard/Challenge), Progress (rank ladder, calendar heatmap, achievements, phoneme mastery, recent activity), More (profile, accent, theme, XP Shop, all phases, bookmarks)
+   859→  - Opened Vowel Sounds lesson, advanced 3 steps to "Mouth Position for /iː/" (mouth-diagram step) — step progress dots visible and interactive
+   860→  - Tested Challenge mode: clicked "Minimal Pair Blitz" → showed /ʃ/ share vs /tʃ/ chair question
+   861→  - Verified XP Shop: 4 items visible (Streak Freeze, Lesson Retry, Double XP, Custom Theme) — all show "Not enough XP" with 0 XP
+   862→  - Confirmed lint passes (exit 0), dev server serves HTTP 200, zero runtime errors
+   863→- App was stable on entry. Proceeded to style + feature work.
+   864→
+   865→NEW FEATURES ADDED (dispatched to subagents):
+   866→
+   867→1. **Coach Insights Panel** (Task 6-coach-insights, full-stack-developer subagent):
+   868→   - Created `src/components/widgets/coach-insights.tsx` — AI-powered personalized practice plan
+   869→   - "Get AI Insights" button gathers phoneme mastery data + completed lessons + XP + streak
+   870→   - Calls `/api/ai-coach` with `mode: "insights"` — special system prompt returns JSON with focusAreas, recommendedLessons, tips
+   871→   - Loading state: 3-dot bouncing animation + "Analyzing your progress…"
+   872→   - Success state: 3 sections (🎯 Focus Areas with phoneme + score ring + reason, 📚 Recommended Lessons as clickable cards that open the lesson, 💡 Practice Tips with amber Lightbulb icons)
+   873→   - Fallback: shows raw text if JSON parsing fails
+   874→   - localStorage caching (date-keyed) so same-day renders skip the API call
+   875→   - Refresh button to regenerate
+   876→   - Added to Dashboard between Sound Profile and Quick Actions
+   877→   - Modified `src/app/api/ai-coach/route.ts` to add `mode: "insights"` branch with `buildInsightsSystemPrompt()`
+   878→   - Fixed pre-existing set-state-in-effect lint error in lesson-modal.tsx
+   879→
+   880→2. **Enhanced Keyboard Shortcuts** (Task 7-keyboard, full-stack-developer subagent):
+   881→   - Added Space key to play audio in lessons — `getPrimaryAudioText(step)` helper maps each step type to its primary spoken text
+   882→   - Space guarded: skips when typing in input/textarea/contentEditable, when AI Coach chat is open, when ShortcutsOverlay is visible, when a button/link is focused
+   883→   - Transient "⌨ Space · Press Space to play" pill hint (Framer Motion spring) floats above footer for 3 seconds on step change
+   884→   - Reorganized shortcuts overlay into 4 grouped cards with emoji icons: 🧭 Navigation (1-5), 🎓 In Lesson (Space, ←→, Esc), ✨ AI Coach (⌘K), ❓ Help (?)
+   885→   - New header with gradient Keyboard icon tile, multi-key shortcuts as separate kbd chips
+   886→   - Bumped z-index to z-[300] so overlay visible above lesson modal
+   887→   - Escape-to-close for overlay, max-h-[90vh] overflow-y-auto for short screens
+   888→
+   889→STYLE IMPROVEMENTS (implemented directly by main agent):
+   890→
+   891→3. **Light Theme Polish — Adaptive Overlay Variables**:
+   892→   - Added 6 new CSS variables to both `:root` (dark) and `.light`:
+   893→     - `--overlay-1`, `--overlay-2`, `--overlay-3` (background tints)
+   894→     - `--overlay-border-1`, `--overlay-border-2` (border tints)
+   895→     - `--shadow-color`
+   896→   - Dark theme keeps original `rgba(255,255,255,...)` values
+   897→   - Light theme uses `rgba(99,102,241,...)` (indigo-tinted) values for better contrast on light background
+   898→   - Replaced hardcoded `rgba(255,255,255,...)` with CSS variables in 11 files:
+   899→     - dashboard.tsx (4 replacements: sparkline bg, progress bar bg, phoneme unknown bg, phoneme unknown dot)
+   900→     - journey.tsx (2 replacements: lesson card bg, progress bar bg)
+   901→     - progress.tsx (6 replacements: calendar cell border, 4 legend borders, rank progress bar bg)
+   902→     - achievement-gallery.tsx (2 replacements: mini progress bar bg, detail progress bar bg)
+   903→     - phoneme-mastery.tsx (1 replacement: progress bar bg)
+   904→     - practice.tsx (1 replacement: score ring track stroke)
+   905→     - more.tsx (1 replacement: phase progress bar bg)
+   906→     - recent-lessons-carousel.tsx (1 replacement: progress bar bg)
+   907→     - xp-shop.tsx (1 replacement: unaffordable item bg)
+   908→     - pronunciation-challenge.tsx (2 replacements: timer ring track stroke, round dot bg)
+   909→     - coach-insights.tsx (2 replacements: score ring track stroke, raw text card bg)
+   910→
+   911→4. **Animated Stat Counters** (dashboard.tsx):
+   912→   - Created `useAnimatedCounter(target, duration)` hook using requestAnimationFrame with ease-out cubic
+   913→   - Created `AnimatedStatValue` component that parses string values like "85%" or "3m" and animates the numeric part
+   914→   - Applied to all 4 dashboard stat cards (Streak, Speaking Today, Accuracy, Total XP)
+   915→   - Values count up from 0 to target over 1.2 seconds on mount
+   916→
+   917→5. **Enhanced Weekly Chart** (dashboard.tsx):
+   918→   - Added background grid lines (3 horizontal lines for visual reference)
+   919→   - Bars now have 3-state styling: today (gradient indigo→cyan + glow), has score (subtle indigo gradient), no score (overlay-1)
+   920→   - Score labels now animate in with delay (opacity + y transition)
+   921→   - Added average line indicator: dashed amber line at average score position with "avg N" label
+   922→   - Only shows when there's actual score data
+   923→
+   924→VERIFICATION:
+   925→- `bun run lint` → EXIT 0 (clean, zero errors, zero warnings)
+   926→- dev.log: all compiles succeed, GET / 200, POST /api/ai-coach 200
+   927→- agent-browser QA confirmed:
+   928→  - Dashboard: Coach Insights section visible with "Get AI Insights" button
+   929→  - Coach Insights: clicked button → received AI response with Focus Areas, Recommended Lessons (clickable), Practice Tips
+   930→  - Keyboard shortcuts: ? opens overlay with 4 grouped sections (Navigation, In Lesson, AI Coach, Help)
+   931→  - Light theme: toggled successfully, no errors, all components render correctly
+   932→  - All 5 views load without errors
+   933→  - Lesson modal: step progress dots work, navigation works
+   934→  - Practice: Challenge mode works with 3 challenge types
+   935→  - XP Shop: 4 items visible with proper disabled state when not enough XP
+   936→
+   937→Stage Summary:
+   938→- 2 major new features added (Coach Insights AI panel, enhanced keyboard shortcuts with Space-to-play)
+   939→- 3 style improvements applied (light theme adaptive overlays in 11 files, animated stat counters, enhanced weekly chart with grid + average line)
+   940→- Files created: coach-insights.tsx
+   941→- Files modified by main agent: globals.css, dashboard.tsx, journey.tsx, progress.tsx, achievement-gallery.tsx, phoneme-mastery.tsx, practice.tsx, more.tsx, recent-lessons-carousel.tsx, xp-shop.tsx, pronunciation-challenge.tsx
+   942→- Files modified by subagents: ai-coach/route.ts, lesson-modal.tsx, keyboard-shortcuts.tsx, dashboard.tsx (CoachInsights import)
+   943→- Lint: PASS (exit 0). Dev server: HTTP 200. All features verified working.
+   944→- App is feature-rich, visually polished, light/dark theme adaptive, and fully functional
+   945→
+   946→Unresolved issues / next steps:
+   947→- Could add social sharing: share daily challenge or completed lesson with OG image generation
+   948→- Could add more challenge types or custom challenge builder
+   949→- Could add lesson difficulty ratings / time tracking per step
+   950→- Could add a "Streak Freeze" notification when consumed (already implemented via toast-watcher)
+   951→- Could add more phoneme data to the PhonemeMastery widget (currently tracks 12 phonemes)
+   952→- Could add a "Recently Earned XP" persistent indicator (XP Burst auto-removes after 2.4s)
+   953→- Could add light theme testing for all 32 lesson step widgets (mouth-diagram, vowel-chart, etc.) — they use SVG with hardcoded colors that may need light theme variants
+   954→- Could add a settings panel for keyboard shortcuts customization
+   955→- Could add accessibility improvements (screen reader announcements for toasts, ARIA live regions)
+   956→
+   957→---
+   958→Task ID: 6-coach-insights
+   959→Agent: coach-insights-builder
+   960→Task: Build a "Coach Insights" AI-powered panel on the Dashboard that analyzes the user's weakest phonemes via the AI Coach backend and renders a structured personalized practice plan (focus areas + recommended lessons + tips).
+   961→
+   962→Work Log:
+   963→- Read /home/z/my-project/worklog.md (847 lines) to absorb project context: AccentAI is a Next.js 16 + TypeScript single-route SPA with 32 lessons across 8 phases, Zustand store, dark-default indigo/violet/cyan palette, Framer Motion throughout. Existing AI Coach at /api/ai-coach streams SSE tokens. PhonemeMastery widget already maps phonemes → lessons and computes avg scores.
+   964→- Inspected key files: src/app/api/ai-coach/route.ts (existing SSE streaming endpoint with buildSystemPrompt), src/components/widgets/phoneme-mastery.tsx (PHONEME_LESSONS mapping + levelColor logic), src/components/views/dashboard.tsx (Sound Profile section ends at line 694, Quick Actions starts at 696 — perfect insertion point between them), src/lib/store.ts (lessons/xp/streak/accent fields), src/lib/lessons/index.ts (ALL_LESSONS array for title→id lookup), src/lib/types.ts (PHASES + Lesson types), src/components/ai-coach/ai-coach-chat.tsx (SSE consumption pattern reference).
+   965→- Read agent-ctx/7-ai-coach-ai-coach-builder.md to understand the AI Coach backend's system prompt design philosophy.
+   966→
+   967→### File 1 — MODIFIED: src/app/api/ai-coach/route.ts
+   968→- Extended `RequestContext` interface with new optional field `phonemeMastery?: PhonemeScore[]` (each entry: { phoneme, score, example?, count? }). Defined new `PhonemeScore` interface.
+   969→- Extended `RequestBody` with new optional field `mode?: "chat" | "insights"`.
+   970→- Added new `buildInsightsSystemPrompt(ctx)` function — a focused system prompt that:
+   971→  • Embeds the user's accent, XP, streak, completed-lesson count, and the FULL phoneme-mastery list (weakest-first) as readable bullet text.
+   972→  • Embeds the entire 8-phase × 4-lesson AccentAI catalog (exact lesson titles) so the model can pick real lessons.
+   973→  • Specifies strict output requirements: ONLY a single valid JSON object, no markdown fences, must start with `{` and end with `}`, three exact keys (focusAreas, recommendedLessons, tips), with constrained item shapes (phoneme without slashes, score 0-100, reason ≤ 1 sentence; phase 1-8, exact lesson title; tips ≤ 3 items, ≤ 18 words each).
+   974→  • Tells the model to pick focus areas from the user's actual weakest phonemes (fallback to /θ/, /ð/, /æ/ if no data) and to recommend next-step lessons appropriate to the learner's experience.
+   975→- In `POST` handler: added `isInsights = body.mode === "insights"` check; loosened input validation so insights mode accepts an empty `messages` array (we synthesize a user message inside the handler since the plan is fully derived from context, not from chat input).
+   976→- For insights mode: filter out client-supplied system messages, synthesize a user message ("Please analyze my phoneme mastery data and generate my personalized practice plan now.") when none provided, then build finalMessages with the insights system prompt.
+   977→- Lowered temperature to 0.45 (vs 0.7 chat) for more consistent JSON output, and bumped max_tokens to 900 for richer plan content.
+   978→- Updated GET endpoint schema doc to advertise the new `mode` field, `phonemeMastery` context field, and the JSON shape returned by insights mode.
+   979→
+   980→### File 2 — CREATED: src/components/widgets/coach-insights.tsx (989 lines)
+   981→- Self-contained CoachInsights component. Public API: `<CoachInsights />` (no props).
+   982→- **Data gathering** (Zustand store): reads `lessons`, `xp`, `streak`, `accent`, `setActiveLesson`. Derives phoneme mastery via a local `derivePhonemeMastery()` helper that mirrors the PhonemeMastery widget logic exactly (same PHONEME_LESSONS mapping, same avg-score + weakest-first sort). Returns top 5 weakest phonemes with example + score + count + bestLessonId.
+   983→- **API integration**: POSTs to `/api/ai-coach` with `{ mode: "insights", messages: [], context: { accent, xp, streak, completedLessons, phonemeMastery: top5 } }`. Consumes the SSE stream token-by-token (same pattern as ai-coach-chat.tsx), accumulates text, then on completion attempts robust JSON parsing.
+   984→- **Robust JSON parsing** (`extractJson(text)` + `normalizePlan(raw)`): 3-tier fallback — (1) direct JSON.parse, (2) unwrap ```json…``` or ```…``` fences, (3) slice between first `{` and last `}`. Then `normalizePlan` validates and coerces each field: arrays must exist, items must match shape (phoneme/score/reason for focus areas, phase/lesson/reason for recommended lessons, strings for tips). Strips leading/trailing slashes from phoneme values, clamps phase to 1-8, clamps score to 0-100, slices tips to max 4. Returns null only if all three sections are empty — otherwise the raw text fallback is used.
+   985→- **localStorage caching**: keyed by `accentai-coach-insights-{YYYY-MM-DD}` (date-based, so a fresh plan is fetched each day). On mount: tries to load today's cached entry and if found, jumps straight to the success view (no loading state on subsequent renders same day). After each successful fetch: persists `{ parsed, rawText, generatedAt, signature }` where signature is a phoneme-score hash for potential future invalidation. Cache writes are wrapped in try/catch to survive quota / private-mode errors.
+   986→- **States & UX**:
+   987→  • `idle`: Animated 64px gradient orb (Sparkles icon + rotating ✨ emoji) + headline + context-aware subtext (different copy for 0 lessons completed vs. 0 phonemes tracked vs. N phonemes tracked) + "Get AI Insights" gradient button (Zap icon).
+   988→  • `loading`: Rotating gradient orb with blurred glow + pulsing center Sparkles + 3-dot bouncing animation (staggered delay 0/0.15/0.3s) + "Analyzing your progress…" headline + subtext "Reading phoneme scores · picking lessons · crafting tips".
+   989→  • `error`: Red AlertTriangle icon + friendly error message + "Try again" button.
+   990→  • `success` (parsed JSON): Three sections with staggered entrance animations:
+   991→    1. **🎯 Your Focus Areas** — grid of cards (1 col mobile, 2 col sm+), each card has: phoneme symbol in colored tile (red/amber/green based on score), ScoreRing SVG (animated stroke-dashoffset + drop-shadow glow + score number in center), 1-sentence reason text.
+   992→    2. **📚 Recommended Lessons** — vertical stack of clickable cards. Each card: phase pill (e.g. "P1"), lesson title (bold), 1-sentence reason, BookOpen icon in gradient tile, ChevronRight that animates on hover. Clicking opens the lesson via `setActiveLesson(lesson.id)` — uses `ALL_LESSONS.find(l => l.title === rec.lesson)` for title→ID lookup with fuzzy fallback (phase match + first 8 chars). Disabled (no pointer cursor) if lesson can't be resolved.
+   993→    3. **💡 Practice Tips** — bullet list with amber Lightbulb icons in circular badges, staggered slide-in from left.
+   994→    Footer: "✨ Generated by AccentAI Coach · regenerate" with inline regenerate button.
+   995→  • `success` (raw text fallback, when JSON parsing fails): Single "Coach Advice" section with the raw AI text in a styled card — graceful degradation so the user always sees something useful.
+   996→- **Refresh button** in the header (top-right) — visible only in success state, calls the same `handleGetInsights()` to fetch a fresh plan.
+   997→- **Visual style**: Animated mesh gradient border around the whole card (4-stop indigo→violet→cyan→indigo gradient, backgroundPosition animates 0%→100%→0% over 8s infinite). Inner card uses glass morphism (`backdrop-filter: blur(16px)`, dark gradient background). Two floating radial orbs in the background (violet top-right + cyan bottom-left, scale/opacity pulse on different timings).
+   998→- **Framer Motion**: All transitions are spring-based (stiffness 280, damping 24 for cards) with staggered delays. Hover: cards lift -2px. Tap: scale 0.98. AnimatePresence mode="wait" between view states for smooth crossfade.
+   999→- **Mobile-first responsive**: Single column on mobile, 2-col grid for focus areas on sm+. Text sizes use the standard xs/sm scale from other AccentAI widgets. Cards have proper min-w-0 + truncate to handle long content gracefully.
+
+[showing lines 500-999 of 1303; use offset=1000 with limit to continue reading]

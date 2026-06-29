@@ -10,6 +10,8 @@ export interface LessonProgress {
   score: number; // 0-100 best score
   completedAt: number | null;
   stepsViewed: number;
+  lastReviewedAt: number | null; // timestamp of last review, null if never reviewed
+  timeSpentSeconds: number; // total seconds spent on this lesson
 }
 
 export interface XPShopItems {
@@ -68,8 +70,9 @@ export interface AppState {
   setActiveLesson: (id: string | null) => void;
   setExpandedPhase: (i: number | null) => void;
 
-  completeLesson: (lessonId: string, score: number, xp: number, badge?: string) => void;
+  completeLesson: (lessonId: string, score: number, xp: number, badge?: string, timeSpentSeconds?: number) => void;
   markStepViewed: (lessonId: string, totalSteps: number) => void;
+  markReviewed: (lessonId: string) => void;
   addSpeakingTime: (seconds: number) => void;
   setDailyGoal: (n: number) => void;
   toggleBookmark: (lessonId: string) => void;
@@ -135,12 +138,13 @@ export const useAppStore = create<AppState>()(
       setActiveLesson: (id) => set({ activeLessonId: id }),
       setExpandedPhase: (i) => set({ expandedPhase: i }),
 
-      completeLesson: (lessonId, score, xp, badge) => {
+      completeLesson: (lessonId, score, xp, badge, timeSpent) => {
         const state = get();
         const existing = state.lessons[lessonId];
         // only award XP the first time
         const isFirstTime = !existing?.completed;
         const newScore = existing ? Math.max(existing.score, score) : score;
+        const newTimeSpent = (existing?.timeSpentSeconds ?? 0) + (timeSpent ?? 0);
 
         // double XP: if active, multiply XP and consume the buff
         const xpMultiplier = state.xpShopItems.doubleXP ? 2 : 1;
@@ -206,6 +210,8 @@ export const useAppStore = create<AppState>()(
               score: newScore,
               completedAt: Date.now(),
               stepsViewed: existing?.stepsViewed ?? 0,
+              lastReviewedAt: existing?.lastReviewedAt ?? null,
+              timeSpentSeconds: newTimeSpent,
             },
           },
           xp: state.xp + earnedXP,
@@ -253,6 +259,8 @@ export const useAppStore = create<AppState>()(
                 score: 0,
                 completedAt: null,
                 stepsViewed: 1,
+                lastReviewedAt: null,
+                timeSpentSeconds: 0,
               },
             },
           });
@@ -267,6 +275,21 @@ export const useAppStore = create<AppState>()(
             },
           });
         }
+      },
+
+      markReviewed: (lessonId) => {
+        const state = get();
+        const existing = state.lessons[lessonId];
+        if (!existing?.completed) return;
+        set({
+          lessons: {
+            ...state.lessons,
+            [lessonId]: {
+              ...existing,
+              lastReviewedAt: Date.now(),
+            },
+          },
+        });
       },
 
       addSpeakingTime: (seconds) => {
@@ -412,6 +435,8 @@ export const useAppStore = create<AppState>()(
           score: 0,
           completedAt: null,
           stepsViewed: 0,
+          lastReviewedAt: null,
+          timeSpentSeconds: 0,
         };
         set({
           lessons: updatedLessons,

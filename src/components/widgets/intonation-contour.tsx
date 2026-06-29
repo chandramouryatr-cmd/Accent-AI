@@ -10,9 +10,10 @@ interface Props {
 }
 
 // Pitch contour SVG — animated path showing how pitch moves across a phrase.
-// Enhanced: filled gradient area under curve, word markers along x-axis,
-// vertical playhead, glow on contour path, pattern description text,
-// larger moving dot with comet trail.
+// Enhanced: animated draw effect (pathLength), moving dot along contour,
+// gradient fill below contour, labeled axis markers with arrows,
+// point labels that fade in showing pitch values at key points,
+// comet trail, vertical playhead, glow on contour path, pattern description.
 
 const PATTERN_DESC: Record<string, string> = {
   rising: "Rising = question / uncertainty / list item",
@@ -26,6 +27,7 @@ export function IntonationContour({ step, speak }: Props) {
   const { contour, phrase, pattern, description, title } = step;
   const [playhead, setPlayhead] = useState(0); // 0..1 progress along the contour
   const [playing, setPlaying] = useState(false);
+  const [drawComplete, setDrawComplete] = useState(false);
 
   const toX = (x: number) => 5 + (x / 100) * 90;
   const toY = (y: number) => 55 - (y / 100) * 50;
@@ -52,6 +54,23 @@ export function IntonationContour({ step, speak }: Props) {
     word: w,
     x: 5 + ((i + 0.5) / words.length) * 90,
   }));
+
+  // Identify key contour points (local extrema + first/last)
+  const keyPointIndices = (() => {
+    const indices = new Set<number>();
+    indices.add(0);
+    indices.add(contour.length - 1);
+    for (let i = 1; i < contour.length - 1; i++) {
+      const prev = contour[i - 1].y;
+      const curr = contour[i].y;
+      const next = contour[i + 1].y;
+      // Local maximum or minimum
+      if ((curr >= prev && curr >= next) || (curr <= prev && curr <= next)) {
+        indices.add(i);
+      }
+    }
+    return Array.from(indices).sort((a, b) => a - b);
+  })();
 
   // Playhead driver
   useEffect(() => {
@@ -82,13 +101,23 @@ export function IntonationContour({ step, speak }: Props) {
   // Compute current playhead X position from progress
   const playheadX = 5 + playhead * 90;
 
+  // Compute Y at playhead position by interpolating contour
+  const playheadY = (() => {
+    const idx = Math.min(contour.length - 1, Math.floor(playhead * (contour.length - 1)));
+    const segP = playhead * (contour.length - 1) - idx;
+    const a = contour[idx];
+    const b = contour[Math.min(idx + 1, contour.length - 1)];
+    const yLerp = a.y + (b.y - a.y) * segP;
+    return toY(yLerp);
+  })();
+
   return (
     <div className="space-y-3">
       {title && <h4 className="font-d font-semibold text-lg text-[var(--t1)]">{title}</h4>}
       {description && <p className="text-[var(--t2)] text-sm leading-relaxed">{description}</p>}
 
       <div className="rounded-2xl p-5 bg-[rgba(99,102,241,0.04)] border border-[var(--border)]">
-        <svg viewBox="0 0 100 60" className="w-full" style={{ aspectRatio: "100/60" }}>
+        <svg viewBox="0 0 100 65" className="w-full" style={{ aspectRatio: "100/65" }}>
           <defs>
             <linearGradient id={`inton-stroke-${pattern}`} x1="0%" y1="0%" x2="100%" y2="0%">
               <stop offset="0%" stopColor={color} stopOpacity="0.2" />
@@ -106,11 +135,74 @@ export function IntonationContour({ step, speak }: Props) {
                 <feMergeNode in="SourceGraphic" />
               </feMerge>
             </filter>
+            {/* Shadow filter for point labels */}
+            <filter id="label-shadow" x="-20%" y="-20%" width="140%" height="140%">
+              <feDropShadow dx="0" dy="0.3" stdDeviation="0.4" floodColor="#000000" floodOpacity="0.6" />
+            </filter>
           </defs>
 
-          {/* Pitch axis labels */}
-          <text x="2" y="8" fontSize="3" fill="rgba(240,239,255,0.4)" fontFamily="var(--font-mono), monospace">HIGH</text>
-          <text x="2" y="55" fontSize="3" fill="rgba(240,239,255,0.4)" fontFamily="var(--font-mono), monospace">LOW</text>
+          {/* Axis labels with arrows */}
+          {/* High pitch label with upward arrow */}
+          <g>
+            <text
+              x="1.5"
+              y="7"
+              fontSize="2.5"
+              fill="rgba(240,239,255,0.5)"
+              fontFamily="var(--font-sans), sans-serif"
+              fontWeight="600"
+            >
+              High pitch
+            </text>
+            {/* Up arrow */}
+            <path
+              d="M 1.2 9.5 L 1.2 13 L 0.5 12.2 M 1.2 13 L 1.9 12.2"
+              stroke="rgba(240,239,255,0.3)"
+              strokeWidth="0.3"
+              fill="none"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </g>
+
+          {/* Low pitch label with downward arrow */}
+          <g>
+            <text
+              x="1.5"
+              y="54"
+              fontSize="2.5"
+              fill="rgba(240,239,255,0.5)"
+              fontFamily="var(--font-sans), sans-serif"
+              fontWeight="600"
+            >
+              Low pitch
+            </text>
+            {/* Down arrow */}
+            <path
+              d="M 1.2 50 L 1.2 46.5 L 0.5 47.3 M 1.2 46.5 L 1.9 47.3"
+              stroke="rgba(240,239,255,0.3)"
+              strokeWidth="0.3"
+              fill="none"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </g>
+
+          {/* Vertical axis line */}
+          <line x1="4.5" y1="5" x2="4.5" y2="55" stroke="rgba(255,255,255,0.1)" strokeWidth="0.3" />
+
+          {/* Horizontal axis ticks */}
+          {[25, 50, 75].map((pct) => (
+            <line
+              key={pct}
+              x1="4"
+              y1={55 - (pct / 100) * 50}
+              x2="5"
+              y2={55 - (pct / 100) * 50}
+              stroke="rgba(255,255,255,0.15)"
+              strokeWidth="0.3"
+            />
+          ))}
 
           {/* Reference line (middle) */}
           <line x1="5" y1="30" x2="95" y2="30" stroke="rgba(255,255,255,0.08)" strokeWidth="0.3" strokeDasharray="2,1" />
@@ -139,7 +231,7 @@ export function IntonationContour({ step, speak }: Props) {
             style={{ pointerEvents: "none" }}
           />
 
-          {/* Animated contour path with glow */}
+          {/* Animated contour path with glow — draw effect via pathLength */}
           <motion.path
             d={pathD}
             fill="none"
@@ -151,6 +243,7 @@ export function IntonationContour({ step, speak }: Props) {
             initial={{ pathLength: 0, opacity: 0 }}
             animate={{ pathLength: 1, opacity: 1 }}
             transition={{ duration: 1.6, ease: "easeInOut" }}
+            onAnimationComplete={() => setDrawComplete(true)}
           />
 
           {/* Contour points */}
@@ -166,6 +259,47 @@ export function IntonationContour({ step, speak }: Props) {
               transition={{ delay: 1.2 + i * 0.1, type: "spring" }}
             />
           ))}
+
+          {/* Point labels that fade in after contour is drawn — key points only */}
+          {keyPointIndices.map((idx, i) => {
+            const p = contour[idx];
+            const isMax = p.y > 70;
+            const isMin = p.y < 30;
+            const label = isMax ? "↑H" : isMin ? "↓L" : `${Math.round(p.y)}`;
+            return (
+              <motion.g
+                key={`label-${i}`}
+                initial={{ opacity: 0, y: 2 }}
+                animate={{ opacity: drawComplete ? 0.85 : 0, y: drawComplete ? 0 : 2 }}
+                transition={{ duration: 0.4, delay: i * 0.12 }}
+              >
+                {/* Label background pill */}
+                <rect
+                  x={toX(p.x) - 3}
+                  y={toY(p.y) - 5.5}
+                  width="6"
+                  height="3.5"
+                  rx="1"
+                  fill="rgba(7,7,15,0.75)"
+                  stroke={color}
+                  strokeWidth="0.2"
+                  opacity="0.8"
+                />
+                <text
+                  x={toX(p.x)}
+                  y={toY(p.y) - 3.2}
+                  textAnchor="middle"
+                  fontSize="2"
+                  fontWeight="bold"
+                  fontFamily="var(--font-mono), monospace"
+                  fill={color}
+                  filter="url(#label-shadow)"
+                >
+                  {label}
+                </text>
+              </motion.g>
+            );
+          })}
 
           {/* Vertical playhead line that moves across the contour */}
           {playing && (
@@ -184,19 +318,16 @@ export function IntonationContour({ step, speak }: Props) {
           {/* Comet trail — three fading dots behind the moving dot */}
           {playing && [0, 1, 2].map((trail) => {
             const trailP = Math.max(0, playhead - trail * 0.04);
+            const trailIdx = Math.min(contour.length - 1, Math.floor(trailP * (contour.length - 1)));
+            const segP = trailP * (contour.length - 1) - trailIdx;
+            const a = contour[trailIdx];
+            const b = contour[Math.min(trailIdx + 1, contour.length - 1)];
+            const yLerp = a.y + (b.y - a.y) * segP;
             return (
               <circle
                 key={trail}
                 cx={5 + trailP * 90}
-                cy={(function () {
-                  // Sample y from contour at progress trailP
-                  const idx = Math.min(contour.length - 1, Math.floor(trailP * (contour.length - 1)));
-                  const segP = trailP * (contour.length - 1) - idx;
-                  const a = contour[idx];
-                  const b = contour[Math.min(idx + 1, contour.length - 1)];
-                  const yLerp = a.y + (b.y - a.y) * segP;
-                  return toY(yLerp);
-                })()}
+                cy={toY(yLerp)}
                 r={1.6 - trail * 0.4}
                 fill={color}
                 opacity={0.6 - trail * 0.2}
@@ -204,27 +335,41 @@ export function IntonationContour({ step, speak }: Props) {
             );
           })}
 
-          {/* Moving dot along path (larger, with glow) */}
-          <motion.circle
-            r="2.4"
-            fill="white"
-            stroke={color}
-            strokeWidth="0.6"
-            initial={{ offsetDistance: "0%" }}
-            animate={{ offsetDistance: ["0%", "100%"] }}
-            transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut", delay: 1.6 }}
-            style={{
-              offsetPath: `path("${pathD}")`,
-              filter: `drop-shadow(0 0 3px ${color})`,
-            }}
-          />
+          {/* Moving dot along path (larger, with glow) — follows playhead when playing */}
+          {playing ? (
+            <motion.circle
+              cx={playheadX}
+              cy={playheadY}
+              r="2.4"
+              fill="white"
+              stroke={color}
+              strokeWidth="0.6"
+              style={{ filter: `drop-shadow(0 0 3px ${color})` }}
+              animate={{ scale: [1, 1.2, 1] }}
+              transition={{ duration: 0.5, repeat: Infinity }}
+            />
+          ) : (
+            <motion.circle
+              r="2.4"
+              fill="white"
+              stroke={color}
+              strokeWidth="0.6"
+              initial={{ offsetDistance: "0%" }}
+              animate={{ offsetDistance: ["0%", "100%"] }}
+              transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut", delay: 1.6 }}
+              style={{
+                offsetPath: `path("${pathD}")`,
+                filter: `drop-shadow(0 0 3px ${color})`,
+              }}
+            />
+          )}
 
           {/* Word labels below contour */}
           {wordMarkers.map((m, i) => (
             <text
               key={i}
               x={m.x}
-              y="59"
+              y="62"
               fontSize="2.5"
               fill="rgba(240,239,255,0.6)"
               textAnchor="middle"
