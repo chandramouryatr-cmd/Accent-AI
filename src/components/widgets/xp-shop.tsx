@@ -62,6 +62,7 @@ export function XPShop() {
   const buyDoubleXP = useAppStore((s) => s.buyDoubleXP);
   const buyCustomTheme = useAppStore((s) => s.buyCustomTheme);
   const buyLessonRetry = useAppStore((s) => s.buyLessonRetry);
+  const devMode = useAppStore((s) => s.devMode);
   const pushToast = useToastStore((s) => s.push);
 
   const [purchasingId, setPurchasingId] = useState<string | null>(null);
@@ -77,7 +78,7 @@ export function XPShop() {
         if (item.id === "customTheme" && xpShopItems.customTheme) return;
       }
 
-      if (xp < item.cost) return;
+      if (xp < item.cost && !devMode) return;
 
       setPurchasingId(item.id);
       const prevXP = xp;
@@ -101,13 +102,15 @@ export function XPShop() {
         }
 
         if (success) {
-          setXpDelta({ from: prevXP, to: prevXP - item.cost });
+          setXpDelta({ from: prevXP, to: devMode ? prevXP : prevXP - item.cost });
           setJustBought(item.id);
           pushToast({
             variant: "badge",
             emoji: item.emoji,
             title: `${item.name} Purchased!`,
-            subtitle: `−${item.cost} XP · ${item.name} is now active`,
+            subtitle: devMode
+              ? `FREE · ${item.name} is now active`
+              : `−${item.cost} XP · ${item.name} is now active`,
             duration: 4000,
             gradient:
               "linear-gradient(135deg, rgba(245,158,11,0.95), rgba(249,115,22,0.95))",
@@ -121,7 +124,7 @@ export function XPShop() {
         setPurchasingId(null);
       }, 300);
     },
-    [xp, xpShopItems, buyStreakFreeze, buyDoubleXP, buyCustomTheme, buyLessonRetry, pushToast]
+    [xp, xpShopItems, buyStreakFreeze, buyDoubleXP, buyCustomTheme, buyLessonRetry, pushToast, devMode]
   );
 
   const isOwned = (item: ShopItem) => {
@@ -180,7 +183,7 @@ export function XPShop() {
       {/* Shop items grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {SHOP_ITEMS.map((item) => {
-          const canAfford = xp >= item.cost;
+          const canAfford = devMode || xp >= item.cost;
           const owned = isOwned(item);
           const ownedCount = getOwnedCount(item);
           const isPurchasing = purchasingId === item.id;
@@ -335,6 +338,11 @@ export function XPShop() {
                         <>
                           <Check className="w-3.5 h-3.5" />
                           Owned
+                        </>
+                      ) : devMode ? (
+                        <>
+                          <Zap className="w-3.5 h-3.5" />
+                          {item.isUnique ? "Unlock FREE" : "Get FREE"}
                         </>
                       ) : canAfford ? (
                         <>

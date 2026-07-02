@@ -1,0 +1,989 @@
+     1→"use client";
+     2→
+     3→import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+     4→import { AnimatePresence, motion } from "framer-motion";
+     5→import {
+     6→  Sparkles,
+     7→  RefreshCw,
+     8→  Target,
+     9→  BookOpen,
+    10→  Lightbulb,
+    11→  AlertTriangle,
+    12→  ChevronRight,
+    13→  Zap,
+    14→} from "lucide-react";
+    15→import { useAppStore } from "@/lib/store";
+    16→import { ALL_LESSONS } from "@/lib/lessons";
+    17→
+    18→// ─── Types ───────────────────────────────────────────────────────────────
+    19→
+    20→interface PhonemeScore {
+    21→  phoneme: string;
+    22→  example?: string;
+    23→  score: number;
+    24→  count?: number;
+    25→  /** best lesson id to practice this phoneme */
+    26→  lessonId?: string;
+    27→}
+    28→
+    29→interface FocusArea {
+    30→  phoneme: string;
+    31→  score: number;
+    32→  reason: string;
+    33→}
+    34→
+    35→interface RecommendedLesson {
+    36→  phase: number;
+    37→  lesson: string;
+    38→  reason: string;
+    39→}
+    40→
+    41→interface InsightsPlan {
+    42→  focusAreas: FocusArea[];
+    43→  recommendedLessons: RecommendedLesson[];
+    44→  tips: string[];
+    45→}
+    46→
+    47→type ViewState = "idle" | "loading" | "success" | "error";
+    48→
+    49→interface CachedInsight {
+    50→  parsed: InsightsPlan | null;
+    51→  rawText: string | null;
+    52→  generatedAt: number;
+    53→  /** snapshot of phoneme mastery signature (for invalidation) */
+    54→  signature: string;
+    55→}
+    56→
+    57→// ─── Phoneme → lessons mapping (kept in sync with PhonemeMastery widget) ─
+    58→
+    59→const PHONEME_LESSONS: Record<string, { ids: string[]; example: string }> = {
+    60→  ð: { ids: ["p1l2", "p1l3", "p1l4"], example: "the, this, mother" },
+    61→  θ: { ids: ["p1l2", "p1l3", "p1l4"], example: "think, three, bath" },
+    62→  æ: { ids: ["p1l1", "p1l4", "p2l1"], example: "cat, bad, ask" },
+    63→  ŋ: { ids: ["p1l2", "p2l1", "p2l3"], example: "sing, going, think" },
+    64→  ɪ: { ids: ["p1l1", "p2l1", "p2l4"], example: "ship, sit, bit" },
+    65→  ʊ: { ids: ["p1l1", "p2l1", "p2l4"], example: "book, put, good" },
+    66→  "ɜː": { ids: ["p1l1", "p2l1", "p5l2"], example: "bird, work, learn" },
+    67→  ʒ: { ids: ["p1l2", "p2l1", "p5l3"], example: "measure, vision" },
+    68→  "ɑː": { ids: ["p1l1", "p2l1"], example: "father, car" },
+    69→  "iː": { ids: ["p1l1", "p1l4"], example: "see, sheep, eat" },
+    70→  "uː": { ids: ["p1l1", "p1l4"], example: "food, pool, two" },
+    71→  r: { ids: ["p1l3", "p4l1"], example: "red, around, very" },
+    72→};
+    73→
+    74→const STORAGE_KEY_PREFIX = "accentai-coach-insights-";
+    75→const FIRST_TOKEN_TIMEOUT_MS = 30_000;
+    76→
+    77→function todayStr() {
+    78→  return new Date().toISOString().slice(0, 10);
+    79→}
+    80→
+    81→function storageKeyForToday() {
+    82→  return `${STORAGE_KEY_PREFIX}${todayStr()}`;
+    83→}
+    84→
+    85→// ─── Phoneme mastery derivation ──────────────────────────────────────────
+    86→
+    87→function derivePhonemeMastery(
+    88→  lessons: Record<string, { completed?: boolean; score: number }>
+    89→): PhonemeScore[] {
+    90→  const out: PhonemeScore[] = [];
+    91→  for (const [ph, { ids, example }] of Object.entries(PHONEME_LESSONS)) {
+    92→    const relevant = ids
+    93→      .map((id) => lessons[id])
+    94→      .filter((l) => l?.completed);
+    95→    if (relevant.length === 0) continue;
+    96→    const avg = Math.round(
+    97→      relevant.reduce((s, l) => s + l.score, 0) / relevant.length
+    98→    );
+    99→    const sortedById = [...relevant].sort((a, b) => a.score - b.score);
+   100→    const bestLessonId =
+   101→      ids.find((id) => lessons[id] === sortedById[0]) || ids[0];
+   102→    out.push({
+   103→      phoneme: ph,
+   104→      example,
+   105→      score: avg,
+   106→      count: relevant.length,
+   107→      lessonId: bestLessonId,
+   108→    });
+   109→  }
+   110→  out.sort((a, b) => a.score - b.score);
+   111→  return out;
+   112→}
+   113→
+   114→// ─── JSON parsing helpers (robust against markdown / extra text) ─────────
+   115→
+   116→function extractJson(text: string): InsightsPlan | null {
+   117→  if (!text) return null;
+   118→  const trimmed = text.trim();
+   119→
+   120→  // Attempt 1: direct parse
+   121→  try {
+   122→    return normalizePlan(JSON.parse(trimmed));
+   123→  } catch {
+   124→    /* continue */
+   125→  }
+   126→
+   127→  // Attempt 2: unwrap ```json ... ``` or ``` ... ``` fences
+   128→  const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+   129→  if (fenceMatch) {
+   130→    try {
+   131→      return normalizePlan(JSON.parse(fenceMatch[1].trim()));
+   132→    } catch {
+   133→      /* continue */
+   134→    }
+   135→  }
+   136→
+   137→  // Attempt 3: grab substring between first { and last }
+   138→  const firstBrace = trimmed.indexOf("{");
+   139→  const lastBrace = trimmed.lastIndexOf("}");
+   140→  if (firstBrace !== -1 && lastBrace > firstBrace) {
+   141→    const slice = trimmed.slice(firstBrace, lastBrace + 1);
+   142→    try {
+   143→      return normalizePlan(JSON.parse(slice));
+   144→    } catch {
+   145→      /* continue */
+   146→    }
+   147→  }
+   148→
+   149→  return null;
+   150→}
+   151→
+   152→function normalizePlan(raw: unknown): InsightsPlan | null {
+   153→  if (!raw || typeof raw !== "object") return null;
+   154→  const obj = raw as Record<string, unknown>;
+   155→  const focusAreas = Array.isArray(obj.focusAreas)
+   156→    ? (obj.focusAreas as unknown[])
+   157→        .map((item) => normalizeFocusArea(item))
+   158→        .filter((x): x is FocusArea => x !== null)
+   159→    : [];
+   160→  const recommendedLessons = Array.isArray(obj.recommendedLessons)
+   161→    ? (obj.recommendedLessons as unknown[])
+   162→        .map((item) => normalizeRecommendedLesson(item))
+   163→        .filter((x): x is RecommendedLesson => x !== null)
+   164→    : [];
+   165→  const tips = Array.isArray(obj.tips)
+   166→    ? (obj.tips as unknown[])
+   167→        .map((t) => (typeof t === "string" ? t : String(t ?? "")))
+   168→        .filter((s) => s.length > 0)
+   169→        .slice(0, 4)
+   170→    : [];
+   171→
+   172→  if (focusAreas.length === 0 && recommendedLessons.length === 0 && tips.length === 0) {
+   173→    return null;
+   174→  }
+   175→  return { focusAreas, recommendedLessons, tips };
+   176→}
+   177→
+   178→function normalizeFocusArea(item: unknown): FocusArea | null {
+   179→  if (!item || typeof item !== "object") return null;
+   180→  const obj = item as Record<string, unknown>;
+   181→  const phoneme =
+   182→    typeof obj.phoneme === "string"
+   183→      ? obj.phoneme.replace(/^\/+|\/+$/g, "").trim()
+   184→      : "";
+   185→  const score =
+   186→    typeof obj.score === "number"
+   187→      ? Math.max(0, Math.min(100, Math.round(obj.score)))
+   188→      : typeof obj.score === "string"
+   189→      ? parseInt(obj.score, 10) || 0
+   190→      : 0;
+   191→  const reason =
+   192→    typeof obj.reason === "string" ? obj.reason : typeof obj.reason === "object" && obj.reason ? JSON.stringify(obj.reason) : "";
+   193→  if (!phoneme) return null;
+   194→  return { phoneme, score, reason };
+   195→}
+   196→
+   197→function normalizeRecommendedLesson(item: unknown): RecommendedLesson | null {
+   198→  if (!item || typeof item !== "object") return null;
+   199→  const obj = item as Record<string, unknown>;
+   200→  const phase =
+   201→    typeof obj.phase === "number"
+   202→      ? Math.max(1, Math.min(8, Math.round(obj.phase)))
+   203→      : typeof obj.phase === "string"
+   204→      ? parseInt(obj.phase, 10) || 1
+   205→      : 1;
+   206→  const lesson = typeof obj.lesson === "string" ? obj.lesson : "";
+   207→  const reason =
+   208→    typeof obj.reason === "string"
+   209→      ? obj.reason
+   210→      : typeof obj.reason === "object" && obj.reason
+   211→      ? JSON.stringify(obj.reason)
+   212→      : "";
+   213→  if (!lesson) return null;
+   214→  return { phase, lesson, reason };
+   215→}
+   216→
+   217→// ─── Sub-components ──────────────────────────────────────────────────────
+   218→
+   219→function ScoreRing({ score, color }: { score: number; color: string }) {
+   220→  const r = 14;
+   221→  const c = 2 * Math.PI * r;
+   222→  const offset = c - (score / 100) * c;
+   223→  return (
+   224→    <svg width={36} height={36} viewBox="0 0 36 36" className="shrink-0">
+   225→      <circle
+   226→        cx={18}
+   227→        cy={18}
+   228→        r={r}
+   229→        fill="none"
+   230→        stroke="var(--overlay-border-1)"
+   231→        strokeWidth={3}
+   232→      />
+   233→      <motion.circle
+   234→        cx={18}
+   235→        cy={18}
+   236→        r={r}
+   237→        fill="none"
+   238→        stroke={color}
+   239→        strokeWidth={3}
+   240→        strokeLinecap="round"
+   241→        strokeDasharray={c}
+   242→        initial={{ strokeDashoffset: c }}
+   243→        animate={{ strokeDashoffset: offset }}
+   244→        transition={{ duration: 0.9, ease: "easeOut" }}
+   245→        transform="rotate(-90 18 18)"
+   246→        style={{ filter: `drop-shadow(0 0 4px ${color}88)` }}
+   247→      />
+   248→      <text
+   249→        x={18}
+   250→        y={21}
+   251→        textAnchor="middle"
+   252→        fontSize={9}
+   253→        fontWeight={700}
+   254→        fill={color}
+   255→        fontFamily="var(--font-mono), monospace"
+   256→      >
+   257→        {score}
+   258→      </text>
+   259→    </svg>
+   260→  );
+   261→}
+   262→
+   263→function FocusAreaCard({ area, index }: { area: FocusArea; index: number }) {
+   264→  const color =
+   265→    area.score >= 85
+   266→      ? "#10b981"
+   267→      : area.score >= 70
+   268→      ? "#f59e0b"
+   269→      : "#ef4444";
+   270→  return (
+   271→    <motion.div
+   272→      initial={{ opacity: 0, y: 12, scale: 0.96 }}
+   273→      animate={{ opacity: 1, y: 0, scale: 1 }}
+   274→      transition={{
+   275→        type: "spring",
+   276→        stiffness: 280,
+   277→        damping: 24,
+   278→        delay: index * 0.08,
+   279→      }}
+   280→      whileHover={{ y: -2 }}
+   281→      className="rounded-2xl p-3 border backdrop-blur-sm"
+   282→      style={{
+   283→        background: `linear-gradient(135deg, ${color}1a, rgba(99,102,241,0.04))`,
+   284→        borderColor: `${color}40`,
+   285→      }}
+   286→    >
+   287→      <div className="flex items-center gap-3">
+   288→        <div
+   289→          className="w-11 h-11 rounded-xl flex items-center justify-center font-mono text-xl font-bold shrink-0"
+   290→          style={{
+   291→            background: `${color}22`,
+   292→            color: color,
+   293→            boxShadow: `0 0 12px ${color}33`,
+   294→          }}
+   295→        >
+   296→          /{area.phoneme}/
+   297→        </div>
+   298→        <div className="flex-1 min-w-0">
+   299→          <div className="flex items-center justify-between gap-2">
+   300→            <span className="text-[10px] uppercase tracking-wider font-mono text-[var(--t3)]">
+   301→              {area.score >= 85
+   302→                ? "Mastered"
+   303→                : area.score >= 70
+   304→                ? "Progressing"
+   305→                : "Needs work"}
+   306→            </span>
+   307→            <ScoreRing score={area.score} color={color} />
+   308→          </div>
+   309→        </div>
+   310→      </div>
+   311→      {area.reason && (
+   312→        <p className="text-xs text-[var(--t2)] leading-relaxed mt-2.5">
+   313→          {area.reason}
+   314→        </p>
+   315→      )}
+   316→    </motion.div>
+   317→  );
+   318→}
+   319→
+   320→function RecommendedLessonCard({
+   321→  rec,
+   322→  index,
+   323→  onOpen,
+   324→}: {
+   325→  rec: RecommendedLesson;
+   326→  index: number;
+   327→  onOpen: (lessonTitle: string) => void;
+   328→}) {
+   329→  // Find the matching lesson by title (case-insensitive trim)
+   330→  const lesson = useMemo(() => {
+   331→    const title = rec.lesson.trim().toLowerCase();
+   332→    return (
+   333→      ALL_LESSONS.find((l) => l.title.trim().toLowerCase() === title) ||
+   334→      ALL_LESSONS.find(
+   335→        (l) => l.phaseId === rec.phase - 1 && l.title.trim().toLowerCase().includes(title.slice(0, 8))
+   336→      )
+   337→    );
+   338→  }, [rec.lesson, rec.phase]);
+   339→
+   340→  return (
+   341→    <motion.button
+   342→      initial={{ opacity: 0, y: 12, scale: 0.96 }}
+   343→      animate={{ opacity: 1, y: 0, scale: 1 }}
+   344→      transition={{
+   345→        type: "spring",
+   346→        stiffness: 280,
+   347→        damping: 24,
+   348→        delay: 0.1 + index * 0.08,
+   349→      }}
+   350→      whileHover={{ y: -2, boxShadow: "0 6px 24px rgba(99,102,241,0.25)" }}
+   351→      whileTap={{ scale: 0.98 }}
+   352→      onClick={() => lesson && onOpen(lesson.title)}
+   353→      disabled={!lesson}
+   354→      className="w-full text-left rounded-2xl p-3.5 border backdrop-blur-sm transition group"
+   355→      style={{
+   356→        background:
+   357→          "linear-gradient(135deg, rgba(99,102,241,0.12), rgba(34,211,238,0.04))",
+   358→        borderColor: "rgba(99,102,241,0.3)",
+   359→        cursor: lesson ? "pointer" : "default",
+   360→      }}
+   361→      aria-label={`Open lesson: ${rec.lesson}`}
+   362→    >
+   363→      <div className="flex items-start gap-3">
+   364→        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[var(--p)] to-[var(--p2)] flex items-center justify-center shrink-0 shadow-[0_0_12px_rgba(99,102,241,0.4)]">
+   365→          <BookOpen className="w-4 h-4 text-white" />
+   366→        </div>
+   367→        <div className="flex-1 min-w-0">
+   368→          <div className="flex items-center gap-2 mb-0.5">
+   369→            <span className="text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-[rgba(99,102,241,0.15)] text-[var(--p3)] border border-[rgba(99,102,241,0.3)]">
+   370→              P{rec.phase}
+   371→            </span>
+   372→            <span className="font-d text-sm font-bold text-[var(--t1)] truncate">
+   373→              {rec.lesson}
+   374→            </span>
+   375→          </div>
+   376→          {rec.reason && (
+   377→            <p className="text-xs text-[var(--t2)] leading-relaxed">
+   378→              {rec.reason}
+   379→            </p>
+   380→          )}
+   381→        </div>
+   382→        {lesson && (
+   383→          <ChevronRight className="w-4 h-4 text-[var(--t3)] group-hover:text-[var(--c2)] group-hover:translate-x-0.5 transition-all shrink-0 mt-1" />
+   384→        )}
+   385→      </div>
+   386→    </motion.button>
+   387→  );
+   388→}
+   389→
+   390→function TipItem({ tip, index }: { tip: string; index: number }) {
+   391→  return (
+   392→    <motion.li
+   393→      initial={{ opacity: 0, x: -8 }}
+   394→      animate={{ opacity: 1, x: 0 }}
+   395→      transition={{ delay: 0.15 + index * 0.07, duration: 0.3 }}
+   396→      className="flex items-start gap-2.5"
+   397→    >
+   398→      <div className="w-6 h-6 rounded-full bg-[rgba(245,158,11,0.12)] flex items-center justify-center shrink-0 mt-0.5 border border-[rgba(245,158,11,0.25)]">
+   399→        <Lightbulb className="w-3 h-3 text-[#f59e0b]" />
+   400→      </div>
+   401→      <span className="text-xs text-[var(--t2)] leading-relaxed flex-1 pt-0.5">
+   402→        {tip}
+   403→      </span>
+   404→    </motion.li>
+   405→  );
+   406→}
+   407→
+   408→function LoadingState() {
+   409→  return (
+   410→    <motion.div
+   411→      initial={{ opacity: 0 }}
+   412→      animate={{ opacity: 1 }}
+   413→      exit={{ opacity: 0 }}
+   414→      className="flex flex-col items-center justify-center py-10"
+   415→    >
+   416→      <div className="relative w-14 h-14 mb-4">
+   417→        <motion.div
+   418→          className="absolute inset-0 rounded-full bg-gradient-to-br from-[var(--p)] via-[var(--p2)] to-[var(--c)]"
+   419→          animate={{
+   420→            scale: [1, 1.1, 1],
+   421→            rotate: [0, 180, 360],
+   422→          }}
+   423→          transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+   424→          style={{ filter: "blur(8px)", opacity: 0.55 }}
+   425→        />
+   426→        <div className="absolute inset-2 rounded-full bg-[var(--bg2)] flex items-center justify-center">
+   427→          <Sparkles className="w-5 h-5 text-[var(--p3)] animate-pulse" />
+   428→        </div>
+   429→      </div>
+   430→      <div className="flex items-center gap-1 mb-2">
+   431→        {[0, 1, 2].map((dot) => (
+   432→          <motion.span
+   433→            key={dot}
+   434→            className="w-1.5 h-1.5 rounded-full bg-[var(--p3)]"
+   435→            animate={{ opacity: [0.3, 1, 0.3], y: [0, -3, 0] }}
+   436→            transition={{
+   437→              duration: 0.9,
+   438→              repeat: Infinity,
+   439→              delay: dot * 0.15,
+   440→              ease: "easeInOut",
+   441→            }}
+   442→          />
+   443→        ))}
+   444→      </div>
+   445→      <div className="text-sm font-d font-semibold text-[var(--t1)]">
+   446→        Analyzing your progress…
+   447→      </div>
+   448→      <div className="text-[11px] text-[var(--t3)] mt-1 font-mono">
+   449→        Reading phoneme scores · picking lessons · crafting tips
+   450→      </div>
+   451→    </motion.div>
+   452→  );
+   453→}
+   454→
+   455→// ─── Main component ──────────────────────────────────────────────────────
+   456→
+   457→export function CoachInsights() {
+   458→  const lessons = useAppStore((s) => s.lessons);
+   459→  const xp = useAppStore((s) => s.xp);
+   460→  const streak = useAppStore((s) => s.streak);
+   461→  const accent = useAppStore((s) => s.accent);
+   462→  const setActiveLesson = useAppStore((s) => s.setActiveLesson);
+   463→
+   464→  const [view, setView] = useState<ViewState>("idle");
+   465→  const [parsed, setParsed] = useState<InsightsPlan | null>(null);
+   466→  const [rawText, setRawText] = useState<string | null>(null);
+   467→  const [error, setError] = useState<string | null>(null);
+   468→
+   469→  const abortRef = useRef<AbortController | null>(null);
+   470→
+   471→  // Derive phoneme mastery data (weakest first)
+   472→  const phonemeMastery = useMemo(() => derivePhonemeMastery(lessons), [lessons]);
+   473→
+   474→  // Build a signature so cache invalidates if phoneme scores change
+   475→  const signature = useMemo(() => {
+   476→    return phonemeMastery
+   477→      .map((p) => `${p.phoneme}:${p.score}:${p.count ?? 0}`)
+   478→      .join("|");
+   479→  }, [phonemeMastery]);
+   480→
+   481→  const completedCount = useMemo(
+   482→    () => Object.values(lessons).filter((l) => l?.completed).length,
+   483→    [lessons]
+   484→  );
+   485→
+   486→  // Load cached insights for today on mount
+   487→  useEffect(() => {
+   488→    if (typeof window === "undefined") return;
+   489→    try {
+   490→      const raw = window.localStorage.getItem(storageKeyForToday());
+   491→      if (!raw) return;
+   492→      const cached = JSON.parse(raw) as CachedInsight;
+   493→      // Only restore if the phoneme signature hasn't materially changed
+   494→      // (allow restore even if signature differs by a little — focus on date key)
+   495→      if (cached && (cached.parsed || cached.rawText)) {
+   496→        setParsed(cached.parsed);
+   497→        setRawText(cached.rawText);
+   498→        setView("success");
+   499→      }
+   500→    } catch {
+   501→      /* ignore malformed cache */
+   502→    }
+   503→  }, []);
+   504→
+   505→  // Cleanup any in-flight request on unmount
+   506→  useEffect(() => {
+   507→    return () => {
+   508→      if (abortRef.current) {
+   509→        abortRef.current.abort();
+   510→        abortRef.current = null;
+   511→      }
+   512→    };
+   513→  }, []);
+   514→
+   515→  const handleGetInsights = useCallback(async () => {
+   516→    setError(null);
+   517→
+   518→    // Abort any previous request
+   519→    if (abortRef.current) abortRef.current.abort();
+   520→    const controller = new AbortController();
+   521→    abortRef.current = controller;
+   522→
+   523→    setView("loading");
+   524→    setParsed(null);
+   525→    setRawText(null);
+   526→
+   527→    const timeoutId = setTimeout(() => {
+   528→      controller.abort();
+   529→    }, FIRST_TOKEN_TIMEOUT_MS);
+   530→
+   531→    // Build completed lessons list
+   532→    const completedLessons = Object.entries(lessons)
+   533→      .filter(([, p]) => p?.completed)
+   534→      .map(([id]) => id);
+   535→
+   536→    // Top 5 weakest phonemes for the model
+   537→    const topPhonemes = phonemeMastery.slice(0, 5).map((p) => ({
+   538→      phoneme: p.phoneme,
+   539→      score: p.score,
+   540→      example: p.example,
+   541→      count: p.count,
+   542→    }));
+   543→
+   544→    try {
+   545→      const res = await fetch("/api/ai-coach", {
+   546→        method: "POST",
+   547→        headers: { "Content-Type": "application/json" },
+   548→        body: JSON.stringify({
+   549→          mode: "insights",
+   550→          messages: [],
+   551→          context: {
+   552→            accent,
+   553→            xp,
+   554→            streak,
+   555→            completedLessons,
+   556→            phonemeMastery: topPhonemes,
+   557→          },
+   558→        }),
+   559→        signal: controller.signal,
+   560→      });
+   561→
+   562→      if (!res.ok) {
+   563→        let detail = `Request failed (${res.status})`;
+   564→        try {
+   565→          const data = await res.json();
+   566→          if (data?.error) detail = data.error;
+   567→        } catch {
+   568→          /* ignore */
+   569→        }
+   570→        throw new Error(detail);
+   571→      }
+   572→
+   573→      if (!res.body) {
+   574→        throw new Error("No response body received.");
+   575→      }
+   576→
+   577→      // Consume SSE stream and accumulate text
+   578→      const reader = res.body.getReader();
+   579→      const decoder = new TextDecoder();
+   580→      let accumulated = "";
+   581→      let buffer = "";
+   582→      let firstTokenReceived = false;
+   583→
+   584→      while (true) {
+   585→        const { done, value } = await reader.read();
+   586→        if (done) break;
+   587→
+   588→        buffer += decoder.decode(value, { stream: true });
+   589→        const lines = buffer.split("\n");
+   590→        buffer = lines.pop() || "";
+   591→
+   592→        for (const line of lines) {
+   593→          const trimmedLine = line.trim();
+   594→          if (!trimmedLine || !trimmedLine.startsWith("data:")) continue;
+   595→
+   596→          const dataStr = trimmedLine.slice(5).trim();
+   597→          if (dataStr === "[DONE]") {
+   598→            break;
+   599→          }
+   600→
+   601→          try {
+   602→            const parsedChunk = JSON.parse(dataStr);
+   603→            if (parsedChunk.error) {
+   604→              throw new Error(parsedChunk.error);
+   605→            }
+   606→            if (typeof parsedChunk.token === "string") {
+   607→              if (!firstTokenReceived) {
+   608→                firstTokenReceived = true;
+   609→                clearTimeout(timeoutId);
+   610→              }
+   611→              accumulated += parsedChunk.token;
+   612→            }
+   613→          } catch (parseErr) {
+   614→            // Re-throw our own thrown errors (with a real message)
+   615→            if (
+   616→              parseErr instanceof Error &&
+   617→              !parseErr.message.startsWith("Unexpected")
+   618→            ) {
+   619→              throw parseErr;
+   620→            }
+   621→            // Skip malformed JSON lines (expected for partial SSE chunks)
+   622→          }
+   623→        }
+   624→      }
+   625→
+   626→      clearTimeout(timeoutId);
+   627→
+   628→      const text = accumulated.trim();
+   629→      if (!text) {
+   630→        throw new Error("The coach didn't return any insights. Please try again.");
+   631→      }
+   632→
+   633→      const plan = extractJson(text);
+   634→      setParsed(plan);
+   635→      setRawText(plan ? null : text);
+   636→      setView("success");
+   637→
+   638→      // Cache the result (date-keyed)
+   639→      try {
+   640→        const payload: CachedInsight = {
+   641→          parsed: plan,
+   642→          rawText: plan ? null : text,
+   643→          generatedAt: Date.now(),
+   644→          signature,
+   645→        };
+   646→        window.localStorage.setItem(
+   647→          storageKeyForToday(),
+   648→          JSON.stringify(payload)
+   649→        );
+   650→      } catch {
+   651→        /* ignore storage errors */
+   652→      }
+   653→    } catch (err) {
+   654→      clearTimeout(timeoutId);
+   655→      if (err instanceof DOMException && err.name === "AbortError") {
+   656→        setError("Request timed out — the coach took too long. Please try again.");
+   657→      } else {
+   658→        const msg = err instanceof Error ? err.message : "Something went wrong.";
+   659→        setError(msg);
+   660→      }
+   661→      setView("error");
+   662→    } finally {
+   663→      abortRef.current = null;
+   664→    }
+   665→  }, [lessons, phonemeMastery, accent, xp, streak, signature]);
+   666→
+   667→  const handleOpenLesson = useCallback(
+   668→    (lessonTitle: string) => {
+   669→      const lesson = ALL_LESSONS.find((l) => l.title === lessonTitle);
+   670→      if (lesson) {
+   671→        setActiveLesson(lesson.id);
+   672→      }
+   673→    },
+   674→    [setActiveLesson]
+   675→  );
+   676→
+   677→  // ─── Render ──────────────────────────────────────────────────────────
+   678→
+   679→  return (
+   680→    <motion.section
+   681→      initial={{ opacity: 0, y: 12 }}
+   682→      animate={{ opacity: 1, y: 0 }}
+   683→      transition={{ duration: 0.4, ease: "easeOut" }}
+   684→      className="relative"
+   685→      aria-label="Coach Insights"
+   686→    >
+   687→      <div className="flex items-center justify-between mb-2">
+   688→        <h2 className="font-d text-base font-bold flex items-center gap-2">
+   689→          <Sparkles className="w-4 h-4 text-[var(--p3)]" />
+   690→          <span>Coach Insights</span>
+   691→        </h2>
+   692→        {view === "success" && (
+   693→          <motion.button
+   694→            onClick={handleGetInsights}
+   695→            whileHover={{ scale: 1.04 }}
+   696→            whileTap={{ scale: 0.96 }}
+   697→            className="text-[10px] font-mono uppercase tracking-wider flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-[var(--card)] border border-[var(--border)] text-[var(--t2)] hover:text-[var(--t1)] hover:border-[rgba(99,102,241,0.4)] transition"
+   698→            aria-label="Refresh insights"
+   699→          >
+   700→            <RefreshCw className="w-3 h-3" />
+   701→            Refresh
+   702→          </motion.button>
+   703→        )}
+   704→      </div>
+   705→
+   706→      {/* Outer animated mesh gradient border */}
+   707→      <div className="relative rounded-3xl p-[1px] overflow-hidden">
+   708→        {/* Animated mesh gradient border */}
+   709→        <motion.div
+   710→          aria-hidden
+   711→          className="absolute inset-0 rounded-3xl"
+   712→          style={{
+   713→            background:
+   714→              "linear-gradient(135deg, rgba(99,102,241,0.5), rgba(139,92,246,0.4), rgba(34,211,238,0.35), rgba(99,102,241,0.5))",
+   715→            backgroundSize: "300% 300%",
+   716→          }}
+   717→          animate={{ backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"] }}
+   718→          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+   719→        />
+   720→
+   721→        {/* Inner card */}
+   722→        <div
+   723→          className="relative rounded-3xl overflow-hidden"
+   724→          style={{
+   725→            background:
+   726→              "linear-gradient(135deg, rgba(12,12,26,0.96), rgba(17,17,40,0.92))",
+   727→            backdropFilter: "blur(16px)",
+   728→          }}
+   729→        >
+   730→          {/* Floating background orbs */}
+   731→          <motion.div
+   732→            aria-hidden
+   733→            className="absolute -top-16 -right-16 w-48 h-48 rounded-full pointer-events-none"
+   734→            style={{
+   735→              background:
+   736→                "radial-gradient(circle, rgba(167,139,250,0.18) 0%, transparent 70%)",
+   737→            }}
+   738→            animate={{ scale: [1, 1.18, 1], opacity: [0.4, 0.7, 0.4] }}
+   739→            transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+   740→          />
+   741→          <motion.div
+   742→            aria-hidden
+   743→            className="absolute -bottom-16 -left-12 w-40 h-40 rounded-full pointer-events-none"
+   744→            style={{
+   745→              background:
+   746→                "radial-gradient(circle, rgba(34,211,238,0.14) 0%, transparent 70%)",
+   747→            }}
+   748→            animate={{ scale: [1, 1.15, 1], opacity: [0.3, 0.6, 0.3] }}
+   749→            transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+   750→          />
+   751→
+   752→          <div className="relative p-5">
+   753→            <AnimatePresence mode="wait">
+   754→              {/* ─── IDLE STATE ─── */}
+   755→              {view === "idle" && (
+   756→                <motion.div
+   757→                  key="idle"
+   758→                  initial={{ opacity: 0 }}
+   759→                  animate={{ opacity: 1 }}
+   760→                  exit={{ opacity: 0, y: -8 }}
+   761→                  className="text-center py-4"
+   762→                >
+   763→                  <motion.div
+   764→                    initial={{ scale: 0.7, opacity: 0 }}
+   765→                    animate={{ scale: 1, opacity: 1 }}
+   766→                    transition={{
+   767→                      type: "spring",
+   768→                      stiffness: 240,
+   769→                      damping: 16,
+   770→                      delay: 0.1,
+   771→                    }}
+   772→                    className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-3 relative"
+   773→                    style={{
+   774→                      background:
+   775→                        "linear-gradient(135deg, rgba(99,102,241,0.18), rgba(34,211,238,0.12))",
+   776→                      border: "1px solid rgba(99,102,241,0.35)",
+   777→                      boxShadow: "0 0 24px rgba(99,102,241,0.2)",
+   778→                    }}
+   779→                  >
+   780→                    <Sparkles className="w-7 h-7 text-[var(--p3)]" />
+   781→                    <motion.span
+   782→                      className="absolute -top-1 -right-1 text-base"
+   783→                      animate={{ rotate: [0, 15, -10, 0], scale: [1, 1.15, 1] }}
+   784→                      transition={{
+   785→                        duration: 2.2,
+   786→                        repeat: Infinity,
+   787→                        ease: "easeInOut",
+   788→                      }}
+   789→                    >
+   790→                      ✨
+   791→                    </motion.span>
+   792→                  </motion.div>
+   793→                  <div className="font-d text-base font-bold text-[var(--t1)] mb-1">
+   794→                    Get your AI practice plan
+   795→                  </div>
+   796→                  <p className="text-xs text-[var(--t2)] leading-relaxed max-w-xs mx-auto mb-4">
+   797→                    {completedCount === 0
+   798→                      ? "I'll analyze your starting point and recommend the perfect first lessons."
+   799→                      : phonemeMastery.length === 0
+   800→                      ? "Complete a few lessons so I can spot your weakest sounds."
+   801→                      : `Based on ${phonemeMastery.length} sound${
+   802→                          phonemeMastery.length !== 1 ? "s" : ""
+   803→                        } tracked — I'll build a personalized plan in seconds.`}
+   804→                  </p>
+   805→                  <motion.button
+   806→                    onClick={handleGetInsights}
+   807→                    whileHover={{ scale: 1.04 }}
+   808→                    whileTap={{ scale: 0.96 }}
+   809→                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white shadow-[0_4px_20px_rgba(99,102,241,0.4)] transition"
+   810→                    style={{
+   811→                      background:
+   812→                        "linear-gradient(135deg, #6366f1, #8b5cf6 55%, #22d3ee)",
+   813→                    }}
+   814→                  >
+   815→                    <Zap className="w-4 h-4" />
+   816→                    Get AI Insights
+   817→                  </motion.button>
+   818→                </motion.div>
+   819→              )}
+   820→
+   821→              {/* ─── LOADING STATE ─── */}
+   822→              {view === "loading" && (
+   823→                <motion.div
+   824→                  key="loading"
+   825→                  initial={{ opacity: 0 }}
+   826→                  animate={{ opacity: 1 }}
+   827→                  exit={{ opacity: 0 }}
+   828→                >
+   829→                  <LoadingState />
+   830→                </motion.div>
+   831→              )}
+   832→
+   833→              {/* ─── ERROR STATE ─── */}
+   834→              {view === "error" && (
+   835→                <motion.div
+   836→                  key="error"
+   837→                  initial={{ opacity: 0, y: 8 }}
+   838→                  animate={{ opacity: 1, y: 0 }}
+   839→                  exit={{ opacity: 0, y: -8 }}
+   840→                  className="flex flex-col items-center text-center py-6"
+   841→                >
+   842→                  <div
+   843→                    className="w-12 h-12 rounded-2xl flex items-center justify-center mb-3"
+   844→                    style={{
+   845→                      background: "rgba(239,68,68,0.12)",
+   846→                      border: "1px solid rgba(239,68,68,0.35)",
+   847→                    }}
+   848→                  >
+   849→                    <AlertTriangle className="w-6 h-6 text-[#ef4444]" />
+   850→                  </div>
+   851→                  <div className="font-d text-sm font-bold text-[var(--t1)] mb-1">
+   852→                    Couldn&apos;t fetch insights
+   853→                  </div>
+   854→                  <p className="text-xs text-[var(--t2)] max-w-xs mb-4 leading-relaxed">
+   855→                    {error || "Something went wrong."}
+   856→                  </p>
+   857→                  <motion.button
+   858→                    onClick={handleGetInsights}
+   859→                    whileHover={{ scale: 1.04 }}
+   860→                    whileTap={{ scale: 0.96 }}
+   861→                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-[var(--card)] border border-[var(--border2)] text-[var(--t1)] hover:border-[rgba(99,102,241,0.4)] transition"
+   862→                  >
+   863→                    <RefreshCw className="w-3.5 h-3.5" />
+   864→                    Try again
+   865→                  </motion.button>
+   866→                </motion.div>
+   867→              )}
+   868→
+   869→              {/* ─── SUCCESS STATE ─── */}
+   870→              {view === "success" && (
+   871→                <motion.div
+   872→                  key="success"
+   873→                  initial={{ opacity: 0 }}
+   874→                  animate={{ opacity: 1 }}
+   875→                  exit={{ opacity: 0 }}
+   876→                  className="space-y-4"
+   877→                >
+   878→                  {/* If we have structured JSON → render 3 sections */}
+   879→                  {parsed ? (
+   880→                    <>
+   881→                      {/* Focus Areas */}
+   882→                      {parsed.focusAreas.length > 0 && (
+   883→                        <section>
+   884→                          <div className="flex items-center gap-2 mb-2.5">
+   885→                            <Target className="w-3.5 h-3.5 text-[#ef4444]" />
+   886→                            <h3 className="font-d text-sm font-bold text-[var(--t1)]">
+   887→                              Your Focus Areas
+   888→                            </h3>
+   889→                            <span className="text-[10px] font-mono text-[var(--t3)] ml-auto">
+   890→                              {parsed.focusAreas.length} sound
+   891→                              {parsed.focusAreas.length !== 1 ? "s" : ""}
+   892→                            </span>
+   893→                          </div>
+   894→                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+   895→                            {parsed.focusAreas
+   896→                              .slice(0, 4)
+   897→                              .map((area, i) => (
+   898→                                <FocusAreaCard
+   899→                                  key={`${area.phoneme}-${i}`}
+   900→                                  area={area}
+   901→                                  index={i}
+   902→                                />
+   903→                              ))}
+   904→                          </div>
+   905→                        </section>
+   906→                      )}
+   907→
+   908→                      {/* Recommended Lessons */}
+   909→                      {parsed.recommendedLessons.length > 0 && (
+   910→                        <section>
+   911→                          <div className="flex items-center gap-2 mb-2.5">
+   912→                            <BookOpen className="w-3.5 h-3.5 text-[var(--p3)]" />
+   913→                            <h3 className="font-d text-sm font-bold text-[var(--t1)]">
+   914→                              Recommended Lessons
+   915→                            </h3>
+   916→                            <span className="text-[10px] font-mono text-[var(--t3)] ml-auto">
+   917→                              tap to open
+   918→                            </span>
+   919→                          </div>
+   920→                          <div className="space-y-2">
+   921→                            {parsed.recommendedLessons
+   922→                              .slice(0, 3)
+   923→                              .map((rec, i) => (
+   924→                                <RecommendedLessonCard
+   925→                                  key={`${rec.lesson}-${i}`}
+   926→                                  rec={rec}
+   927→                                  index={i}
+   928→                                  onOpen={handleOpenLesson}
+   929→                                />
+   930→                              ))}
+   931→                          </div>
+   932→                        </section>
+   933→                      )}
+   934→
+   935→                      {/* Practice Tips */}
+   936→                      {parsed.tips.length > 0 && (
+   937→                        <section>
+   938→                          <div className="flex items-center gap-2 mb-2.5">
+   939→                            <Lightbulb className="w-3.5 h-3.5 text-[#f59e0b]" />
+   940→                            <h3 className="font-d text-sm font-bold text-[var(--t1)]">
+   941→                              Practice Tips
+   942→                            </h3>
+   943→                          </div>
+   944→                          <ul className="space-y-2.5">
+   945→                            {parsed.tips.map((tip, i) => (
+   946→                              <TipItem key={i} tip={tip} index={i} />
+   947→                            ))}
+   948→                          </ul>
+   949→                        </section>
+   950→                      )}
+   951→
+   952→                      {/* Footer note */}
+   953→                      <div className="text-[10px] text-[var(--t3)] font-mono text-center pt-2 border-t border-[var(--border)]">
+   954→                        ✨ Generated by AccentAI Coach ·{" "}
+   955→                        <button
+   956→                          onClick={handleGetInsights}
+   957→                          className="text-[var(--p3)] hover:text-[var(--c2)] transition underline-offset-2 hover:underline"
+   958→                        >
+   959→                          regenerate
+   960→                        </button>
+   961→                      </div>
+   962→                    </>
+   963→                  ) : (
+   964→                    // Fallback: raw text response
+   965→                    <section>
+   966→                      <div className="flex items-center gap-2 mb-2.5">
+   967→                        <Sparkles className="w-3.5 h-3.5 text-[var(--p3)]" />
+   968→                        <h3 className="font-d text-sm font-bold text-[var(--t1)]">
+   969→                          Coach Advice
+   970→                        </h3>
+   971→                      </div>
+   972→                      <div className="rounded-2xl p-3.5 bg-[var(--overlay-1)] border border-[var(--border)] text-xs text-[var(--t2)] leading-relaxed whitespace-pre-wrap">
+   973→                        {rawText}
+   974→                      </div>
+   975→                      <div className="text-[10px] text-[var(--t3)] font-mono text-center pt-2 mt-2">
+   976→                        ✨ Generated by AccentAI Coach
+   977→                      </div>
+   978→                    </section>
+   979→                  )}
+   980→                </motion.div>
+   981→              )}
+   982→            </AnimatePresence>
+   983→          </div>
+   984→        </div>
+   985→      </div>
+   986→    </motion.section>
+   987→  );
+   988→}
+   989→

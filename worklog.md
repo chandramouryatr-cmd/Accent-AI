@@ -2215,3 +2215,201 @@ Unresolved Issues / Next Phase Priorities:
 - MEDIUM: Lesson step renderers (16 types) inside lesson-modal may still have residual colored elements
 - LOW: Consider adding a subtle accent color (single color) for interactive highlights to avoid pure monochrome feeling sterile
 - LOW: The "Hear it" / TTS buttons should show a visual "speaking" state (pulsing) — infrastructure is in place (isSpeaking/onSpeakingChange) but not all buttons use it yet
+
+---
+Task ID: B
+Agent: Daily Challenge Minimal Agent
+Task: Redesign Daily Challenge card to minimal white/black
+
+Work Log:
+- Read worklog.md and the existing daily-challenge-card.tsx to understand the heavy gradient/orb design that needed to be stripped.
+- Confirmed CSS tokens (var(--card), --card-h, --bg2, --border, --border2, --t1, --t2, --t3, --p) exist in globals.css for both light & dark themes.
+- Rewrote daily-challenge-card.tsx with minimal design:
+  * Card: bg-[var(--card)] border border-[var(--border)] rounded-xl — solid white, thin gray border.
+  * Removed the linear-gradient card background style and the two animated radial-gradient motion.div orbs entirely.
+  * Header: kept emoji + "Daily Challenge" mono uppercase t3 label + "Master the {focus}" t1 title.
+  * Difficulty badge: replaced colored accent badge with monochrome pill — t3 text on card-h bg with thin border. DIFFICULTY_COLORS map kept in code but unused.
+  * Phrase box: bg-[var(--bg2)] border border-[var(--border)] rounded-lg p-3 — light gray bg. Phrase in t1, IPA in t3 mono.
+  * Tip: removed amber-tinted box; replaced with left-border accent (border-l-2 border-[var(--border2)] pl-3) with t2 text. Kept the 💡 emoji.
+  * Action buttons (3, same size, rounded-lg py-2 text-xs font-semibold):
+    - "Hear it": solid bg-[var(--p)] text-white.
+    - "Slow": ghost — border border-[var(--border2)] text-[var(--t1)] hover:bg-[var(--card-h)].
+    - "Mark Done": when not done — outline border-[var(--p)] text-[var(--p)] hover:bg-[var(--card-h)]. When done — solid bg-[var(--p)] text-white with Check icon.
+  * Footer: removed emoji-heavy text; plain t3 mono "New challenge every day · N total" + status.
+- Preserved all functionality: speak(), handlePlay, handlePlaySlow, handleComplete (with setActiveTab("practice") when already done), completed state with localStorage, pushToast on completion.
+- Ran `bun run lint` — clean, no errors. Dev server log shows successful compilation.
+
+Stage Summary:
+- Daily Challenge card is now minimal white/black monochrome, consistent with the rest of the AccentAI minimal redesign.
+- All gradient backgrounds, animated orbs, hardcoded rgba(99,102,241/139,92,246/34,211,238) colors, amber tip tint, and backdrop effects have been removed.
+- The card uses only the global CSS token system so it adapts automatically to light/dark themes.
+- No functionality was lost; only visual presentation changed.
+
+---
+Task ID: D
+Agent: Developer Switch Agent
+Task: Add Developer Mode toggle to More view + simplify More styling
+
+Work Log:
+- Read /home/z/my-project/worklog.md for project context (AccentAI, Zustand+persist store, Next.js 16, dark-default minimal theme).
+- Read /home/z/my-project/src/components/views/more.tsx (633 lines) — confirmed the existing structure: Section/Divider/SelectedCheck helpers + 9 sections (Profile, Accent, Theme, XP Shop, Phases, Bookmarks, Notes, About, Reset).
+- Read /home/z/my-project/src/lib/store.ts — found devMode/setDevMode did NOT exist; needed to add them so the More view could read/write the flag.
+- Edited src/lib/store.ts:
+  * Added `devMode: boolean` field to AppState interface (before `activeTab`).
+  * Added `setDevMode: (v: boolean) => void` action signature.
+  * Initialized `devMode: false` in the store factory.
+  * Implemented `setDevMode: (v) => set({ devMode: v })`.
+  * Added `devMode: s.devMode` to the persist `partialize` block so the preference survives reloads.
+  * Deliberately did NOT reset devMode in `resetAll` — it's a developer/test preference, not user progress.
+- Edited src/components/views/more.tsx:
+  * Added Terminal + Check to the lucide-react import.
+  * Added a new `DevToggle` helper component (button[role=switch][aria-checked] + motion.div thumb with spring left animation) after SelectedCheck.
+  * Wired `const devMode = useAppStore((s) => s.devMode);` and `const setDevMode = useAppStore((s) => s.setDevMode);` into MoreView.
+  * Added a small `DEV` badge (`bg-[var(--p)] text-white font-mono text-[9px]`) next to the "More" title that only renders when devMode is true.
+  * Inserted a new Developer Mode section with index 8 (BEFORE the Reset section, AFTER the About section) containing: a Terminal icon + "Developer Mode" title + DevToggle on the right, a description in t2/xs, and a conditionally-rendered "Unlocked" status panel with a 2×2 grid of Check-marked items (All 8 Phases, All 32 Lessons, Free XP Shop, Unlimited XP).
+  * Shifted the Reset section from index 8 to index 9.
+  * Simplified the More heading: removed `animate-gradient-text` + the linear-gradient backgroundImage; just `text-[var(--t1)]`.
+  * Simplified the profile card: removed the `animate-pulse-glow` radial halo and the `animate-gradient-ring` conic ring; avatar now a single `bg-[var(--p)] text-white rounded-full` motion.div.
+  * Changed profile "Save" button from `bg-[var(--grad-btn)]` to `bg-[var(--p)]`.
+  * Removed `boxShadow: "0 0 20px rgba(99,102,241,0.2)"` inline styles from the accent selector + both theme selector buttons (kept the `border-[var(--p)]` Tailwind class).
+  * Changed About section "AccentAI" from `animate-gradient-text` + linear-gradient(135deg, #6366f1, #8b5cf6, #22d3ee, #a78bfa, #6366f1) to plain `text-[var(--t1)]`.
+  * Changed Share My Stats button from `style={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6)", boxShadow: "0 6px 20px rgba(99,102,241,0.4)" }}` to `className="bg-[var(--p)]"` (no shadow).
+  * Changed phase overview progress bars from `bg-[var(--grad-btn)]` to `bg-[var(--p)]`.
+  * Simplified bookmarked empty-state ⭐ animation from a rotation (`rotate: [0, -10, 10, -10, 0]`) to a subtle bounce (`y: [0, -4, 0]` + `scale: [1, 1.08, 1]`, easeInOut, repeatDelay 2.5).
+  * Changed notes count badge from `bg-[rgba(99,102,241,0.12)] text-[var(--p3)]` to `bg-[var(--card-h)] text-[var(--t2)]`.
+  * Simplified SelectedCheck: removed the `shadow-[0_2px_8px_rgba(99,102,241,0.5)]` boxShadow (kept the bg-[var(--p)] badge and spring animation).
+- Wrote work record to /home/z/my-project/agent-ctx/D-developer-switch-developer-switch-agent.md.
+- Verified `bun run lint` → EXIT 0, zero errors, zero warnings.
+- Verified `tail /home/z/my-project/dev.log` → "✓ Compiled" repeatedly, GET / 200, no compile errors.
+
+Stage Summary:
+- More view now exposes a Developer Mode toggle wired to a new `devMode`/`setDevMode` Zustand store field (persisted via partialize). Flipping it ON reveals a status panel listing the unlocked features (All 8 Phases, All 32 Lessons, Free XP Shop, Unlimited XP) and renders a small black `DEV` badge next to the "More" heading.
+- All functionality preserved: name editing, accent/theme switching, XP Shop, phase overview, bookmarks, lesson notes, About card, Share My Stats, ShareCard modal, Reset flow.
+- More view's visual language is now consistent with the recently redesigned AppShell/Dashboard: no indigo/violet/cyan gradients, no glow halos, no inline boxShadows. Cards rely purely on `bg-[var(--card)] border border-[var(--border)]`, primary actions use `bg-[var(--p)]`, and selector highlight uses `border-[var(--p)]` without glow.
+- Downstream consumers (e.g. journey.tsx gating phase locks, xp-shop.tsx price gating, dashboard.tsx level gating) can now read `useAppStore(s => s.devMode)` to bypass their locks — that wiring is the responsibility of subsequent task agents, not this one.
+- Lint: PASS (exit 0). Dev server compiles cleanly.
+
+---
+Task ID: C
+Agent: Coach Insights Minimal Agent
+Task: Redesign Coach Insights to minimal white/black
+
+Work Log:
+- Read worklog.md and the full coach-insights.tsx (989 lines) to understand current structure. Inspected previous agent-ctx notes (6-coach-insights builder, 8-dashboard-minimal-redesign) for context — dashboard already redesigned to minimal, CoachInsights was the remaining heavy widget.
+- Confirmed CSS tokens exist in globals.css: `--card-h` (#f4f4f5 light / #1c1c1c dark), `--border2` (#d4d4d4 / #333333), `--rd` (#dc2626 / #f87171), `--overlay-1`, `--overlay-border-1/2`.
+- Rewrote `src/components/widgets/coach-insights.tsx` (989 → 749 lines):
+
+### Removed (heavy visual effects)
+- Animated mesh gradient border `div` (linear-gradient indigo/violet/cyan/indigo with animated backgroundPosition over 8s)
+- Inner card dark gradient (`linear-gradient(rgba(12,12,26,0.96), rgba(17,17,40,0.92))`) + `backdrop-filter: blur(16px)`
+- Both floating radial-gradient orbs (violet top-right pulsing scale 1→1.18, cyan bottom-left pulsing scale 1→1.15)
+- Idle state gradient icon box (`linear-gradient(135deg, rgba(99,102,241,0.18), rgba(34,211,238,0.12))` + `boxShadow: 0 0 24px rgba(99,102,241,0.2)`)
+- Rotating ✨ emoji animation (`animate={{ rotate: [0, 15, -10, 0], scale: [1, 1.15, 1] }}`)
+- Idle "Get AI Insights" gradient button (`linear-gradient(135deg, #6366f1, #8b5cf6 55%, #22d3ee)` + `boxShadow: 0 4px 20px rgba(99,102,241,0.4)`)
+- LoadingState animated gradient ring spinner (`bg-gradient-to-br from-[var(--p)] via-[var(--p2)] to-[var(--c)]` with blur(8px) + scale/rotate infinite) + `animate-pulse` Sparkles + 3-dot bouncing animation
+- ScoreRing SVG component entirely (was used in FocusAreaCard with colored stroke + drop-shadow glow)
+- FocusAreaCard colored tile (`${color}22` bg + `boxShadow: 0 0 12px ${color}33` glow), colored border, tier-based red/amber/green coloring
+- RecommendedLessonCard gradient bg (`linear-gradient(135deg, rgba(99,102,241,0.12), rgba(34,211,238,0.04))`), indigo border, gradient icon tile (`bg-gradient-to-br from-[var(--p)] to-[var(--p2)]` + `boxShadow: 0 0 12px rgba(99,102,241,0.4)`), indigo phase badge (`bg-[rgba(99,102,241,0.15)] text-[var(--p3)] border-[rgba(99,102,241,0.3)]`), hover boxShadow glow (`0 6px 24px rgba(99,102,241,0.25)`), `group-hover:text-[var(--c2)]` chevron
+- TipItem amber circle (`bg-[rgba(245,158,11,0.12)] border-[rgba(245,158,11,0.25)]` with Lightbulb `text-[#f59e0b]`)
+- Error state red-tinted icon box (`bg-[rgba(239,68,68,0.12)] border-[rgba(239,68,68,0.35)]`)
+- Colored section header icons (red Target, violet BookOpen, amber Lightbulb, violet Sparkles)
+- Refresh button indigo hover border (`hover:border-[rgba(99,102,241,0.4)]`)
+- Footer ✨ emoji and indigo "regenerate" link color
+
+### New (minimal)
+- Outer container: solid `bg-[var(--card)] border border-[var(--border)] rounded-xl` — no gradient, no blur, no orbs, no border animation
+- Section heading "Coach Insights" with Sparkles icon in `var(--t1)` (was `var(--p3)`); heading text also explicitly `text-[var(--t1)]`
+- Refresh button: simple ghost button `bg-[var(--card)] border border-[var(--border)] text-[var(--t2)] hover:text-[var(--t1)] hover:border-[var(--border2)]`
+- Idle icon box: `bg-[var(--card-h)] border border-[var(--border)] rounded-xl` with Sparkles in `var(--t1)` — no glow, no gradient, no rotating emoji
+- "Get AI Insights" button: `bg-[var(--p)] text-white rounded-xl px-5 py-2.5 text-sm font-semibold hover:opacity-80 transition` — solid black, no gradient, no colored shadow (kept `whileTap scale 0.98` only)
+- LoadingState: simple spinner `border-2 border-[var(--border)] border-t-[var(--p)] rounded-full w-8 h-8 animate-spin` + "Analyzing…" text in `var(--t2)` + small `var(--t3)` mono subtext — no animated dots, no gradient orb
+- Error state: icon box `bg-[var(--card-h)] border border-[var(--border)]` (removed red tint); AlertTriangle icon in `var(--rd)` (only place red appears). "Try again" button: ghost `border border-[var(--border2)] text-[var(--t1)] hover:bg-[var(--card-h)]`
+- FocusAreaCard: `bg-[var(--card)] border border-[var(--border)] rounded-lg p-3`; phoneme tile `bg-[var(--card-h)] border border-[var(--border)] text-[var(--t1)]`; score display = `var(--t1)` number + `var(--t3)` label; replaced colored ScoreRing with a thin `h-1` bar — `bg-[var(--border)]` track + animated `bg-[var(--p)]` fill (width animates from 0 to score%); reason text `var(--t2)`
+- RecommendedLessonCard: `bg-[var(--card)] border border-[var(--border)] rounded-lg p-3 hover:border-[var(--border2)]`; icon box `bg-[var(--card-h)] border border-[var(--border)] text-[var(--t1)]`; phase badge `bg-[var(--card-h)] text-[var(--t3)] border border-[var(--border)]`; chevron `text-[var(--t3)]` with `group-hover:translate-x-0.5` (removed `group-hover:text-[var(--c2)]`); kept `whileTap scale 0.98`
+- TipItem: removed Lightbulb circle; replaced with simple `—` em-dash bullet in `var(--t3)`; text `var(--t2)`
+- Section headers: Target/BookOpen/Lightbulb/Sparkles all `text-[var(--t1)]` (was red/violet/amber/violet)
+- Footer note: `var(--t3)` mono, no ✨ emoji, "regenerate" link uses `text-[var(--t1)] hover:underline underline-offset-2`
+- Fallback raw-text card: `rounded-lg p-3.5 bg-[var(--card-h)] border border-[var(--border)]` (was `rounded-2xl bg-[var(--overlay-1)]`)
+
+### Preserved (no functional changes)
+- All types (`PhonemeScore`, `FocusArea`, `RecommendedLesson`, `InsightsPlan`, `ViewState`, `CachedInsight`)
+- `PHONEME_LESSONS` mapping, `derivePhonemeMastery`, `extractJson`, `normalizePlan`, `normalizeFocusArea`, `normalizeRecommendedLesson` helpers — untouched
+- `handleGetInsights`, `handleOpenLesson`, AbortController + 30s first-token timeout, SSE streaming consumption, localStorage date-keyed caching with signature, phoneme-mastery derivation
+- `view` state machine (idle/loading/success/error)
+- AnimatePresence mode="wait" transitions between states (kept subtle: small y offsets, spring 280/24, staggered delays)
+- `useMemo` lesson-title → lesson-ID lookup with fuzzy fallback
+- Mobile-first responsive grid (1 col mobile / 2 col sm+ for focus areas)
+- All aria-labels, aria-hidden on decorative elements, semantic `<section>`/`<ul>`/`<li>` markup
+
+### Verification
+- `bun run lint` → EXIT 0 (no errors, no warnings)
+- dev.log shows clean compiles (`✓ Compiled in 77ms` etc.) with no errors after edit
+
+Stage Summary:
+- `coach-insights.tsx` reduced from 989 → 749 lines (−240 lines, −24%)
+- ALL `linear-gradient` and `radial-gradient` backgrounds removed; ALL `backdrop-filter: blur` removed; ALL hardcoded `rgba(99,102,241,...)`, `rgba(139,92,246,...)`, `rgba(34,211,238,...)`, `rgba(167,139,250,...)`, `rgba(239,68,68,...)`, `rgba(245,158,11,...)` colors removed; ALL boxShadow glow effects removed; animated mesh gradient border div removed; both floating orbs removed; `animate-pulse` on sparkles removed
+- Visual language now consistent with the previously-redesigned dashboard: solid `bg-[var(--card)]` cards with thin `border-[var(--border)]`, `var(--p)` solid-black primary actions, grayscale `var(--t1/t2/t3)` typography, single accent color `var(--p)` reserved for primary buttons and score-bar fills, `var(--rd)` used only for the error AlertTriangle icon
+- Lint: PASS (exit 0). Dev server compiles cleanly. Functionality 100% preserved.
+
+---
+Task ID: A
+Agent: Store DevMode Agent
+Task: Add devMode to store + wire to journey unlock + XP shop
+
+Work Log:
+- Read worklog.md, store.ts, journey.tsx, xp-shop.tsx for full context.
+- Found that the devMode field/setDevMode action/initial-state/partialize entry had ALREADY been added to store.ts by a concurrent agent; my MultiEdit created duplicate declarations which I then cleaned up, leaving exactly one of each.
+- Added the actual devMode BEHAVIOR (the core of this task) to store.ts:
+  - spendXP: `if (get().devMode) return true;` at start (any amount free).
+  - buyStreakFreeze / buyLessonRetry: devMode branch increments count by 1, no XP deduction.
+  - buyDoubleXP / buyCustomTheme: devMode branch sets the boolean true (unique-item guard preserved — returns false if already owned), no XP deduction.
+- Wired devMode into journey.tsx: read `devMode` from store; in phaseInfo useMemo changed `unlocked.push(prevDone)` → `unlocked.push(prevDone || devMode)`; added `devMode` to the useMemo deps. All phases become unlocked/clickable (Lock icon hidden) in dev mode.
+- Wired devMode into xp-shop.tsx: read `devMode`; `canAfford = devMode || xp >= item.cost`; handleBuy guard `if (xp < item.cost && !devMode) return;`; button label switches to "Unlock FREE" (unique) / "Get FREE" (non-unique) when devMode; toast subtitle becomes "FREE · {name} is now active"; xpDelta animation suppressed (to = prevXP) so no false XP-drop; added devMode to handleBuy deps.
+- Ran `bun run lint` → clean. Verified store.ts has single declarations (rg devMode → 10 hits, all unique). Dev server compiles cleanly.
+- Wrote agent-ctx record at agent-ctx/A-store-devmode-agent.md.
+
+Stage Summary:
+- devMode toggle is now fully functional end-to-end. When ON: every Journey phase is unlocked & clickable; every XP Shop item is free (buttons read "Unlock FREE"/"Get FREE", toast confirms "FREE"); spendXP always succeeds; buy* grant items without deducting XP (unique-item guards preserved). Persistence is intact (devMode is in the partialize allowlist). No visual styling was changed — only logic and label text. A UI control to flip setDevMode (e.g. in the More view) is the natural follow-up, outside this task's scope.
+
+---
+Task ID: 11 (Round 11 — Main Agent)
+Agent: Main Orchestrator
+Task: Fix Daily Challenge + Coach Insights UI + add Developer Switch to unlock all features
+
+Work Log:
+- User reported: "daily challenge and coach insights ui doesn't look good" + "need a developer switch once i click i need access to all the locked features"
+- Investigated current state:
+  - Daily Challenge card: heavy gradient bg, 2 animated radial orbs, colored difficulty badge, dark phrase box, gradient buttons
+  - Coach Insights: animated mesh gradient border, dark glass card, 2 floating orbs, gradient idle button with glow, colored section headers, gradient icon boxes
+  - Locked features: Phases 2-8 in Journey (locked until prev phase done), XP Shop items (cost 30-200 XP), all require grinding
+- Dispatched 4 parallel subagents:
+  - Task A: Add devMode to store + wire to journey unlock + XP shop free purchases
+  - Task B: Redesign Daily Challenge card to minimal white/black
+  - Task C: Redesign Coach Insights to minimal white/black (989→749 lines)
+  - Task D: Add Developer Mode toggle to More view + simplify More styling
+- Verified all changes with agent-browser + VLM:
+  - Daily Challenge: clean white card, monochrome badge, solid black "Hear it" button, outline "Mark Done" ✅
+  - Coach Insights: clean white card, minimal Sparkles icon, solid black "Get AI Insights" button, no orbs/gradient border ✅
+  - Developer Mode toggle in More view: OFF/ON switch, "DEV" badge appears when ON, "Unlocked" status panel shows (All 8 Phases, All 32 Lessons, Free XP Shop, Unlimited XP) ✅
+  - Journey view with devMode ON: all 8 phases show "CURRENT", no lock icons, Phase 8 expandable, Phase 8 Lesson 1 (Tone Adaptation) opens successfully ✅
+  - XP Shop with devMode ON: all items show "Get FREE" or "Unlock FREE", Double XP granted for free (no XP deducted), shows "Owned ✓" ✅
+- Lint: PASS (0 errors). Dev log: clean compiles.
+
+Stage Summary:
+- Daily Challenge card FULLY REDESIGNED to minimal: white bg, thin border, monochrome difficulty badge, solid black "Hear it" button, outline "Mark Done" button. Removed all gradients, orbs, colored tints.
+- Coach Insights FULLY REDESIGNED to minimal (240 lines removed): white card, thin border, minimal Sparkles icon, solid black button, simple spinner for loading, thin progress bars instead of ScoreRing, grayscale section headers. Removed mesh gradient border, glass morphism, floating orbs, all colored glows.
+- DEVELOPER MODE FEATURE ADDED:
+  - New store fields: `devMode: boolean`, `setDevMode` action, persisted across reloads
+  - Store logic: `spendXP` returns true for free, all `buy*` functions grant items without XP deduction
+  - Journey view: all phases unlocked when devMode is true
+  - XP Shop: buttons always enabled, show "FREE" labels, grant without XP
+  - More view: new Developer Mode section with toggle switch + "Unlocked" status panel + "DEV" badge next to title
+- More view ALSO simplified to minimal: removed gradient text, pulse-glow halo, conic ring, gradient share button, gradient progress bars, colored notes badge
+- Files changed: store.ts, journey.tsx, xp-shop.tsx, daily-challenge-card.tsx, coach-insights.tsx, more.tsx
+
+Unresolved Issues / Next Phase Priorities:
+- MEDIUM: Practice, Progress views still have old styling — should be simplified to match minimal aesthetic
+- MEDIUM: AI Coach FAB + chat panel may still have colored styling
+- MEDIUM: Lesson step renderers (16 types) inside lesson-modal may have residual colored elements
+- LOW: When devMode is ON, consider adding a visual indicator on Dashboard/Journey (small "DEV" pill) so user knows features are unlocked
+- LOW: Consider a "Reset devMode" quick action or auto-disable after session

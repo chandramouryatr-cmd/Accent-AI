@@ -57,6 +57,9 @@ export interface AppState {
   // xp shop
   xpShopItems: XPShopItems;
 
+  // developer mode — unlocks all phases/lessons/shop for testing
+  devMode: boolean;
+
   // ui
   activeTab: "dashboard" | "journey" | "practice" | "progress" | "more";
   activeLessonId: string | null;
@@ -88,6 +91,7 @@ export interface AppState {
   buyCustomTheme: () => boolean;
   buyLessonRetry: () => boolean;
   consumeLessonRetry: (lessonId: string) => boolean;
+  setDevMode: (v: boolean) => void;
   resetAll: () => void;
 }
 
@@ -126,6 +130,8 @@ export const useAppStore = create<AppState>()(
         customTheme: false,
         lessonRetries: 0,
       },
+
+      devMode: false,
 
       activeTab: "dashboard",
       activeLessonId: null,
@@ -350,6 +356,8 @@ export const useAppStore = create<AppState>()(
       },
 
       spendXP: (amount) => {
+        // dev mode: any amount is spendable for free
+        if (get().devMode) return true;
         const state = get();
         if (state.xp < amount) return false;
         set({ xp: state.xp - amount });
@@ -372,6 +380,16 @@ export const useAppStore = create<AppState>()(
 
       buyStreakFreeze: () => {
         const state = get();
+        // dev mode: grant for free without deducting XP
+        if (state.devMode) {
+          set({
+            xpShopItems: {
+              ...state.xpShopItems,
+              streakFreezes: state.xpShopItems.streakFreezes + 1,
+            },
+          });
+          return true;
+        }
         if (state.xp < 50) return false;
         set({
           xp: state.xp - 50,
@@ -385,6 +403,17 @@ export const useAppStore = create<AppState>()(
 
       buyDoubleXP: () => {
         const state = get();
+        // dev mode: grant for free without deducting XP
+        if (state.devMode) {
+          if (state.xpShopItems.doubleXP) return false;
+          set({
+            xpShopItems: {
+              ...state.xpShopItems,
+              doubleXP: true,
+            },
+          });
+          return true;
+        }
         if (state.xp < 100 || state.xpShopItems.doubleXP) return false;
         set({
           xp: state.xp - 100,
@@ -398,6 +427,17 @@ export const useAppStore = create<AppState>()(
 
       buyCustomTheme: () => {
         const state = get();
+        // dev mode: grant for free without deducting XP
+        if (state.devMode) {
+          if (state.xpShopItems.customTheme) return false;
+          set({
+            xpShopItems: {
+              ...state.xpShopItems,
+              customTheme: true,
+            },
+          });
+          return true;
+        }
         if (state.xp < 200 || state.xpShopItems.customTheme) return false;
         set({
           xp: state.xp - 200,
@@ -411,6 +451,16 @@ export const useAppStore = create<AppState>()(
 
       buyLessonRetry: () => {
         const state = get();
+        // dev mode: grant for free without deducting XP
+        if (state.devMode) {
+          set({
+            xpShopItems: {
+              ...state.xpShopItems,
+              lessonRetries: state.xpShopItems.lessonRetries + 1,
+            },
+          });
+          return true;
+        }
         if (state.xp < 30) return false;
         set({
           xp: state.xp - 30,
@@ -447,6 +497,8 @@ export const useAppStore = create<AppState>()(
         });
         return true;
       },
+
+      setDevMode: (v) => set({ devMode: v }),
 
       resetAll: () => {
         set({
@@ -500,6 +552,7 @@ export const useAppStore = create<AppState>()(
         challengeHighScore: s.challengeHighScore,
         lessonNotes: s.lessonNotes,
         xpShopItems: s.xpShopItems,
+        devMode: s.devMode,
       }),
     }
   )

@@ -216,95 +216,50 @@ function normalizeRecommendedLesson(item: unknown): RecommendedLesson | null {
 
 // ─── Sub-components ──────────────────────────────────────────────────────
 
-function ScoreRing({ score, color }: { score: number; color: string }) {
-  const r = 14;
-  const c = 2 * Math.PI * r;
-  const offset = c - (score / 100) * c;
-  return (
-    <svg width={36} height={36} viewBox="0 0 36 36" className="shrink-0">
-      <circle
-        cx={18}
-        cy={18}
-        r={r}
-        fill="none"
-        stroke="var(--overlay-border-1)"
-        strokeWidth={3}
-      />
-      <motion.circle
-        cx={18}
-        cy={18}
-        r={r}
-        fill="none"
-        stroke={color}
-        strokeWidth={3}
-        strokeLinecap="round"
-        strokeDasharray={c}
-        initial={{ strokeDashoffset: c }}
-        animate={{ strokeDashoffset: offset }}
-        transition={{ duration: 0.9, ease: "easeOut" }}
-        transform="rotate(-90 18 18)"
-        style={{ filter: `drop-shadow(0 0 4px ${color}88)` }}
-      />
-      <text
-        x={18}
-        y={21}
-        textAnchor="middle"
-        fontSize={9}
-        fontWeight={700}
-        fill={color}
-        fontFamily="var(--font-mono), monospace"
-      >
-        {score}
-      </text>
-    </svg>
-  );
-}
-
 function FocusAreaCard({ area, index }: { area: FocusArea; index: number }) {
-  const color =
+  const label =
     area.score >= 85
-      ? "#10b981"
+      ? "Mastered"
       : area.score >= 70
-      ? "#f59e0b"
-      : "#ef4444";
+      ? "Progressing"
+      : "Needs work";
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12, scale: 0.96 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
       transition={{
         type: "spring",
         stiffness: 280,
         damping: 24,
-        delay: index * 0.08,
+        delay: index * 0.06,
       }}
-      whileHover={{ y: -2 }}
-      className="rounded-2xl p-3 border backdrop-blur-sm"
-      style={{
-        background: `linear-gradient(135deg, ${color}1a, rgba(99,102,241,0.04))`,
-        borderColor: `${color}40`,
-      }}
+      className="bg-[var(--card)] border border-[var(--border)] rounded-lg p-3"
     >
       <div className="flex items-center gap-3">
-        <div
-          className="w-11 h-11 rounded-xl flex items-center justify-center font-mono text-xl font-bold shrink-0"
-          style={{
-            background: `${color}22`,
-            color: color,
-            boxShadow: `0 0 12px ${color}33`,
-          }}
-        >
+        <div className="w-11 h-11 rounded-xl flex items-center justify-center font-mono text-lg font-bold shrink-0 bg-[var(--card-h)] border border-[var(--border)] text-[var(--t1)]">
           /{area.phoneme}/
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center justify-between gap-2 mb-1.5">
             <span className="text-[10px] uppercase tracking-wider font-mono text-[var(--t3)]">
-              {area.score >= 85
-                ? "Mastered"
-                : area.score >= 70
-                ? "Progressing"
-                : "Needs work"}
+              {label}
             </span>
-            <ScoreRing score={area.score} color={color} />
+            <span className="font-mono text-sm font-bold text-[var(--t1)]">
+              {area.score}
+            </span>
+          </div>
+          {/* Thin score bar: var(--border) track, var(--p) fill */}
+          <div className="h-1 rounded-full bg-[var(--border)] overflow-hidden">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${area.score}%` }}
+              transition={{
+                duration: 0.7,
+                ease: "easeOut",
+                delay: index * 0.06 + 0.1,
+              }}
+              className="h-full bg-[var(--p)] rounded-full"
+            />
           </div>
         </div>
       </div>
@@ -339,34 +294,28 @@ function RecommendedLessonCard({
 
   return (
     <motion.button
-      initial={{ opacity: 0, y: 12, scale: 0.96 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
       transition={{
         type: "spring",
         stiffness: 280,
         damping: 24,
-        delay: 0.1 + index * 0.08,
+        delay: 0.1 + index * 0.06,
       }}
-      whileHover={{ y: -2, boxShadow: "0 6px 24px rgba(99,102,241,0.25)" }}
       whileTap={{ scale: 0.98 }}
       onClick={() => lesson && onOpen(lesson.title)}
       disabled={!lesson}
-      className="w-full text-left rounded-2xl p-3.5 border backdrop-blur-sm transition group"
-      style={{
-        background:
-          "linear-gradient(135deg, rgba(99,102,241,0.12), rgba(34,211,238,0.04))",
-        borderColor: "rgba(99,102,241,0.3)",
-        cursor: lesson ? "pointer" : "default",
-      }}
+      className="w-full text-left bg-[var(--card)] border border-[var(--border)] rounded-lg p-3 hover:border-[var(--border2)] transition group"
+      style={{ cursor: lesson ? "pointer" : "default" }}
       aria-label={`Open lesson: ${rec.lesson}`}
     >
       <div className="flex items-start gap-3">
-        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[var(--p)] to-[var(--p2)] flex items-center justify-center shrink-0 shadow-[0_0_12px_rgba(99,102,241,0.4)]">
-          <BookOpen className="w-4 h-4 text-white" />
+        <div className="w-9 h-9 rounded-xl bg-[var(--card-h)] border border-[var(--border)] flex items-center justify-center shrink-0">
+          <BookOpen className="w-4 h-4 text-[var(--t1)]" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
-            <span className="text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-[rgba(99,102,241,0.15)] text-[var(--p3)] border border-[rgba(99,102,241,0.3)]">
+            <span className="text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-[var(--card-h)] text-[var(--t3)] border border-[var(--border)]">
               P{rec.phase}
             </span>
             <span className="font-d text-sm font-bold text-[var(--t1)] truncate">
@@ -380,7 +329,7 @@ function RecommendedLessonCard({
           )}
         </div>
         {lesson && (
-          <ChevronRight className="w-4 h-4 text-[var(--t3)] group-hover:text-[var(--c2)] group-hover:translate-x-0.5 transition-all shrink-0 mt-1" />
+          <ChevronRight className="w-4 h-4 text-[var(--t3)] group-hover:translate-x-0.5 transition-transform shrink-0 mt-1" />
         )}
       </div>
     </motion.button>
@@ -392,12 +341,12 @@ function TipItem({ tip, index }: { tip: string; index: number }) {
     <motion.li
       initial={{ opacity: 0, x: -8 }}
       animate={{ opacity: 1, x: 0 }}
-      transition={{ delay: 0.15 + index * 0.07, duration: 0.3 }}
+      transition={{ delay: 0.1 + index * 0.06, duration: 0.3 }}
       className="flex items-start gap-2.5"
     >
-      <div className="w-6 h-6 rounded-full bg-[rgba(245,158,11,0.12)] flex items-center justify-center shrink-0 mt-0.5 border border-[rgba(245,158,11,0.25)]">
-        <Lightbulb className="w-3 h-3 text-[#f59e0b]" />
-      </div>
+      <span className="text-[var(--t3)] mt-1.5 shrink-0 select-none" aria-hidden>
+        —
+      </span>
       <span className="text-xs text-[var(--t2)] leading-relaxed flex-1 pt-0.5">
         {tip}
       </span>
@@ -413,37 +362,10 @@ function LoadingState() {
       exit={{ opacity: 0 }}
       className="flex flex-col items-center justify-center py-10"
     >
-      <div className="relative w-14 h-14 mb-4">
-        <motion.div
-          className="absolute inset-0 rounded-full bg-gradient-to-br from-[var(--p)] via-[var(--p2)] to-[var(--c)]"
-          animate={{
-            scale: [1, 1.1, 1],
-            rotate: [0, 180, 360],
-          }}
-          transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
-          style={{ filter: "blur(8px)", opacity: 0.55 }}
-        />
-        <div className="absolute inset-2 rounded-full bg-[var(--bg2)] flex items-center justify-center">
-          <Sparkles className="w-5 h-5 text-[var(--p3)] animate-pulse" />
-        </div>
-      </div>
-      <div className="flex items-center gap-1 mb-2">
-        {[0, 1, 2].map((dot) => (
-          <motion.span
-            key={dot}
-            className="w-1.5 h-1.5 rounded-full bg-[var(--p3)]"
-            animate={{ opacity: [0.3, 1, 0.3], y: [0, -3, 0] }}
-            transition={{
-              duration: 0.9,
-              repeat: Infinity,
-              delay: dot * 0.15,
-              ease: "easeInOut",
-            }}
-          />
-        ))}
-      </div>
-      <div className="text-sm font-d font-semibold text-[var(--t1)]">
-        Analyzing your progress…
+      {/* Simple spinner: thin border track + var(--p) top */}
+      <div className="w-8 h-8 rounded-full border-2 border-[var(--border)] border-t-[var(--p)] animate-spin mb-4" />
+      <div className="text-sm font-d font-semibold text-[var(--t2)]">
+        Analyzing…
       </div>
       <div className="text-[11px] text-[var(--t3)] mt-1 font-mono">
         Reading phoneme scores · picking lessons · crafting tips
@@ -685,302 +607,215 @@ export function CoachInsights() {
       aria-label="Coach Insights"
     >
       <div className="flex items-center justify-between mb-2">
-        <h2 className="font-d text-base font-bold flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-[var(--p3)]" />
+        <h2 className="font-d text-base font-bold flex items-center gap-2 text-[var(--t1)]">
+          <Sparkles className="w-4 h-4 text-[var(--t1)]" />
           <span>Coach Insights</span>
         </h2>
         {view === "success" && (
-          <motion.button
+          <button
             onClick={handleGetInsights}
-            whileHover={{ scale: 1.04 }}
-            whileTap={{ scale: 0.96 }}
-            className="text-[10px] font-mono uppercase tracking-wider flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-[var(--card)] border border-[var(--border)] text-[var(--t2)] hover:text-[var(--t1)] hover:border-[rgba(99,102,241,0.4)] transition"
+            className="text-[10px] font-mono uppercase tracking-wider flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-[var(--card)] border border-[var(--border)] text-[var(--t2)] hover:text-[var(--t1)] hover:border-[var(--border2)] transition"
             aria-label="Refresh insights"
           >
             <RefreshCw className="w-3 h-3" />
             Refresh
-          </motion.button>
+          </button>
         )}
       </div>
 
-      {/* Outer animated mesh gradient border */}
-      <div className="relative rounded-3xl p-[1px] overflow-hidden">
-        {/* Animated mesh gradient border */}
-        <motion.div
-          aria-hidden
-          className="absolute inset-0 rounded-3xl"
-          style={{
-            background:
-              "linear-gradient(135deg, rgba(99,102,241,0.5), rgba(139,92,246,0.4), rgba(34,211,238,0.35), rgba(99,102,241,0.5))",
-            backgroundSize: "300% 300%",
-          }}
-          animate={{ backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"] }}
-          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-        />
-
-        {/* Inner card */}
-        <div
-          className="relative rounded-3xl overflow-hidden"
-          style={{
-            background:
-              "linear-gradient(135deg, rgba(12,12,26,0.96), rgba(17,17,40,0.92))",
-            backdropFilter: "blur(16px)",
-          }}
-        >
-          {/* Floating background orbs */}
-          <motion.div
-            aria-hidden
-            className="absolute -top-16 -right-16 w-48 h-48 rounded-full pointer-events-none"
-            style={{
-              background:
-                "radial-gradient(circle, rgba(167,139,250,0.18) 0%, transparent 70%)",
-            }}
-            animate={{ scale: [1, 1.18, 1], opacity: [0.4, 0.7, 0.4] }}
-            transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
-          />
-          <motion.div
-            aria-hidden
-            className="absolute -bottom-16 -left-12 w-40 h-40 rounded-full pointer-events-none"
-            style={{
-              background:
-                "radial-gradient(circle, rgba(34,211,238,0.14) 0%, transparent 70%)",
-            }}
-            animate={{ scale: [1, 1.15, 1], opacity: [0.3, 0.6, 0.3] }}
-            transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-          />
-
-          <div className="relative p-5">
-            <AnimatePresence mode="wait">
-              {/* ─── IDLE STATE ─── */}
-              {view === "idle" && (
-                <motion.div
-                  key="idle"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  className="text-center py-4"
+      {/* Solid card: white bg + thin border, no gradient, no blur, no orbs */}
+      <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl">
+        <div className="p-5">
+          <AnimatePresence mode="wait">
+            {/* ─── IDLE STATE ─── */}
+            {view === "idle" && (
+              <motion.div
+                key="idle"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0, y: -8 }}
+                className="text-center py-4"
+              >
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl mb-3 bg-[var(--card-h)] border border-[var(--border)]">
+                  <Sparkles className="w-7 h-7 text-[var(--t1)]" />
+                </div>
+                <div className="font-d text-base font-bold text-[var(--t1)] mb-1">
+                  Get your AI practice plan
+                </div>
+                <p className="text-xs text-[var(--t2)] leading-relaxed max-w-xs mx-auto mb-4">
+                  {completedCount === 0
+                    ? "I'll analyze your starting point and recommend the perfect first lessons."
+                    : phonemeMastery.length === 0
+                    ? "Complete a few lessons so I can spot your weakest sounds."
+                    : `Based on ${phonemeMastery.length} sound${
+                        phonemeMastery.length !== 1 ? "s" : ""
+                      } tracked — I'll build a personalized plan in seconds.`}
+                </p>
+                <motion.button
+                  onClick={handleGetInsights}
+                  whileTap={{ scale: 0.98 }}
+                  className="inline-flex items-center gap-2 bg-[var(--p)] text-white rounded-xl px-5 py-2.5 text-sm font-semibold hover:opacity-80 transition"
                 >
-                  <motion.div
-                    initial={{ scale: 0.7, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    transition={{
-                      type: "spring",
-                      stiffness: 240,
-                      damping: 16,
-                      delay: 0.1,
-                    }}
-                    className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-3 relative"
-                    style={{
-                      background:
-                        "linear-gradient(135deg, rgba(99,102,241,0.18), rgba(34,211,238,0.12))",
-                      border: "1px solid rgba(99,102,241,0.35)",
-                      boxShadow: "0 0 24px rgba(99,102,241,0.2)",
-                    }}
-                  >
-                    <Sparkles className="w-7 h-7 text-[var(--p3)]" />
-                    <motion.span
-                      className="absolute -top-1 -right-1 text-base"
-                      animate={{ rotate: [0, 15, -10, 0], scale: [1, 1.15, 1] }}
-                      transition={{
-                        duration: 2.2,
-                        repeat: Infinity,
-                        ease: "easeInOut",
-                      }}
-                    >
-                      ✨
-                    </motion.span>
-                  </motion.div>
-                  <div className="font-d text-base font-bold text-[var(--t1)] mb-1">
-                    Get your AI practice plan
-                  </div>
-                  <p className="text-xs text-[var(--t2)] leading-relaxed max-w-xs mx-auto mb-4">
-                    {completedCount === 0
-                      ? "I'll analyze your starting point and recommend the perfect first lessons."
-                      : phonemeMastery.length === 0
-                      ? "Complete a few lessons so I can spot your weakest sounds."
-                      : `Based on ${phonemeMastery.length} sound${
-                          phonemeMastery.length !== 1 ? "s" : ""
-                        } tracked — I'll build a personalized plan in seconds.`}
-                  </p>
-                  <motion.button
-                    onClick={handleGetInsights}
-                    whileHover={{ scale: 1.04 }}
-                    whileTap={{ scale: 0.96 }}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white shadow-[0_4px_20px_rgba(99,102,241,0.4)] transition"
-                    style={{
-                      background:
-                        "linear-gradient(135deg, #6366f1, #8b5cf6 55%, #22d3ee)",
-                    }}
-                  >
-                    <Zap className="w-4 h-4" />
-                    Get AI Insights
-                  </motion.button>
-                </motion.div>
-              )}
+                  <Zap className="w-4 h-4" />
+                  Get AI Insights
+                </motion.button>
+              </motion.div>
+            )}
 
-              {/* ─── LOADING STATE ─── */}
-              {view === "loading" && (
-                <motion.div
-                  key="loading"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
+            {/* ─── LOADING STATE ─── */}
+            {view === "loading" && (
+              <motion.div
+                key="loading"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                <LoadingState />
+              </motion.div>
+            )}
+
+            {/* ─── ERROR STATE ─── */}
+            {view === "error" && (
+              <motion.div
+                key="error"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                className="flex flex-col items-center text-center py-6"
+              >
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-3 bg-[var(--card-h)] border border-[var(--border)]">
+                  <AlertTriangle className="w-6 h-6 text-[var(--rd)]" />
+                </div>
+                <div className="font-d text-sm font-bold text-[var(--t1)] mb-1">
+                  Couldn&apos;t fetch insights
+                </div>
+                <p className="text-xs text-[var(--t2)] max-w-xs mb-4 leading-relaxed">
+                  {error || "Something went wrong."}
+                </p>
+                <button
+                  onClick={handleGetInsights}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold border border-[var(--border2)] text-[var(--t1)] hover:bg-[var(--card-h)] transition"
                 >
-                  <LoadingState />
-                </motion.div>
-              )}
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Try again
+                </button>
+              </motion.div>
+            )}
 
-              {/* ─── ERROR STATE ─── */}
-              {view === "error" && (
-                <motion.div
-                  key="error"
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  className="flex flex-col items-center text-center py-6"
-                >
-                  <div
-                    className="w-12 h-12 rounded-2xl flex items-center justify-center mb-3"
-                    style={{
-                      background: "rgba(239,68,68,0.12)",
-                      border: "1px solid rgba(239,68,68,0.35)",
-                    }}
-                  >
-                    <AlertTriangle className="w-6 h-6 text-[#ef4444]" />
-                  </div>
-                  <div className="font-d text-sm font-bold text-[var(--t1)] mb-1">
-                    Couldn&apos;t fetch insights
-                  </div>
-                  <p className="text-xs text-[var(--t2)] max-w-xs mb-4 leading-relaxed">
-                    {error || "Something went wrong."}
-                  </p>
-                  <motion.button
-                    onClick={handleGetInsights}
-                    whileHover={{ scale: 1.04 }}
-                    whileTap={{ scale: 0.96 }}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-[var(--card)] border border-[var(--border2)] text-[var(--t1)] hover:border-[rgba(99,102,241,0.4)] transition"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    Try again
-                  </motion.button>
-                </motion.div>
-              )}
-
-              {/* ─── SUCCESS STATE ─── */}
-              {view === "success" && (
-                <motion.div
-                  key="success"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="space-y-4"
-                >
-                  {/* If we have structured JSON → render 3 sections */}
-                  {parsed ? (
-                    <>
-                      {/* Focus Areas */}
-                      {parsed.focusAreas.length > 0 && (
-                        <section>
-                          <div className="flex items-center gap-2 mb-2.5">
-                            <Target className="w-3.5 h-3.5 text-[#ef4444]" />
-                            <h3 className="font-d text-sm font-bold text-[var(--t1)]">
-                              Your Focus Areas
-                            </h3>
-                            <span className="text-[10px] font-mono text-[var(--t3)] ml-auto">
-                              {parsed.focusAreas.length} sound
-                              {parsed.focusAreas.length !== 1 ? "s" : ""}
-                            </span>
-                          </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                            {parsed.focusAreas
-                              .slice(0, 4)
-                              .map((area, i) => (
-                                <FocusAreaCard
-                                  key={`${area.phoneme}-${i}`}
-                                  area={area}
-                                  index={i}
-                                />
-                              ))}
-                          </div>
-                        </section>
-                      )}
-
-                      {/* Recommended Lessons */}
-                      {parsed.recommendedLessons.length > 0 && (
-                        <section>
-                          <div className="flex items-center gap-2 mb-2.5">
-                            <BookOpen className="w-3.5 h-3.5 text-[var(--p3)]" />
-                            <h3 className="font-d text-sm font-bold text-[var(--t1)]">
-                              Recommended Lessons
-                            </h3>
-                            <span className="text-[10px] font-mono text-[var(--t3)] ml-auto">
-                              tap to open
-                            </span>
-                          </div>
-                          <div className="space-y-2">
-                            {parsed.recommendedLessons
-                              .slice(0, 3)
-                              .map((rec, i) => (
-                                <RecommendedLessonCard
-                                  key={`${rec.lesson}-${i}`}
-                                  rec={rec}
-                                  index={i}
-                                  onOpen={handleOpenLesson}
-                                />
-                              ))}
-                          </div>
-                        </section>
-                      )}
-
-                      {/* Practice Tips */}
-                      {parsed.tips.length > 0 && (
-                        <section>
-                          <div className="flex items-center gap-2 mb-2.5">
-                            <Lightbulb className="w-3.5 h-3.5 text-[#f59e0b]" />
-                            <h3 className="font-d text-sm font-bold text-[var(--t1)]">
-                              Practice Tips
-                            </h3>
-                          </div>
-                          <ul className="space-y-2.5">
-                            {parsed.tips.map((tip, i) => (
-                              <TipItem key={i} tip={tip} index={i} />
+            {/* ─── SUCCESS STATE ─── */}
+            {view === "success" && (
+              <motion.div
+                key="success"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="space-y-4"
+              >
+                {/* If we have structured JSON → render 3 sections */}
+                {parsed ? (
+                  <>
+                    {/* Focus Areas */}
+                    {parsed.focusAreas.length > 0 && (
+                      <section>
+                        <div className="flex items-center gap-2 mb-2.5">
+                          <Target className="w-3.5 h-3.5 text-[var(--t1)]" />
+                          <h3 className="font-d text-sm font-bold text-[var(--t1)]">
+                            Your Focus Areas
+                          </h3>
+                          <span className="text-[10px] font-mono text-[var(--t3)] ml-auto">
+                            {parsed.focusAreas.length} sound
+                            {parsed.focusAreas.length !== 1 ? "s" : ""}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          {parsed.focusAreas
+                            .slice(0, 4)
+                            .map((area, i) => (
+                              <FocusAreaCard
+                                key={`${area.phoneme}-${i}`}
+                                area={area}
+                                index={i}
+                              />
                             ))}
-                          </ul>
-                        </section>
-                      )}
+                        </div>
+                      </section>
+                    )}
 
-                      {/* Footer note */}
-                      <div className="text-[10px] text-[var(--t3)] font-mono text-center pt-2 border-t border-[var(--border)]">
-                        ✨ Generated by AccentAI Coach ·{" "}
-                        <button
-                          onClick={handleGetInsights}
-                          className="text-[var(--p3)] hover:text-[var(--c2)] transition underline-offset-2 hover:underline"
-                        >
-                          regenerate
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    // Fallback: raw text response
-                    <section>
-                      <div className="flex items-center gap-2 mb-2.5">
-                        <Sparkles className="w-3.5 h-3.5 text-[var(--p3)]" />
-                        <h3 className="font-d text-sm font-bold text-[var(--t1)]">
-                          Coach Advice
-                        </h3>
-                      </div>
-                      <div className="rounded-2xl p-3.5 bg-[var(--overlay-1)] border border-[var(--border)] text-xs text-[var(--t2)] leading-relaxed whitespace-pre-wrap">
-                        {rawText}
-                      </div>
-                      <div className="text-[10px] text-[var(--t3)] font-mono text-center pt-2 mt-2">
-                        ✨ Generated by AccentAI Coach
-                      </div>
-                    </section>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+                    {/* Recommended Lessons */}
+                    {parsed.recommendedLessons.length > 0 && (
+                      <section>
+                        <div className="flex items-center gap-2 mb-2.5">
+                          <BookOpen className="w-3.5 h-3.5 text-[var(--t1)]" />
+                          <h3 className="font-d text-sm font-bold text-[var(--t1)]">
+                            Recommended Lessons
+                          </h3>
+                          <span className="text-[10px] font-mono text-[var(--t3)] ml-auto">
+                            tap to open
+                          </span>
+                        </div>
+                        <div className="space-y-2">
+                          {parsed.recommendedLessons
+                            .slice(0, 3)
+                            .map((rec, i) => (
+                              <RecommendedLessonCard
+                                key={`${rec.lesson}-${i}`}
+                                rec={rec}
+                                index={i}
+                                onOpen={handleOpenLesson}
+                              />
+                            ))}
+                        </div>
+                      </section>
+                    )}
+
+                    {/* Practice Tips */}
+                    {parsed.tips.length > 0 && (
+                      <section>
+                        <div className="flex items-center gap-2 mb-2.5">
+                          <Lightbulb className="w-3.5 h-3.5 text-[var(--t1)]" />
+                          <h3 className="font-d text-sm font-bold text-[var(--t1)]">
+                            Practice Tips
+                          </h3>
+                        </div>
+                        <ul className="space-y-2.5">
+                          {parsed.tips.map((tip, i) => (
+                            <TipItem key={i} tip={tip} index={i} />
+                          ))}
+                        </ul>
+                      </section>
+                    )}
+
+                    {/* Footer note */}
+                    <div className="text-[10px] text-[var(--t3)] font-mono text-center pt-2 border-t border-[var(--border)]">
+                      Generated by AccentAI Coach ·{" "}
+                      <button
+                        onClick={handleGetInsights}
+                        className="text-[var(--t1)] hover:underline underline-offset-2 transition"
+                      >
+                        regenerate
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  // Fallback: raw text response
+                  <section>
+                    <div className="flex items-center gap-2 mb-2.5">
+                      <Sparkles className="w-3.5 h-3.5 text-[var(--t1)]" />
+                      <h3 className="font-d text-sm font-bold text-[var(--t1)]">
+                        Coach Advice
+                      </h3>
+                    </div>
+                    <div className="rounded-lg p-3.5 bg-[var(--card-h)] border border-[var(--border)] text-xs text-[var(--t2)] leading-relaxed whitespace-pre-wrap">
+                      {rawText}
+                    </div>
+                    <div className="text-[10px] text-[var(--t3)] font-mono text-center pt-2 mt-2">
+                      Generated by AccentAI Coach
+                    </div>
+                  </section>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </motion.section>

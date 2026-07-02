@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
-import { Star, Play, NotebookPen, Share2 } from "lucide-react";
+import { Star, Play, NotebookPen, Share2, Terminal, Check } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { useTheme } from "@/components/theme-provider";
 import { PHASES } from "@/lib/types";
@@ -65,7 +65,7 @@ function SelectedCheck({ delay = 0 }: { delay?: number }) {
         damping: 18,
         delay,
       }}
-      className="absolute top-2 right-2 w-5 h-5 rounded-full bg-[var(--p)] flex items-center justify-center shadow-[0_2px_8px_rgba(99,102,241,0.5)]"
+      className="absolute top-2 right-2 w-5 h-5 rounded-full bg-[var(--p)] flex items-center justify-center"
     >
       <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
         <motion.path
@@ -83,6 +83,24 @@ function SelectedCheck({ delay = 0 }: { delay?: number }) {
   );
 }
 
+/** Minimal inline toggle switch for Developer Mode. */
+function DevToggle({ on, onClick }: { on: boolean; onClick: () => void }) {
+  return (
+    <button
+      role="switch"
+      aria-checked={on}
+      onClick={onClick}
+      className={`relative w-11 h-6 rounded-full transition-colors ${on ? "bg-[var(--p)]" : "bg-[var(--card-h)] border border-[var(--border)]"}`}
+    >
+      <motion.div
+        className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm"
+        animate={{ left: on ? 22 : 2 }}
+        transition={{ type: "spring", stiffness: 500, damping: 30 }}
+      />
+    </button>
+  );
+}
+
 // ─── Main view ────────────────────────────────────────────────────────────────
 
 export function MoreView() {
@@ -94,6 +112,8 @@ export function MoreView() {
   const lessons = useAppStore((s) => s.lessons);
   const bookmarkedLessons = useAppStore((s) => s.bookmarkedLessons);
   const setActiveLesson = useAppStore((s) => s.setActiveLesson);
+  const devMode = useAppStore((s) => s.devMode);
+  const setDevMode = useAppStore((s) => s.setDevMode);
   const { theme, setTheme } = useTheme();
   const [showReset, setShowReset] = useState(false);
   const [editingName, setEditingName] = useState(false);
@@ -122,50 +142,28 @@ export function MoreView() {
         transition={{ duration: 0.45, ease: "easeOut" }}
         className="text-center"
       >
-        <h1 className="font-d text-3xl font-bold mb-1">
-          <span
-            className="animate-gradient-text"
-            style={{
-              backgroundImage:
-                "linear-gradient(135deg, #6366f1, #8b5cf6, #22d3ee, #6366f1)",
-            }}
-          >
-            More
-          </span>
+        <h1 className="font-d text-3xl font-bold mb-1 text-[var(--t1)]">
+          More
+          {devMode && (
+            <span className="ml-2 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-[var(--p)] text-white align-middle">
+              DEV
+            </span>
+          )}
         </h1>
         <p className="text-sm text-[var(--t2)]">Settings &amp; options</p>
       </motion.div>
 
-      {/* Profile card — animated avatar with rotating conic ring + pulse glow */}
+      {/* Profile card — simple avatar */}
       <Section index={0}>
         <div className="rounded-2xl p-5 bg-[var(--card)] border border-[var(--border)] flex items-center gap-4">
-          <div className="relative">
-            {/* Soft pulse-glow halo */}
-            <div
-              className="absolute -inset-3 rounded-full pointer-events-none animate-pulse-glow"
-              style={{
-                background:
-                  "radial-gradient(circle, rgba(99,102,241,0.35) 0%, transparent 70%)",
-              }}
-            />
-            {/* Rotating gradient conic ring */}
-            <div
-              className="absolute -inset-1 rounded-full animate-gradient-ring"
-              style={{
-                background:
-                  "conic-gradient(from 0deg, #6366f1, #8b5cf6, #22d3ee, #6366f1)",
-                opacity: 0.7,
-              }}
-            />
-            <motion.div
-              initial={{ scale: 0.85, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: "spring", stiffness: 220, damping: 14 }}
-              className="relative w-14 h-14 rounded-full bg-[var(--grad-btn)] flex items-center justify-center text-2xl font-bold text-white"
-            >
-              {userName.charAt(0).toUpperCase()}
-            </motion.div>
-          </div>
+          <motion.div
+            initial={{ scale: 0.85, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: "spring", stiffness: 220, damping: 14 }}
+            className="relative w-14 h-14 rounded-full bg-[var(--p)] flex items-center justify-center text-2xl font-bold text-white"
+          >
+            {userName.charAt(0).toUpperCase()}
+          </motion.div>
           <div className="flex-1">
             {editingName ? (
               <div className="flex gap-2">
@@ -178,7 +176,7 @@ export function MoreView() {
                 />
                 <button
                   onClick={handleSaveName}
-                  className="px-3 py-1.5 rounded-lg bg-[var(--grad-btn)] text-white text-xs font-semibold"
+                  className="px-3 py-1.5 rounded-lg bg-[var(--p)] text-white text-xs font-semibold"
                 >
                   Save
                 </button>
@@ -221,11 +219,6 @@ export function MoreView() {
                     ? "border-[var(--p)] bg-[rgba(99,102,241,0.1)]"
                     : "border-[var(--border)] bg-[var(--card)]"
                 }`}
-                style={
-                  accent === a
-                    ? { boxShadow: "0 0 20px rgba(99,102,241,0.2)" }
-                    : {}
-                }
               >
                 {accent === a && <SelectedCheck />}
                 {/* Country flag with wave animation when selected */}
@@ -277,11 +270,6 @@ export function MoreView() {
                   ? "border-[var(--p)] bg-[rgba(99,102,241,0.1)]"
                   : "border-[var(--border)] bg-[var(--card)]"
               }`}
-              style={
-                theme === "dark"
-                  ? { boxShadow: "0 0 20px rgba(99,102,241,0.2)" }
-                  : {}
-              }
             >
               {theme === "dark" && <SelectedCheck />}
               {/* Moon icon — fades/pulses when dark theme active, dims when not */}
@@ -323,11 +311,6 @@ export function MoreView() {
                   ? "border-[var(--p)] bg-[rgba(99,102,241,0.1)]"
                   : "border-[var(--border)] bg-[var(--card)]"
               }`}
-              style={
-                theme === "light"
-                  ? { boxShadow: "0 0 20px rgba(99,102,241,0.2)" }
-                  : {}
-              }
             >
               {theme === "light" && <SelectedCheck />}
               {/* Sun icon — rotates in when light theme active */}
@@ -396,7 +379,7 @@ export function MoreView() {
                     </div>
                     <div className="mt-1 h-1 rounded-full bg-[var(--overlay-border-1)] overflow-hidden">
                       <motion.div
-                        className="h-full bg-[var(--grad-btn)]"
+                        className="h-full bg-[var(--p)]"
                         initial={{ width: 0 }}
                         animate={{ width: `${pct}%` }}
                         transition={{ duration: 0.6, delay: 0.2 + idx * 0.05 }}
@@ -426,8 +409,8 @@ export function MoreView() {
             <div className="rounded-2xl p-6 bg-[var(--card)] border border-[var(--border)] text-center">
               <motion.div
                 className="text-3xl mb-2 inline-block"
-                animate={{ rotate: [0, -10, 10, -10, 0], scale: [1, 1.1, 1] }}
-                transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
+                animate={{ y: [0, -4, 0], scale: [1, 1.08, 1] }}
+                transition={{ duration: 1.8, repeat: Infinity, repeatDelay: 2.5, ease: "easeInOut" }}
               >
                 ⭐
               </motion.div>
@@ -482,7 +465,7 @@ export function MoreView() {
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 transition={{ type: "spring", stiffness: 400, damping: 15 }}
-                className="ml-auto text-[10px] font-mono px-2 py-0.5 rounded-full bg-[rgba(99,102,241,0.12)] text-[var(--p3)]"
+                className="ml-auto text-[10px] font-mono px-2 py-0.5 rounded-full bg-[var(--card-h)] text-[var(--t2)]"
               >
                 {noteCount} {noteCount === 1 ? "note" : "notes"}
               </motion.span>
@@ -496,20 +479,12 @@ export function MoreView() {
 
       <Divider />
 
-      {/* About — animated gradient title */}
+      {/* About */}
       <Section index={7}>
         <div className="rounded-2xl p-5 bg-[var(--card)] border border-[var(--border)]">
-          <h3 className="font-d font-bold text-base mb-2">
+          <h3 className="font-d font-bold text-base mb-2 text-[var(--t1)]">
             About{" "}
-            <span
-              className="animate-gradient-text"
-              style={{
-                backgroundImage:
-                  "linear-gradient(135deg, #6366f1, #8b5cf6, #22d3ee, #a78bfa, #6366f1)",
-              }}
-            >
-              AccentAI
-            </span>
+            <span className="text-[var(--t1)]">AccentAI</span>
           </h3>
           <p className="text-xs text-[var(--t2)] leading-relaxed">
             AccentAI is a comprehensive English accent training app with 8 phases and 32 detailed lessons.
@@ -529,11 +504,7 @@ export function MoreView() {
             onClick={shareCard.openShare}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            className="mt-4 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white border-0"
-            style={{
-              background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
-              boxShadow: "0 6px 20px rgba(99,102,241,0.4)",
-            }}
+            className="mt-4 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white border-0 bg-[var(--p)]"
             aria-label="Share my stats"
           >
             <Share2 className="w-4 h-4" />
@@ -547,8 +518,45 @@ export function MoreView() {
 
       <Divider />
 
-      {/* Reset — pulsing red warning glow on hover */}
+      {/* Developer Mode — unlock all phases/lessons/shop for testing */}
       <Section index={8}>
+        <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Terminal className="w-4 h-4 text-[var(--t1)]" />
+              <span className="font-d font-bold text-sm text-[var(--t1)]">Developer Mode</span>
+            </div>
+            <DevToggle on={devMode} onClick={() => setDevMode(!devMode)} />
+          </div>
+          <p className="mt-2 text-xs text-[var(--t2)]">
+            Unlocks all phases, lessons, and XP shop items for free. For testing and exploration.
+          </p>
+          {devMode && (
+            <div className="mt-3 pt-3 border-t border-[var(--border)] space-y-2">
+              <div className="text-[10px] uppercase tracking-wider font-mono text-[var(--t3)]">Unlocked</div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="flex items-center gap-1.5 text-[var(--t2)]">
+                  <Check className="w-3 h-3 text-[var(--p)]" /> All 8 Phases
+                </div>
+                <div className="flex items-center gap-1.5 text-[var(--t2)]">
+                  <Check className="w-3 h-3 text-[var(--p)]" /> All 32 Lessons
+                </div>
+                <div className="flex items-center gap-1.5 text-[var(--t2)]">
+                  <Check className="w-3 h-3 text-[var(--p)]" /> Free XP Shop
+                </div>
+                <div className="flex items-center gap-1.5 text-[var(--t2)]">
+                  <Check className="w-3 h-3 text-[var(--p)]" /> Unlimited XP
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </Section>
+
+      <Divider />
+
+      {/* Reset — pulsing red warning glow on hover */}
+      <Section index={9}>
         <motion.div
           onHoverStart={() => setResetHovered(true)}
           onHoverEnd={() => setResetHovered(false)}

@@ -47,6 +47,7 @@ export function JourneyView() {
   const accent = useAppStore((s) => s.accent);
   const bookmarkedLessons = useAppStore((s) => s.bookmarkedLessons);
   const toggleBookmark = useAppStore((s) => s.toggleBookmark);
+  const devMode = useAppStore((s) => s.devMode);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterMode>("all");
@@ -57,7 +58,7 @@ export function JourneyView() {
     for (let i = 1; i < PHASES.length; i++) {
       const prevLessons = getLessonsForPhase(i - 1);
       const prevDone = prevLessons.every((l) => lessons[l.id]?.completed);
-      unlocked.push(prevDone);
+      unlocked.push(prevDone || devMode);  // devMode unlocks everything
     }
     return PHASES.map((phase, i) => {
       const phaseLessons = getLessonsForPhase(i);
@@ -73,7 +74,7 @@ export function JourneyView() {
         isDone: done === total,
       };
     });
-  }, [lessons]);
+  }, [lessons, devMode]);
 
   // Filter logic
   const isSearching = searchQuery.trim().length > 0;

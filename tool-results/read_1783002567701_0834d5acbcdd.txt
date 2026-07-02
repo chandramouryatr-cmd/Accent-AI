@@ -1,0 +1,989 @@
+     1→     1→"use client";
+     2→     2→
+     3→     3→import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+     4→     4→import { AnimatePresence, motion } from "framer-motion";
+     5→     5→import {
+     6→     6→  Sparkles,
+     7→     7→  RefreshCw,
+     8→     8→  Target,
+     9→     9→  BookOpen,
+    10→    10→  Lightbulb,
+    11→    11→  AlertTriangle,
+    12→    12→  ChevronRight,
+    13→    13→  Zap,
+    14→    14→} from "lucide-react";
+    15→    15→import { useAppStore } from "@/lib/store";
+    16→    16→import { ALL_LESSONS } from "@/lib/lessons";
+    17→    17→
+    18→    18→// ─── Types ───────────────────────────────────────────────────────────────
+    19→    19→
+    20→    20→interface PhonemeScore {
+    21→    21→  phoneme: string;
+    22→    22→  example?: string;
+    23→    23→  score: number;
+    24→    24→  count?: number;
+    25→    25→  /** best lesson id to practice this phoneme */
+    26→    26→  lessonId?: string;
+    27→    27→}
+    28→    28→
+    29→    29→interface FocusArea {
+    30→    30→  phoneme: string;
+    31→    31→  score: number;
+    32→    32→  reason: string;
+    33→    33→}
+    34→    34→
+    35→    35→interface RecommendedLesson {
+    36→    36→  phase: number;
+    37→    37→  lesson: string;
+    38→    38→  reason: string;
+    39→    39→}
+    40→    40→
+    41→    41→interface InsightsPlan {
+    42→    42→  focusAreas: FocusArea[];
+    43→    43→  recommendedLessons: RecommendedLesson[];
+    44→    44→  tips: string[];
+    45→    45→}
+    46→    46→
+    47→    47→type ViewState = "idle" | "loading" | "success" | "error";
+    48→    48→
+    49→    49→interface CachedInsight {
+    50→    50→  parsed: InsightsPlan | null;
+    51→    51→  rawText: string | null;
+    52→    52→  generatedAt: number;
+    53→    53→  /** snapshot of phoneme mastery signature (for invalidation) */
+    54→    54→  signature: string;
+    55→    55→}
+    56→    56→
+    57→    57→// ─── Phoneme → lessons mapping (kept in sync with PhonemeMastery widget) ─
+    58→    58→
+    59→    59→const PHONEME_LESSONS: Record<string, { ids: string[]; example: string }> = {
+    60→    60→  ð: { ids: ["p1l2", "p1l3", "p1l4"], example: "the, this, mother" },
+    61→    61→  θ: { ids: ["p1l2", "p1l3", "p1l4"], example: "think, three, bath" },
+    62→    62→  æ: { ids: ["p1l1", "p1l4", "p2l1"], example: "cat, bad, ask" },
+    63→    63→  ŋ: { ids: ["p1l2", "p2l1", "p2l3"], example: "sing, going, think" },
+    64→    64→  ɪ: { ids: ["p1l1", "p2l1", "p2l4"], example: "ship, sit, bit" },
+    65→    65→  ʊ: { ids: ["p1l1", "p2l1", "p2l4"], example: "book, put, good" },
+    66→    66→  "ɜː": { ids: ["p1l1", "p2l1", "p5l2"], example: "bird, work, learn" },
+    67→    67→  ʒ: { ids: ["p1l2", "p2l1", "p5l3"], example: "measure, vision" },
+    68→    68→  "ɑː": { ids: ["p1l1", "p2l1"], example: "father, car" },
+    69→    69→  "iː": { ids: ["p1l1", "p1l4"], example: "see, sheep, eat" },
+    70→    70→  "uː": { ids: ["p1l1", "p1l4"], example: "food, pool, two" },
+    71→    71→  r: { ids: ["p1l3", "p4l1"], example: "red, around, very" },
+    72→    72→};
+    73→    73→
+    74→    74→const STORAGE_KEY_PREFIX = "accentai-coach-insights-";
+    75→    75→const FIRST_TOKEN_TIMEOUT_MS = 30_000;
+    76→    76→
+    77→    77→function todayStr() {
+    78→    78→  return new Date().toISOString().slice(0, 10);
+    79→    79→}
+    80→    80→
+    81→    81→function storageKeyForToday() {
+    82→    82→  return `${STORAGE_KEY_PREFIX}${todayStr()}`;
+    83→    83→}
+    84→    84→
+    85→    85→// ─── Phoneme mastery derivation ──────────────────────────────────────────
+    86→    86→
+    87→    87→function derivePhonemeMastery(
+    88→    88→  lessons: Record<string, { completed?: boolean; score: number }>
+    89→    89→): PhonemeScore[] {
+    90→    90→  const out: PhonemeScore[] = [];
+    91→    91→  for (const [ph, { ids, example }] of Object.entries(PHONEME_LESSONS)) {
+    92→    92→    const relevant = ids
+    93→    93→      .map((id) => lessons[id])
+    94→    94→      .filter((l) => l?.completed);
+    95→    95→    if (relevant.length === 0) continue;
+    96→    96→    const avg = Math.round(
+    97→    97→      relevant.reduce((s, l) => s + l.score, 0) / relevant.length
+    98→    98→    );
+    99→    99→    const sortedById = [...relevant].sort((a, b) => a.score - b.score);
+   100→   100→    const bestLessonId =
+   101→   101→      ids.find((id) => lessons[id] === sortedById[0]) || ids[0];
+   102→   102→    out.push({
+   103→   103→      phoneme: ph,
+   104→   104→      example,
+   105→   105→      score: avg,
+   106→   106→      count: relevant.length,
+   107→   107→      lessonId: bestLessonId,
+   108→   108→    });
+   109→   109→  }
+   110→   110→  out.sort((a, b) => a.score - b.score);
+   111→   111→  return out;
+   112→   112→}
+   113→   113→
+   114→   114→// ─── JSON parsing helpers (robust against markdown / extra text) ─────────
+   115→   115→
+   116→   116→function extractJson(text: string): InsightsPlan | null {
+   117→   117→  if (!text) return null;
+   118→   118→  const trimmed = text.trim();
+   119→   119→
+   120→   120→  // Attempt 1: direct parse
+   121→   121→  try {
+   122→   122→    return normalizePlan(JSON.parse(trimmed));
+   123→   123→  } catch {
+   124→   124→    /* continue */
+   125→   125→  }
+   126→   126→
+   127→   127→  // Attempt 2: unwrap ```json ... ``` or ``` ... ``` fences
+   128→   128→  const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+   129→   129→  if (fenceMatch) {
+   130→   130→    try {
+   131→   131→      return normalizePlan(JSON.parse(fenceMatch[1].trim()));
+   132→   132→    } catch {
+   133→   133→      /* continue */
+   134→   134→    }
+   135→   135→  }
+   136→   136→
+   137→   137→  // Attempt 3: grab substring between first { and last }
+   138→   138→  const firstBrace = trimmed.indexOf("{");
+   139→   139→  const lastBrace = trimmed.lastIndexOf("}");
+   140→   140→  if (firstBrace !== -1 && lastBrace > firstBrace) {
+   141→   141→    const slice = trimmed.slice(firstBrace, lastBrace + 1);
+   142→   142→    try {
+   143→   143→      return normalizePlan(JSON.parse(slice));
+   144→   144→    } catch {
+   145→   145→      /* continue */
+   146→   146→    }
+   147→   147→  }
+   148→   148→
+   149→   149→  return null;
+   150→   150→}
+   151→   151→
+   152→   152→function normalizePlan(raw: unknown): InsightsPlan | null {
+   153→   153→  if (!raw || typeof raw !== "object") return null;
+   154→   154→  const obj = raw as Record<string, unknown>;
+   155→   155→  const focusAreas = Array.isArray(obj.focusAreas)
+   156→   156→    ? (obj.focusAreas as unknown[])
+   157→   157→        .map((item) => normalizeFocusArea(item))
+   158→   158→        .filter((x): x is FocusArea => x !== null)
+   159→   159→    : [];
+   160→   160→  const recommendedLessons = Array.isArray(obj.recommendedLessons)
+   161→   161→    ? (obj.recommendedLessons as unknown[])
+   162→   162→        .map((item) => normalizeRecommendedLesson(item))
+   163→   163→        .filter((x): x is RecommendedLesson => x !== null)
+   164→   164→    : [];
+   165→   165→  const tips = Array.isArray(obj.tips)
+   166→   166→    ? (obj.tips as unknown[])
+   167→   167→        .map((t) => (typeof t === "string" ? t : String(t ?? "")))
+   168→   168→        .filter((s) => s.length > 0)
+   169→   169→        .slice(0, 4)
+   170→   170→    : [];
+   171→   171→
+   172→   172→  if (focusAreas.length === 0 && recommendedLessons.length === 0 && tips.length === 0) {
+   173→   173→    return null;
+   174→   174→  }
+   175→   175→  return { focusAreas, recommendedLessons, tips };
+   176→   176→}
+   177→   177→
+   178→   178→function normalizeFocusArea(item: unknown): FocusArea | null {
+   179→   179→  if (!item || typeof item !== "object") return null;
+   180→   180→  const obj = item as Record<string, unknown>;
+   181→   181→  const phoneme =
+   182→   182→    typeof obj.phoneme === "string"
+   183→   183→      ? obj.phoneme.replace(/^\/+|\/+$/g, "").trim()
+   184→   184→      : "";
+   185→   185→  const score =
+   186→   186→    typeof obj.score === "number"
+   187→   187→      ? Math.max(0, Math.min(100, Math.round(obj.score)))
+   188→   188→      : typeof obj.score === "string"
+   189→   189→      ? parseInt(obj.score, 10) || 0
+   190→   190→      : 0;
+   191→   191→  const reason =
+   192→   192→    typeof obj.reason === "string" ? obj.reason : typeof obj.reason === "object" && obj.reason ? JSON.stringify(obj.reason) : "";
+   193→   193→  if (!phoneme) return null;
+   194→   194→  return { phoneme, score, reason };
+   195→   195→}
+   196→   196→
+   197→   197→function normalizeRecommendedLesson(item: unknown): RecommendedLesson | null {
+   198→   198→  if (!item || typeof item !== "object") return null;
+   199→   199→  const obj = item as Record<string, unknown>;
+   200→   200→  const phase =
+   201→   201→    typeof obj.phase === "number"
+   202→   202→      ? Math.max(1, Math.min(8, Math.round(obj.phase)))
+   203→   203→      : typeof obj.phase === "string"
+   204→   204→      ? parseInt(obj.phase, 10) || 1
+   205→   205→      : 1;
+   206→   206→  const lesson = typeof obj.lesson === "string" ? obj.lesson : "";
+   207→   207→  const reason =
+   208→   208→    typeof obj.reason === "string"
+   209→   209→      ? obj.reason
+   210→   210→      : typeof obj.reason === "object" && obj.reason
+   211→   211→      ? JSON.stringify(obj.reason)
+   212→   212→      : "";
+   213→   213→  if (!lesson) return null;
+   214→   214→  return { phase, lesson, reason };
+   215→   215→}
+   216→   216→
+   217→   217→// ─── Sub-components ──────────────────────────────────────────────────────
+   218→   218→
+   219→   219→function ScoreRing({ score, color }: { score: number; color: string }) {
+   220→   220→  const r = 14;
+   221→   221→  const c = 2 * Math.PI * r;
+   222→   222→  const offset = c - (score / 100) * c;
+   223→   223→  return (
+   224→   224→    <svg width={36} height={36} viewBox="0 0 36 36" className="shrink-0">
+   225→   225→      <circle
+   226→   226→        cx={18}
+   227→   227→        cy={18}
+   228→   228→        r={r}
+   229→   229→        fill="none"
+   230→   230→        stroke="var(--overlay-border-1)"
+   231→   231→        strokeWidth={3}
+   232→   232→      />
+   233→   233→      <motion.circle
+   234→   234→        cx={18}
+   235→   235→        cy={18}
+   236→   236→        r={r}
+   237→   237→        fill="none"
+   238→   238→        stroke={color}
+   239→   239→        strokeWidth={3}
+   240→   240→        strokeLinecap="round"
+   241→   241→        strokeDasharray={c}
+   242→   242→        initial={{ strokeDashoffset: c }}
+   243→   243→        animate={{ strokeDashoffset: offset }}
+   244→   244→        transition={{ duration: 0.9, ease: "easeOut" }}
+   245→   245→        transform="rotate(-90 18 18)"
+   246→   246→        style={{ filter: `drop-shadow(0 0 4px ${color}88)` }}
+   247→   247→      />
+   248→   248→      <text
+   249→   249→        x={18}
+   250→   250→        y={21}
+   251→   251→        textAnchor="middle"
+   252→   252→        fontSize={9}
+   253→   253→        fontWeight={700}
+   254→   254→        fill={color}
+   255→   255→        fontFamily="var(--font-mono), monospace"
+   256→   256→      >
+   257→   257→        {score}
+   258→   258→      </text>
+   259→   259→    </svg>
+   260→   260→  );
+   261→   261→}
+   262→   262→
+   263→   263→function FocusAreaCard({ area, index }: { area: FocusArea; index: number }) {
+   264→   264→  const color =
+   265→   265→    area.score >= 85
+   266→   266→      ? "#10b981"
+   267→   267→      : area.score >= 70
+   268→   268→      ? "#f59e0b"
+   269→   269→      : "#ef4444";
+   270→   270→  return (
+   271→   271→    <motion.div
+   272→   272→      initial={{ opacity: 0, y: 12, scale: 0.96 }}
+   273→   273→      animate={{ opacity: 1, y: 0, scale: 1 }}
+   274→   274→      transition={{
+   275→   275→        type: "spring",
+   276→   276→        stiffness: 280,
+   277→   277→        damping: 24,
+   278→   278→        delay: index * 0.08,
+   279→   279→      }}
+   280→   280→      whileHover={{ y: -2 }}
+   281→   281→      className="rounded-2xl p-3 border backdrop-blur-sm"
+   282→   282→      style={{
+   283→   283→        background: `linear-gradient(135deg, ${color}1a, rgba(99,102,241,0.04))`,
+   284→   284→        borderColor: `${color}40`,
+   285→   285→      }}
+   286→   286→    >
+   287→   287→      <div className="flex items-center gap-3">
+   288→   288→        <div
+   289→   289→          className="w-11 h-11 rounded-xl flex items-center justify-center font-mono text-xl font-bold shrink-0"
+   290→   290→          style={{
+   291→   291→            background: `${color}22`,
+   292→   292→            color: color,
+   293→   293→            boxShadow: `0 0 12px ${color}33`,
+   294→   294→          }}
+   295→   295→        >
+   296→   296→          /{area.phoneme}/
+   297→   297→        </div>
+   298→   298→        <div className="flex-1 min-w-0">
+   299→   299→          <div className="flex items-center justify-between gap-2">
+   300→   300→            <span className="text-[10px] uppercase tracking-wider font-mono text-[var(--t3)]">
+   301→   301→              {area.score >= 85
+   302→   302→                ? "Mastered"
+   303→   303→                : area.score >= 70
+   304→   304→                ? "Progressing"
+   305→   305→                : "Needs work"}
+   306→   306→            </span>
+   307→   307→            <ScoreRing score={area.score} color={color} />
+   308→   308→          </div>
+   309→   309→        </div>
+   310→   310→      </div>
+   311→   311→      {area.reason && (
+   312→   312→        <p className="text-xs text-[var(--t2)] leading-relaxed mt-2.5">
+   313→   313→          {area.reason}
+   314→   314→        </p>
+   315→   315→      )}
+   316→   316→    </motion.div>
+   317→   317→  );
+   318→   318→}
+   319→   319→
+   320→   320→function RecommendedLessonCard({
+   321→   321→  rec,
+   322→   322→  index,
+   323→   323→  onOpen,
+   324→   324→}: {
+   325→   325→  rec: RecommendedLesson;
+   326→   326→  index: number;
+   327→   327→  onOpen: (lessonTitle: string) => void;
+   328→   328→}) {
+   329→   329→  // Find the matching lesson by title (case-insensitive trim)
+   330→   330→  const lesson = useMemo(() => {
+   331→   331→    const title = rec.lesson.trim().toLowerCase();
+   332→   332→    return (
+   333→   333→      ALL_LESSONS.find((l) => l.title.trim().toLowerCase() === title) ||
+   334→   334→      ALL_LESSONS.find(
+   335→   335→        (l) => l.phaseId === rec.phase - 1 && l.title.trim().toLowerCase().includes(title.slice(0, 8))
+   336→   336→      )
+   337→   337→    );
+   338→   338→  }, [rec.lesson, rec.phase]);
+   339→   339→
+   340→   340→  return (
+   341→   341→    <motion.button
+   342→   342→      initial={{ opacity: 0, y: 12, scale: 0.96 }}
+   343→   343→      animate={{ opacity: 1, y: 0, scale: 1 }}
+   344→   344→      transition={{
+   345→   345→        type: "spring",
+   346→   346→        stiffness: 280,
+   347→   347→        damping: 24,
+   348→   348→        delay: 0.1 + index * 0.08,
+   349→   349→      }}
+   350→   350→      whileHover={{ y: -2, boxShadow: "0 6px 24px rgba(99,102,241,0.25)" }}
+   351→   351→      whileTap={{ scale: 0.98 }}
+   352→   352→      onClick={() => lesson && onOpen(lesson.title)}
+   353→   353→      disabled={!lesson}
+   354→   354→      className="w-full text-left rounded-2xl p-3.5 border backdrop-blur-sm transition group"
+   355→   355→      style={{
+   356→   356→        background:
+   357→   357→          "linear-gradient(135deg, rgba(99,102,241,0.12), rgba(34,211,238,0.04))",
+   358→   358→        borderColor: "rgba(99,102,241,0.3)",
+   359→   359→        cursor: lesson ? "pointer" : "default",
+   360→   360→      }}
+   361→   361→      aria-label={`Open lesson: ${rec.lesson}`}
+   362→   362→    >
+   363→   363→      <div className="flex items-start gap-3">
+   364→   364→        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[var(--p)] to-[var(--p2)] flex items-center justify-center shrink-0 shadow-[0_0_12px_rgba(99,102,241,0.4)]">
+   365→   365→          <BookOpen className="w-4 h-4 text-white" />
+   366→   366→        </div>
+   367→   367→        <div className="flex-1 min-w-0">
+   368→   368→          <div className="flex items-center gap-2 mb-0.5">
+   369→   369→            <span className="text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-[rgba(99,102,241,0.15)] text-[var(--p3)] border border-[rgba(99,102,241,0.3)]">
+   370→   370→              P{rec.phase}
+   371→   371→            </span>
+   372→   372→            <span className="font-d text-sm font-bold text-[var(--t1)] truncate">
+   373→   373→              {rec.lesson}
+   374→   374→            </span>
+   375→   375→          </div>
+   376→   376→          {rec.reason && (
+   377→   377→            <p className="text-xs text-[var(--t2)] leading-relaxed">
+   378→   378→              {rec.reason}
+   379→   379→            </p>
+   380→   380→          )}
+   381→   381→        </div>
+   382→   382→        {lesson && (
+   383→   383→          <ChevronRight className="w-4 h-4 text-[var(--t3)] group-hover:text-[var(--c2)] group-hover:translate-x-0.5 transition-all shrink-0 mt-1" />
+   384→   384→        )}
+   385→   385→      </div>
+   386→   386→    </motion.button>
+   387→   387→  );
+   388→   388→}
+   389→   389→
+   390→   390→function TipItem({ tip, index }: { tip: string; index: number }) {
+   391→   391→  return (
+   392→   392→    <motion.li
+   393→   393→      initial={{ opacity: 0, x: -8 }}
+   394→   394→      animate={{ opacity: 1, x: 0 }}
+   395→   395→      transition={{ delay: 0.15 + index * 0.07, duration: 0.3 }}
+   396→   396→      className="flex items-start gap-2.5"
+   397→   397→    >
+   398→   398→      <div className="w-6 h-6 rounded-full bg-[rgba(245,158,11,0.12)] flex items-center justify-center shrink-0 mt-0.5 border border-[rgba(245,158,11,0.25)]">
+   399→   399→        <Lightbulb className="w-3 h-3 text-[#f59e0b]" />
+   400→   400→      </div>
+   401→   401→      <span className="text-xs text-[var(--t2)] leading-relaxed flex-1 pt-0.5">
+   402→   402→        {tip}
+   403→   403→      </span>
+   404→   404→    </motion.li>
+   405→   405→  );
+   406→   406→}
+   407→   407→
+   408→   408→function LoadingState() {
+   409→   409→  return (
+   410→   410→    <motion.div
+   411→   411→      initial={{ opacity: 0 }}
+   412→   412→      animate={{ opacity: 1 }}
+   413→   413→      exit={{ opacity: 0 }}
+   414→   414→      className="flex flex-col items-center justify-center py-10"
+   415→   415→    >
+   416→   416→      <div className="relative w-14 h-14 mb-4">
+   417→   417→        <motion.div
+   418→   418→          className="absolute inset-0 rounded-full bg-gradient-to-br from-[var(--p)] via-[var(--p2)] to-[var(--c)]"
+   419→   419→          animate={{
+   420→   420→            scale: [1, 1.1, 1],
+   421→   421→            rotate: [0, 180, 360],
+   422→   422→          }}
+   423→   423→          transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+   424→   424→          style={{ filter: "blur(8px)", opacity: 0.55 }}
+   425→   425→        />
+   426→   426→        <div className="absolute inset-2 rounded-full bg-[var(--bg2)] flex items-center justify-center">
+   427→   427→          <Sparkles className="w-5 h-5 text-[var(--p3)] animate-pulse" />
+   428→   428→        </div>
+   429→   429→      </div>
+   430→   430→      <div className="flex items-center gap-1 mb-2">
+   431→   431→        {[0, 1, 2].map((dot) => (
+   432→   432→          <motion.span
+   433→   433→            key={dot}
+   434→   434→            className="w-1.5 h-1.5 rounded-full bg-[var(--p3)]"
+   435→   435→            animate={{ opacity: [0.3, 1, 0.3], y: [0, -3, 0] }}
+   436→   436→            transition={{
+   437→   437→              duration: 0.9,
+   438→   438→              repeat: Infinity,
+   439→   439→              delay: dot * 0.15,
+   440→   440→              ease: "easeInOut",
+   441→   441→            }}
+   442→   442→          />
+   443→   443→        ))}
+   444→   444→      </div>
+   445→   445→      <div className="text-sm font-d font-semibold text-[var(--t1)]">
+   446→   446→        Analyzing your progress…
+   447→   447→      </div>
+   448→   448→      <div className="text-[11px] text-[var(--t3)] mt-1 font-mono">
+   449→   449→        Reading phoneme scores · picking lessons · crafting tips
+   450→   450→      </div>
+   451→   451→    </motion.div>
+   452→   452→  );
+   453→   453→}
+   454→   454→
+   455→   455→// ─── Main component ──────────────────────────────────────────────────────
+   456→   456→
+   457→   457→export function CoachInsights() {
+   458→   458→  const lessons = useAppStore((s) => s.lessons);
+   459→   459→  const xp = useAppStore((s) => s.xp);
+   460→   460→  const streak = useAppStore((s) => s.streak);
+   461→   461→  const accent = useAppStore((s) => s.accent);
+   462→   462→  const setActiveLesson = useAppStore((s) => s.setActiveLesson);
+   463→   463→
+   464→   464→  const [view, setView] = useState<ViewState>("idle");
+   465→   465→  const [parsed, setParsed] = useState<InsightsPlan | null>(null);
+   466→   466→  const [rawText, setRawText] = useState<string | null>(null);
+   467→   467→  const [error, setError] = useState<string | null>(null);
+   468→   468→
+   469→   469→  const abortRef = useRef<AbortController | null>(null);
+   470→   470→
+   471→   471→  // Derive phoneme mastery data (weakest first)
+   472→   472→  const phonemeMastery = useMemo(() => derivePhonemeMastery(lessons), [lessons]);
+   473→   473→
+   474→   474→  // Build a signature so cache invalidates if phoneme scores change
+   475→   475→  const signature = useMemo(() => {
+   476→   476→    return phonemeMastery
+   477→   477→      .map((p) => `${p.phoneme}:${p.score}:${p.count ?? 0}`)
+   478→   478→      .join("|");
+   479→   479→  }, [phonemeMastery]);
+   480→   480→
+   481→   481→  const completedCount = useMemo(
+   482→   482→    () => Object.values(lessons).filter((l) => l?.completed).length,
+   483→   483→    [lessons]
+   484→   484→  );
+   485→   485→
+   486→   486→  // Load cached insights for today on mount
+   487→   487→  useEffect(() => {
+   488→   488→    if (typeof window === "undefined") return;
+   489→   489→    try {
+   490→   490→      const raw = window.localStorage.getItem(storageKeyForToday());
+   491→   491→      if (!raw) return;
+   492→   492→      const cached = JSON.parse(raw) as CachedInsight;
+   493→   493→      // Only restore if the phoneme signature hasn't materially changed
+   494→   494→      // (allow restore even if signature differs by a little — focus on date key)
+   495→   495→      if (cached && (cached.parsed || cached.rawText)) {
+   496→   496→        setParsed(cached.parsed);
+   497→   497→        setRawText(cached.rawText);
+   498→   498→        setView("success");
+   499→   499→      }
+   500→   500→    } catch {
+   501→   501→      /* ignore malformed cache */
+   502→   502→    }
+   503→   503→  }, []);
+   504→   504→
+   505→   505→  // Cleanup any in-flight request on unmount
+   506→   506→  useEffect(() => {
+   507→   507→    return () => {
+   508→   508→      if (abortRef.current) {
+   509→   509→        abortRef.current.abort();
+   510→   510→        abortRef.current = null;
+   511→   511→      }
+   512→   512→    };
+   513→   513→  }, []);
+   514→   514→
+   515→   515→  const handleGetInsights = useCallback(async () => {
+   516→   516→    setError(null);
+   517→   517→
+   518→   518→    // Abort any previous request
+   519→   519→    if (abortRef.current) abortRef.current.abort();
+   520→   520→    const controller = new AbortController();
+   521→   521→    abortRef.current = controller;
+   522→   522→
+   523→   523→    setView("loading");
+   524→   524→    setParsed(null);
+   525→   525→    setRawText(null);
+   526→   526→
+   527→   527→    const timeoutId = setTimeout(() => {
+   528→   528→      controller.abort();
+   529→   529→    }, FIRST_TOKEN_TIMEOUT_MS);
+   530→   530→
+   531→   531→    // Build completed lessons list
+   532→   532→    const completedLessons = Object.entries(lessons)
+   533→   533→      .filter(([, p]) => p?.completed)
+   534→   534→      .map(([id]) => id);
+   535→   535→
+   536→   536→    // Top 5 weakest phonemes for the model
+   537→   537→    const topPhonemes = phonemeMastery.slice(0, 5).map((p) => ({
+   538→   538→      phoneme: p.phoneme,
+   539→   539→      score: p.score,
+   540→   540→      example: p.example,
+   541→   541→      count: p.count,
+   542→   542→    }));
+   543→   543→
+   544→   544→    try {
+   545→   545→      const res = await fetch("/api/ai-coach", {
+   546→   546→        method: "POST",
+   547→   547→        headers: { "Content-Type": "application/json" },
+   548→   548→        body: JSON.stringify({
+   549→   549→          mode: "insights",
+   550→   550→          messages: [],
+   551→   551→          context: {
+   552→   552→            accent,
+   553→   553→            xp,
+   554→   554→            streak,
+   555→   555→            completedLessons,
+   556→   556→            phonemeMastery: topPhonemes,
+   557→   557→          },
+   558→   558→        }),
+   559→   559→        signal: controller.signal,
+   560→   560→      });
+   561→   561→
+   562→   562→      if (!res.ok) {
+   563→   563→        let detail = `Request failed (${res.status})`;
+   564→   564→        try {
+   565→   565→          const data = await res.json();
+   566→   566→          if (data?.error) detail = data.error;
+   567→   567→        } catch {
+   568→   568→          /* ignore */
+   569→   569→        }
+   570→   570→        throw new Error(detail);
+   571→   571→      }
+   572→   572→
+   573→   573→      if (!res.body) {
+   574→   574→        throw new Error("No response body received.");
+   575→   575→      }
+   576→   576→
+   577→   577→      // Consume SSE stream and accumulate text
+   578→   578→      const reader = res.body.getReader();
+   579→   579→      const decoder = new TextDecoder();
+   580→   580→      let accumulated = "";
+   581→   581→      let buffer = "";
+   582→   582→      let firstTokenReceived = false;
+   583→   583→
+   584→   584→      while (true) {
+   585→   585→        const { done, value } = await reader.read();
+   586→   586→        if (done) break;
+   587→   587→
+   588→   588→        buffer += decoder.decode(value, { stream: true });
+   589→   589→        const lines = buffer.split("\n");
+   590→   590→        buffer = lines.pop() || "";
+   591→   591→
+   592→   592→        for (const line of lines) {
+   593→   593→          const trimmedLine = line.trim();
+   594→   594→          if (!trimmedLine || !trimmedLine.startsWith("data:")) continue;
+   595→   595→
+   596→   596→          const dataStr = trimmedLine.slice(5).trim();
+   597→   597→          if (dataStr === "[DONE]") {
+   598→   598→            break;
+   599→   599→          }
+   600→   600→
+   601→   601→          try {
+   602→   602→            const parsedChunk = JSON.parse(dataStr);
+   603→   603→            if (parsedChunk.error) {
+   604→   604→              throw new Error(parsedChunk.error);
+   605→   605→            }
+   606→   606→            if (typeof parsedChunk.token === "string") {
+   607→   607→              if (!firstTokenReceived) {
+   608→   608→                firstTokenReceived = true;
+   609→   609→                clearTimeout(timeoutId);
+   610→   610→              }
+   611→   611→              accumulated += parsedChunk.token;
+   612→   612→            }
+   613→   613→          } catch (parseErr) {
+   614→   614→            // Re-throw our own thrown errors (with a real message)
+   615→   615→            if (
+   616→   616→              parseErr instanceof Error &&
+   617→   617→              !parseErr.message.startsWith("Unexpected")
+   618→   618→            ) {
+   619→   619→              throw parseErr;
+   620→   620→            }
+   621→   621→            // Skip malformed JSON lines (expected for partial SSE chunks)
+   622→   622→          }
+   623→   623→        }
+   624→   624→      }
+   625→   625→
+   626→   626→      clearTimeout(timeoutId);
+   627→   627→
+   628→   628→      const text = accumulated.trim();
+   629→   629→      if (!text) {
+   630→   630→        throw new Error("The coach didn't return any insights. Please try again.");
+   631→   631→      }
+   632→   632→
+   633→   633→      const plan = extractJson(text);
+   634→   634→      setParsed(plan);
+   635→   635→      setRawText(plan ? null : text);
+   636→   636→      setView("success");
+   637→   637→
+   638→   638→      // Cache the result (date-keyed)
+   639→   639→      try {
+   640→   640→        const payload: CachedInsight = {
+   641→   641→          parsed: plan,
+   642→   642→          rawText: plan ? null : text,
+   643→   643→          generatedAt: Date.now(),
+   644→   644→          signature,
+   645→   645→        };
+   646→   646→        window.localStorage.setItem(
+   647→   647→          storageKeyForToday(),
+   648→   648→          JSON.stringify(payload)
+   649→   649→        );
+   650→   650→      } catch {
+   651→   651→        /* ignore storage errors */
+   652→   652→      }
+   653→   653→    } catch (err) {
+   654→   654→      clearTimeout(timeoutId);
+   655→   655→      if (err instanceof DOMException && err.name === "AbortError") {
+   656→   656→        setError("Request timed out — the coach took too long. Please try again.");
+   657→   657→      } else {
+   658→   658→        const msg = err instanceof Error ? err.message : "Something went wrong.";
+   659→   659→        setError(msg);
+   660→   660→      }
+   661→   661→      setView("error");
+   662→   662→    } finally {
+   663→   663→      abortRef.current = null;
+   664→   664→    }
+   665→   665→  }, [lessons, phonemeMastery, accent, xp, streak, signature]);
+   666→   666→
+   667→   667→  const handleOpenLesson = useCallback(
+   668→   668→    (lessonTitle: string) => {
+   669→   669→      const lesson = ALL_LESSONS.find((l) => l.title === lessonTitle);
+   670→   670→      if (lesson) {
+   671→   671→        setActiveLesson(lesson.id);
+   672→   672→      }
+   673→   673→    },
+   674→   674→    [setActiveLesson]
+   675→   675→  );
+   676→   676→
+   677→   677→  // ─── Render ──────────────────────────────────────────────────────────
+   678→   678→
+   679→   679→  return (
+   680→   680→    <motion.section
+   681→   681→      initial={{ opacity: 0, y: 12 }}
+   682→   682→      animate={{ opacity: 1, y: 0 }}
+   683→   683→      transition={{ duration: 0.4, ease: "easeOut" }}
+   684→   684→      className="relative"
+   685→   685→      aria-label="Coach Insights"
+   686→   686→    >
+   687→   687→      <div className="flex items-center justify-between mb-2">
+   688→   688→        <h2 className="font-d text-base font-bold flex items-center gap-2">
+   689→   689→          <Sparkles className="w-4 h-4 text-[var(--p3)]" />
+   690→   690→          <span>Coach Insights</span>
+   691→   691→        </h2>
+   692→   692→        {view === "success" && (
+   693→   693→          <motion.button
+   694→   694→            onClick={handleGetInsights}
+   695→   695→            whileHover={{ scale: 1.04 }}
+   696→   696→            whileTap={{ scale: 0.96 }}
+   697→   697→            className="text-[10px] font-mono uppercase tracking-wider flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-[var(--card)] border border-[var(--border)] text-[var(--t2)] hover:text-[var(--t1)] hover:border-[rgba(99,102,241,0.4)] transition"
+   698→   698→            aria-label="Refresh insights"
+   699→   699→          >
+   700→   700→            <RefreshCw className="w-3 h-3" />
+   701→   701→            Refresh
+   702→   702→          </motion.button>
+   703→   703→        )}
+   704→   704→      </div>
+   705→   705→
+   706→   706→      {/* Outer animated mesh gradient border */}
+   707→   707→      <div className="relative rounded-3xl p-[1px] overflow-hidden">
+   708→   708→        {/* Animated mesh gradient border */}
+   709→   709→        <motion.div
+   710→   710→          aria-hidden
+   711→   711→          className="absolute inset-0 rounded-3xl"
+   712→   712→          style={{
+   713→   713→            background:
+   714→   714→              "linear-gradient(135deg, rgba(99,102,241,0.5), rgba(139,92,246,0.4), rgba(34,211,238,0.35), rgba(99,102,241,0.5))",
+   715→   715→            backgroundSize: "300% 300%",
+   716→   716→          }}
+   717→   717→          animate={{ backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"] }}
+   718→   718→          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+   719→   719→        />
+   720→   720→
+   721→   721→        {/* Inner card */}
+   722→   722→        <div
+   723→   723→          className="relative rounded-3xl overflow-hidden"
+   724→   724→          style={{
+   725→   725→            background:
+   726→   726→              "linear-gradient(135deg, rgba(12,12,26,0.96), rgba(17,17,40,0.92))",
+   727→   727→            backdropFilter: "blur(16px)",
+   728→   728→          }}
+   729→   729→        >
+   730→   730→          {/* Floating background orbs */}
+   731→   731→          <motion.div
+   732→   732→            aria-hidden
+   733→   733→            className="absolute -top-16 -right-16 w-48 h-48 rounded-full pointer-events-none"
+   734→   734→            style={{
+   735→   735→              background:
+   736→   736→                "radial-gradient(circle, rgba(167,139,250,0.18) 0%, transparent 70%)",
+   737→   737→            }}
+   738→   738→            animate={{ scale: [1, 1.18, 1], opacity: [0.4, 0.7, 0.4] }}
+   739→   739→            transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+   740→   740→          />
+   741→   741→          <motion.div
+   742→   742→            aria-hidden
+   743→   743→            className="absolute -bottom-16 -left-12 w-40 h-40 rounded-full pointer-events-none"
+   744→   744→            style={{
+   745→   745→              background:
+   746→   746→                "radial-gradient(circle, rgba(34,211,238,0.14) 0%, transparent 70%)",
+   747→   747→            }}
+   748→   748→            animate={{ scale: [1, 1.15, 1], opacity: [0.3, 0.6, 0.3] }}
+   749→   749→            transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+   750→   750→          />
+   751→   751→
+   752→   752→          <div className="relative p-5">
+   753→   753→            <AnimatePresence mode="wait">
+   754→   754→              {/* ─── IDLE STATE ─── */}
+   755→   755→              {view === "idle" && (
+   756→   756→                <motion.div
+   757→   757→                  key="idle"
+   758→   758→                  initial={{ opacity: 0 }}
+   759→   759→                  animate={{ opacity: 1 }}
+   760→   760→                  exit={{ opacity: 0, y: -8 }}
+   761→   761→                  className="text-center py-4"
+   762→   762→                >
+   763→   763→                  <motion.div
+   764→   764→                    initial={{ scale: 0.7, opacity: 0 }}
+   765→   765→                    animate={{ scale: 1, opacity: 1 }}
+   766→   766→                    transition={{
+   767→   767→                      type: "spring",
+   768→   768→                      stiffness: 240,
+   769→   769→                      damping: 16,
+   770→   770→                      delay: 0.1,
+   771→   771→                    }}
+   772→   772→                    className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-3 relative"
+   773→   773→                    style={{
+   774→   774→                      background:
+   775→   775→                        "linear-gradient(135deg, rgba(99,102,241,0.18), rgba(34,211,238,0.12))",
+   776→   776→                      border: "1px solid rgba(99,102,241,0.35)",
+   777→   777→                      boxShadow: "0 0 24px rgba(99,102,241,0.2)",
+   778→   778→                    }}
+   779→   779→                  >
+   780→   780→                    <Sparkles className="w-7 h-7 text-[var(--p3)]" />
+   781→   781→                    <motion.span
+   782→   782→                      className="absolute -top-1 -right-1 text-base"
+   783→   783→                      animate={{ rotate: [0, 15, -10, 0], scale: [1, 1.15, 1] }}
+   784→   784→                      transition={{
+   785→   785→                        duration: 2.2,
+   786→   786→                        repeat: Infinity,
+   787→   787→                        ease: "easeInOut",
+   788→   788→                      }}
+   789→   789→                    >
+   790→   790→                      ✨
+   791→   791→                    </motion.span>
+   792→   792→                  </motion.div>
+   793→   793→                  <div className="font-d text-base font-bold text-[var(--t1)] mb-1">
+   794→   794→                    Get your AI practice plan
+   795→   795→                  </div>
+   796→   796→                  <p className="text-xs text-[var(--t2)] leading-relaxed max-w-xs mx-auto mb-4">
+   797→   797→                    {completedCount === 0
+   798→   798→                      ? "I'll analyze your starting point and recommend the perfect first lessons."
+   799→   799→                      : phonemeMastery.length === 0
+   800→   800→                      ? "Complete a few lessons so I can spot your weakest sounds."
+   801→   801→                      : `Based on ${phonemeMastery.length} sound${
+   802→   802→                          phonemeMastery.length !== 1 ? "s" : ""
+   803→   803→                        } tracked — I'll build a personalized plan in seconds.`}
+   804→   804→                  </p>
+   805→   805→                  <motion.button
+   806→   806→                    onClick={handleGetInsights}
+   807→   807→                    whileHover={{ scale: 1.04 }}
+   808→   808→                    whileTap={{ scale: 0.96 }}
+   809→   809→                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white shadow-[0_4px_20px_rgba(99,102,241,0.4)] transition"
+   810→   810→                    style={{
+   811→   811→                      background:
+   812→   812→                        "linear-gradient(135deg, #6366f1, #8b5cf6 55%, #22d3ee)",
+   813→   813→                    }}
+   814→   814→                  >
+   815→   815→                    <Zap className="w-4 h-4" />
+   816→   816→                    Get AI Insights
+   817→   817→                  </motion.button>
+   818→   818→                </motion.div>
+   819→   819→              )}
+   820→   820→
+   821→   821→              {/* ─── LOADING STATE ─── */}
+   822→   822→              {view === "loading" && (
+   823→   823→                <motion.div
+   824→   824→                  key="loading"
+   825→   825→                  initial={{ opacity: 0 }}
+   826→   826→                  animate={{ opacity: 1 }}
+   827→   827→                  exit={{ opacity: 0 }}
+   828→   828→                >
+   829→   829→                  <LoadingState />
+   830→   830→                </motion.div>
+   831→   831→              )}
+   832→   832→
+   833→   833→              {/* ─── ERROR STATE ─── */}
+   834→   834→              {view === "error" && (
+   835→   835→                <motion.div
+   836→   836→                  key="error"
+   837→   837→                  initial={{ opacity: 0, y: 8 }}
+   838→   838→                  animate={{ opacity: 1, y: 0 }}
+   839→   839→                  exit={{ opacity: 0, y: -8 }}
+   840→   840→                  className="flex flex-col items-center text-center py-6"
+   841→   841→                >
+   842→   842→                  <div
+   843→   843→                    className="w-12 h-12 rounded-2xl flex items-center justify-center mb-3"
+   844→   844→                    style={{
+   845→   845→                      background: "rgba(239,68,68,0.12)",
+   846→   846→                      border: "1px solid rgba(239,68,68,0.35)",
+   847→   847→                    }}
+   848→   848→                  >
+   849→   849→                    <AlertTriangle className="w-6 h-6 text-[#ef4444]" />
+   850→   850→                  </div>
+   851→   851→                  <div className="font-d text-sm font-bold text-[var(--t1)] mb-1">
+   852→   852→                    Couldn&apos;t fetch insights
+   853→   853→                  </div>
+   854→   854→                  <p className="text-xs text-[var(--t2)] max-w-xs mb-4 leading-relaxed">
+   855→   855→                    {error || "Something went wrong."}
+   856→   856→                  </p>
+   857→   857→                  <motion.button
+   858→   858→                    onClick={handleGetInsights}
+   859→   859→                    whileHover={{ scale: 1.04 }}
+   860→   860→                    whileTap={{ scale: 0.96 }}
+   861→   861→                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-[var(--card)] border border-[var(--border2)] text-[var(--t1)] hover:border-[rgba(99,102,241,0.4)] transition"
+   862→   862→                  >
+   863→   863→                    <RefreshCw className="w-3.5 h-3.5" />
+   864→   864→                    Try again
+   865→   865→                  </motion.button>
+   866→   866→                </motion.div>
+   867→   867→              )}
+   868→   868→
+   869→   869→              {/* ─── SUCCESS STATE ─── */}
+   870→   870→              {view === "success" && (
+   871→   871→                <motion.div
+   872→   872→                  key="success"
+   873→   873→                  initial={{ opacity: 0 }}
+   874→   874→                  animate={{ opacity: 1 }}
+   875→   875→                  exit={{ opacity: 0 }}
+   876→   876→                  className="space-y-4"
+   877→   877→                >
+   878→   878→                  {/* If we have structured JSON → render 3 sections */}
+   879→   879→                  {parsed ? (
+   880→   880→                    <>
+   881→   881→                      {/* Focus Areas */}
+   882→   882→                      {parsed.focusAreas.length > 0 && (
+   883→   883→                        <section>
+   884→   884→                          <div className="flex items-center gap-2 mb-2.5">
+   885→   885→                            <Target className="w-3.5 h-3.5 text-[#ef4444]" />
+   886→   886→                            <h3 className="font-d text-sm font-bold text-[var(--t1)]">
+   887→   887→                              Your Focus Areas
+   888→   888→                            </h3>
+   889→   889→                            <span className="text-[10px] font-mono text-[var(--t3)] ml-auto">
+   890→   890→                              {parsed.focusAreas.length} sound
+   891→   891→                              {parsed.focusAreas.length !== 1 ? "s" : ""}
+   892→   892→                            </span>
+   893→   893→                          </div>
+   894→   894→                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+   895→   895→                            {parsed.focusAreas
+   896→   896→                              .slice(0, 4)
+   897→   897→                              .map((area, i) => (
+   898→   898→                                <FocusAreaCard
+   899→   899→                                  key={`${area.phoneme}-${i}`}
+   900→   900→                                  area={area}
+   901→   901→                                  index={i}
+   902→   902→                                />
+   903→   903→                              ))}
+   904→   904→                          </div>
+   905→   905→                        </section>
+   906→   906→                      )}
+   907→   907→
+   908→   908→                      {/* Recommended Lessons */}
+   909→   909→                      {parsed.recommendedLessons.length > 0 && (
+   910→   910→                        <section>
+   911→   911→                          <div className="flex items-center gap-2 mb-2.5">
+   912→   912→                            <BookOpen className="w-3.5 h-3.5 text-[var(--p3)]" />
+   913→   913→                            <h3 className="font-d text-sm font-bold text-[var(--t1)]">
+   914→   914→                              Recommended Lessons
+   915→   915→                            </h3>
+   916→   916→                            <span className="text-[10px] font-mono text-[var(--t3)] ml-auto">
+   917→   917→                              tap to open
+   918→   918→                            </span>
+   919→   919→                          </div>
+   920→   920→                          <div className="space-y-2">
+   921→   921→                            {parsed.recommendedLessons
+   922→   922→                              .slice(0, 3)
+   923→   923→                              .map((rec, i) => (
+   924→   924→                                <RecommendedLessonCard
+   925→   925→                                  key={`${rec.lesson}-${i}`}
+   926→   926→                                  rec={rec}
+   927→   927→                                  index={i}
+   928→   928→                                  onOpen={handleOpenLesson}
+   929→   929→                                />
+   930→   930→                              ))}
+   931→   931→                          </div>
+   932→   932→                        </section>
+   933→   933→                      )}
+   934→   934→
+   935→   935→                      {/* Practice Tips */}
+   936→   936→                      {parsed.tips.length > 0 && (
+   937→   937→                        <section>
+   938→   938→                          <div className="flex items-center gap-2 mb-2.5">
+   939→   939→                            <Lightbulb className="w-3.5 h-3.5 text-[#f59e0b]" />
+   940→   940→                            <h3 className="font-d text-sm font-bold text-[var(--t1)]">
+   941→   941→                              Practice Tips
+   942→   942→                            </h3>
+   943→   943→                          </div>
+   944→   944→                          <ul className="space-y-2.5">
+   945→   945→                            {parsed.tips.map((tip, i) => (
+   946→   946→                              <TipItem key={i} tip={tip} index={i} />
+   947→   947→                            ))}
+   948→   948→                          </ul>
+   949→   949→                        </section>
+   950→   950→                      )}
+   951→   951→
+   952→   952→                      {/* Footer note */}
+   953→   953→                      <div className="text-[10px] text-[var(--t3)] font-mono text-center pt-2 border-t border-[var(--border)]">
+   954→   954→                        ✨ Generated by AccentAI Coach ·{" "}
+   955→   955→                        <button
+   956→   956→                          onClick={handleGetInsights}
+   957→   957→                          className="text-[var(--p3)] hover:text-[var(--c2)] transition underline-offset-2 hover:underline"
+   958→   958→                        >
+   959→   959→                          regenerate
+   960→   960→                        </button>
+   961→   961→                      </div>
+   962→   962→                    </>
+   963→   963→                  ) : (
+   964→   964→                    // Fallback: raw text response
+   965→   965→                    <section>
+   966→   966→                      <div className="flex items-center gap-2 mb-2.5">
+   967→   967→                        <Sparkles className="w-3.5 h-3.5 text-[var(--p3)]" />
+   968→   968→                        <h3 className="font-d text-sm font-bold text-[var(--t1)]">
+   969→   969→                          Coach Advice
+   970→   970→                        </h3>
+   971→   971→                      </div>
+   972→   972→                      <div className="rounded-2xl p-3.5 bg-[var(--overlay-1)] border border-[var(--border)] text-xs text-[var(--t2)] leading-relaxed whitespace-pre-wrap">
+   973→   973→                        {rawText}
+   974→   974→                      </div>
+   975→   975→                      <div className="text-[10px] text-[var(--t3)] font-mono text-center pt-2 mt-2">
+   976→   976→                        ✨ Generated by AccentAI Coach
+   977→   977→                      </div>
+   978→   978→                    </section>
+   979→   979→                  )}
+   980→   980→                </motion.div>
+   981→   981→              )}
+   982→   982→            </AnimatePresence>
+   983→   983→          </div>
+   984→   984→        </div>
+   985→   985→      </div>
+   986→   986→    </motion.section>
+   987→   987→  );
+   988→   988→}
+   989→   989→
