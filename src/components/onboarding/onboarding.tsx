@@ -8,12 +8,13 @@ const TAGLINE = "Master Native-Level English";
 
 export function Onboarding() {
   const [stage, setStage] = useState<"login" | "accent">("login");
-  const [selectedAccent, setSelectedAccent] = useState<"usa" | null>(null);
+  const [selectedAccent, setSelectedAccent] = useState<"usa" | "uk" | null>(null);
   const setOnboarded = useAppStore((s) => s.setOnboarded);
   const setAccent = useAppStore((s) => s.setAccent);
+  const devMode = useAppStore((s) => s.devMode);
 
   const handleLogin = () => setStage("accent");
-  const handleSelectAccent = (a: "usa") => setSelectedAccent(a);
+  const handleSelectAccent = (a: "usa" | "uk") => setSelectedAccent(a);
   const handleBegin = () => {
     if (selectedAccent) {
       setAccent(selectedAccent);
@@ -125,17 +126,44 @@ export function Onboarding() {
             <div className="text-xs text-[var(--t3)] mt-0.5">American Accent</div>
           </button>
 
-          {/* UK — coming soon */}
-          <div className="relative rounded-xl p-5 text-center border border-[var(--border)] bg-white opacity-50">
-            <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded text-[9px] font-medium uppercase tracking-wider bg-[var(--bg2)] text-[var(--t2)]">
-              Soon
+          {/* UK — coming soon (selectable in dev mode) */}
+          {devMode ? (
+            <button
+              onClick={() => handleSelectAccent("uk")}
+              className={`relative rounded-xl p-5 text-center border transition bg-white ${
+                selectedAccent === "uk"
+                  ? "border-black"
+                  : "border-[var(--border)] hover:border-[var(--border2)]"
+              }`}
+            >
+              {selectedAccent === "uk" && (
+                <motion.span
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 20 }}
+                  className="absolute top-2 right-2 w-4 h-4 rounded-full bg-black flex items-center justify-center text-white text-[9px]"
+                >
+                  ✓
+                </motion.span>
+              )}
+              <div className="text-4xl mb-2">🇬🇧</div>
+              <div className="font-d font-semibold text-sm text-[var(--t1)]">
+                UK English
+              </div>
+              <div className="text-xs text-[var(--t3)] mt-0.5">British RP</div>
+            </button>
+          ) : (
+            <div className="relative rounded-xl p-5 text-center border border-[var(--border)] bg-white opacity-50">
+              <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded text-[9px] font-medium uppercase tracking-wider bg-[var(--bg2)] text-[var(--t2)]">
+                Soon
+              </div>
+              <div className="text-4xl mb-2">🇬🇧</div>
+              <div className="font-d font-semibold text-sm text-[var(--t1)]">
+                UK English
+              </div>
+              <div className="text-xs text-[var(--t3)] mt-0.5">British RP</div>
             </div>
-            <div className="text-4xl mb-2">🇬🇧</div>
-            <div className="font-d font-semibold text-sm text-[var(--t1)]">
-              UK English
-            </div>
-            <div className="text-xs text-[var(--t3)] mt-0.5">British RP</div>
-          </div>
+          )}
         </div>
 
         {/* Coming soon section */}
@@ -154,6 +182,12 @@ export function Onboarding() {
           ))}
         </div>
 
+        {devMode && (
+          <div className="mb-4 text-center text-[10px] font-mono uppercase tracking-wider text-[var(--t3)]">
+            ⚡ Developer Mode — all accents unlocked
+          </div>
+        )}
+
         {/* Begin button — solid black */}
         <div className="mt-auto">
           <button
@@ -171,7 +205,7 @@ export function Onboarding() {
               className="text-center text-xs text-[var(--t3)] mt-3"
             >
               You picked{" "}
-              <span className="text-[var(--t1)] font-medium">USA English</span>
+              <span className="text-[var(--t1)] font-medium">{selectedAccent === "usa" ? "USA English" : "UK English"}</span>
             </motion.p>
           )}
         </div>

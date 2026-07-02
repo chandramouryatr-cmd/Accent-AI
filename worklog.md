@@ -2413,3 +2413,91 @@ Unresolved Issues / Next Phase Priorities:
 - MEDIUM: Lesson step renderers (16 types) inside lesson-modal may have residual colored elements
 - LOW: When devMode is ON, consider adding a visual indicator on Dashboard/Journey (small "DEV" pill) so user knows features are unlocked
 - LOW: Consider a "Reset devMode" quick action or auto-disable after session
+
+---
+Task ID: 2-3
+Agent: frontend-styling-expert
+Task: Redesign Daily Challenge and Coach Insights UI for minimal white/black theme
+
+Work Log:
+- Read worklog.md (full history) to understand prior minimal-redesign work. Confirmed both target files had already received a "minimal pass" by Task B/C agents (gradients/orbs/indigo tints already removed). My task was a POLISH pass: better visual hierarchy, button hierarchy, refined sub-components, and a richer loading state — while staying strictly within the minimal white/black design system.
+- Re-read all 3 target files in full: `daily-challenge-card.tsx` (170 lines), `coach-insights.tsx` (823 lines, sub-components at lines 219/275/339/357 + render at 599+), `dashboard.tsx` (lines 547-632 wrappers).
+- Confirmed NO remaining `rgba(99,102,241,...)` / `rgba(34,211,238,...)` / `grad-text` / indigo/violet/cyan tints in either widget — nothing to replace; both were already clean monochrome.
+- Verified design tokens exist: `--bg`, `--t1/t2/t3`, `--p` (#18181b), `--card`, `--card-h`, `--border`, `--border2`, `--bg2`, semantic `--gr`/`--yl`/`--rd`/`--c`. Used only these (no hard-coded hex).
+
+### `daily-challenge-card.tsx` (170 → 203 lines)
+- Added a new `DifficultyIndicator` helper: mono uppercase label + 3 dots (filled = level). Replaces the plain rounded pill — subtler, more refined, still monochrome (filled dots use `var(--t1)`, empty use `var(--border2)`).
+- Removed the unused `DIFFICULTY_COLORS` constant (was left over as a comment-only reference; now fully deleted).
+- Header: more breathing room (`mb-3` → `mb-4`), larger emoji (`text-base` → `text-xl` with `leading-none mt-0.5`), better label→title stack with `mt-0.5 leading-snug`. Difficulty indicator right-aligned.
+- Phrase: promoted from `text-base` inside a bordered box → `text-lg font-bold` standalone (no box), more prominent. Uses typographic curly quotes `&ldquo;…&rdquo;`. IPA moved directly under phrase (`mt-1.5`), `text-xs var(--t3) font-mono`.
+- Tip: replaced left-border accent with a clean rounded card (`bg-[var(--bg2)] border border-[var(--border)] rounded-lg p-3`). Emoji + tip text, better padding.
+- Action buttons: established clear primary/secondary hierarchy + `min-h-[40px]` (touch-friendly):
+  - "Hear it" = primary filled black (`bg-[var(--p)] text-white`), `flex-1`.
+  - "Slow" = secondary outline (`border-[var(--border2)]`), auto-width `px-3.5`, has `aria-label="Play slowly"`.
+  - "Mark Done" = outline black when not done (`border-[var(--p)] text-[var(--p)]`), fills black with check when done (`bg-[var(--p)] text-white` + `<Check/> Done`). `flex-1`.
+  - All buttons get `active:scale-[0.98]` for tactile feedback; `items-stretch` on the row so all buttons share the same height.
+- Completed-state reward: card border subtly elevates (`border-[var(--border)]` → `border-[var(--border2)]`); footer shows a green `<Check/>` + "Completed today" (`text-[var(--gr)]` for the icon — semantic success).
+- Footer: added `pt-3 border-t border-[var(--border)]` separator; status pill on the right swaps to a green check + label when completed.
+
+### `coach-insights.tsx` (823 → 913 lines — net +90 from richer loading skeleton + idle chips)
+- **Section heading**: `mb-2` → `mb-3`; Sparkles icon gets `strokeWidth={2.25}` for a slightly weightier mark. Refresh button tracking widened to `tracking-[0.1em]`.
+- **Idle state**: icon box refined (16×16 → 14×14 `rounded-2xl`, Sparkles `w-6 h-6 strokeWidth={2}`). Title bumped `text-base` → `text-lg`. Added a row of 3 insight-type preview chips (`Focus Areas` / `Lessons` / `Tips`) using Target/BookOpen/Lightbulb icons in `var(--t3)` mono uppercase — sets expectations for what's coming. CTA button enlarged: `px-5 py-2.5` → `px-6 py-3`, `hover:opacity-80` → `hover:opacity-90`, Zap icon `strokeWidth={2.25}`.
+- **LoadingState**: completely rewritten. Replaced the centered spinner + 2-line text with a horizontal spinner+status row (`"Analyzing your pronunciation…"` + mono subtext), then TWO skeleton preview blocks that mirror the actual success-state layout:
+  - Focus Areas skeleton: 2× card grid with phoneme-tile placeholder, label bar, score-bar line, and reason line — all `bg-[var(--card-h)] animate-pulse`.
+  - Recommended Lessons skeleton: 2× row placeholders with icon-tile + title/reason bars.
+  - This gives the user structural context during the 1-5s streaming response instead of a blank spinner.
+- **FocusAreaCard**: padding `p-3` → `p-3.5`; phoneme tile `w-11 h-11` → `w-12 h-12`, `text-lg` → `text-base` (cleaner proportions). Added a semantic accent system: `--gr` (≥85 Mastered), `--yl` (≥70 Progressing), `--rd` (<70 Needs work) — shown as a small `w-1.5 h-1.5` dot next to the label AND as the score-bar fill color. Meaningful use of semantic color (spec allows it: "Semantic accent colors ONLY when meaningful"). Score number gets a fainter `%` suffix. Reason text now sits below a `pt-3 border-t border-[var(--border)]` separator for cleaner scannability.
+- **RecommendedLessonCard**: padding `p-3` → `p-3.5`; icon tile `w-9 h-9` → `w-10 h-10`; phase badge `rounded-full` → `rounded` (sharper, more ledger-like); added `hover:bg-[var(--card-h)]` to complement the existing `hover:border-[var(--border2)]`; reason text gets `line-clamp-2` to prevent overflow on long reasons; chevron now `group-hover:text-[var(--t1)]` (was static `var(--t3)`) for a clearer affordance; layout switched from `items-start` to `items-center` for tighter alignment with the icon tile.
+- **TipItem**: replaced the em-dash bullet with a numbered mono prefix `01` / `02` / `03` (`tabular-nums`, `text-[10px] font-bold var(--t3)`) — more premium, more scannable, makes the ordered nature of tips explicit. Removed the `pt-0.5` offset; gap `2.5` → `3`.
+- **Section headings (Focus Areas / Recommended Lessons / Practice Tips)**: `mb-2.5` → `mb-3`; all icons get `strokeWidth={2.25}`; count badges get `uppercase tracking-[0.1em]` to match the rest of the typographic system. Added a "N tips" count badge to the Practice Tips heading (was the only one without a right-aligned count).
+- **Footer note**: `pt-2` → `pt-3 mt-1` with the existing top border — more breathing room from the last tip.
+- **Error state**: icon box `rounded-xl` → `rounded-2xl`, AlertTriangle `w-6 h-6` → `w-5 h-5 strokeWidth={2}`; "Try again" button gets `min-h-[36px]` for consistent touch target.
+- **Fallback raw-text card**: `bg-[var(--card-h)]` → `bg-[var(--bg2)]` to match the new tip-card style in Daily Challenge; footer gets `pt-3 mt-3 border-t` separator.
+
+### `dashboard.tsx` (line 547-553)
+- Daily Challenge section heading: `mb-2` → `mb-3` (matches the new `mb-3` on the Coach Insights heading inside the widget, so both section headings have consistent spacing above their cards). Reformatted to multi-line for readability. No other dashboard changes — Coach Insights widget renders its own heading with its own spacing.
+
+### Verification
+- `bun run lint` → EXIT 0 (no errors, no warnings) after all edits.
+- Dev server (`tail dev.log`) shows clean compiles (`✓ Compiled in 74ms` / `163ms` / etc.) with no runtime errors after edits.
+- Confirmed via `git diff --stat` that ONLY the 3 target files were touched (dashboard.tsx +4/-2, coach-insights.tsx +188/-…, daily-challenge-card.tsx +109/-…). Pre-existing modifications to lesson-modal.tsx and onboarding.tsx were from earlier agents, untouched by me.
+- Opened the dashboard in agent-browser (HTTP 200) and screenshotted the redesigned sections to visually confirm clean rendering — no layout breakage, no overflow, all elements visible.
+
+Stage Summary:
+- **Daily Challenge card** now has clear visual hierarchy: prominent `text-lg` phrase with curly quotes, subtle IPA underneath, a clean tip card with `--bg2` background, and a 3-button row with explicit primary (filled black "Hear it") / secondary (outline "Slow") / completion (outline→filled "Mark Done") hierarchy — all at `min-h-[40px]`. Difficulty is shown as a 3-dot indicator (1=Easy, 2=Medium, 3=Hard) instead of a plain pill. Completed state is rewarded with: elevated card border, filled black "Done ✓" button, and a green-check "Completed today" footer status — minimal but satisfying.
+- **Coach Insights** now has: (1) a richer idle CTA with 3 preview chips showing what you'll get (Focus Areas / Lessons / Tips), (2) a structured loading state with skeleton blocks mirroring the success layout (not just a spinner), (3) FocusAreaCards with meaningful semantic accent colors (green/amber/red dot + matching score-bar fill) tied to mastery tier, (4) RecommendedLessonCards with hover-fill background + line-clamped reasons + animated chevron, (5) TipItems as a numbered (01/02/03) mono-prefixed list for premium scannability, (6) consistent section headings with strokeWidth-weighted icons and uppercase-tracked count badges.
+- **No design-system violations**: no new gradients, no glows, no `grad-text`, no indigo/violet/cyan tints. Semantic colors (`--gr`/`--yl`/`--rd`) used ONLY where meaningful (mastery tier, completed check, error icon). All buttons use `var(--p)` solid black or `var(--border2)`/`var(--p)` outlines. Rounded corners follow the `rounded-xl` (cards) / `rounded-lg` (inner) / `rounded-2xl` (idle icon) convention.
+- **No logic/data changes**: all TTS handlers, lesson-open handlers, refresh handlers, SSE streaming, localStorage caching, phoneme-mastery derivation, and state-machine transitions are byte-for-byte identical. Only className/JSX structure changed.
+- Lint: PASS (exit 0). Dev server compiles cleanly.
+
+
+---
+Task ID: 1, 4 (Round 11)
+Agent: main
+Task: Remove "Hear the title" button + nonsensical WaveformCanvas animation from lesson intro; wire Developer Mode into onboarding coming-soon accents
+
+Work Log:
+- Read worklog.md to understand Round 10 state (minimal white/black theme, lesson modal fixes).
+- Searched lesson-modal.tsx for "Hear" — found 3 instances: "▶ Hear the title" (intro, line 832), "Tap to hear individual words" (example label), "▶ Hear the target" (practice).
+- Read IntroStepView (lines 757-866): identified 4 elements to remove — (1) background glow blob, (2) WaveformCanvas (sine-wave animation with no audio = "animation that doesn't make sense"), (3) "▶ Hear the title" button, (4) TTS speed control (0.6×/0.8×/1×/1.2×).
+- Read ShadowStepView (lines 1049-1083): found a second WaveformCanvas (height=80) also animating without audio — removed it too for consistency.
+- Traced the ttsSpeed/setTtsSpeed prop chain (modal state → StepRenderer props → IntroStepView) and cleaned it up entirely:
+  - Changed `const [ttsSpeed, setTtsSpeed] = useState(1)` → `const ttsSpeed = 1` (setter no longer needed).
+  - Removed ttsSpeed/setTtsSpeed from StepRendererProps interface, StepRenderer destructure, StepRenderer call site, IntroStepView signature, and IntroStepView call.
+  - Removed the `TTS_SPEEDS` constant (now unused).
+  - Removed `Gauge` from lucide-react import (only used by speed control).
+  - Removed `WaveformCanvas` import (both usages removed).
+- Simplified intro title from `<span className="grad-text">` to plain `text-[var(--t1)]` (consistent with minimal theme — no gradient text).
+- Wired Developer Mode into onboarding (onboarding.tsx):
+  - Read `devMode` from store; changed `selectedAccent` state type from `"usa" | null` to `"usa" | "uk" | null`.
+  - Made UK English card conditionally selectable: when `devMode` is true, renders as a clickable button (same style as USA card); when false, renders the locked "Soon" badge div (unchanged).
+  - Added a "⚡ Developer Mode — all accents unlocked" indicator above the Begin button when dev mode is active.
+  - Updated "You picked" text to dynamically show "USA English" or "UK English".
+- Verified dev mode was already wired into: journey.tsx phase unlocks (line 61: `prevDone || devMode`), store.ts XP shop buy functions (all check devMode for free grants), more.tsx DevToggle UI (section 8).
+
+Stage Summary:
+- **Lesson intro is now clean & minimal**: illustration + "LESSON INTRODUCTION" label + EASY badge + title (solid black) + subtitle + description. No "Hear the title" button, no WaveformCanvas sine-wave animation, no TTS speed control, no background glow. The IntroIllustration (meaningful SVG metaphor) + gentle float are retained.
+- **Shadow step** also lost its nonsensical WaveformCanvas — the "Listen & Repeat" button now directly follows the phrase/IPA.
+- **Developer Switch fully wired**: toggle in More view (section 8) unlocks — all 8 phases in Journey, all 32 lessons, free XP shop items, AND UK English accent in onboarding (when dev mode is on, UK card is selectable; off = "Soon" badge). The 8 decorative coming-soon accents (German/French/etc.) remain locked since they're not valid Accent types.
+- **Lint: PASS** (exit 0). Dev server compiles cleanly.
+- **agent-browser verification (full flow)**: onboarding login → accent select (UK locked, dev off) → select USA → begin → dashboard (Daily Challenge + Coach Insights look polished) → open lesson → intro has NO "Hear the title"/waveform/speed-control/glow (confirmed via vision) → Continue advances step 1→2 ✓ → close lesson → More view → enable Developer Mode → "Unlocked: All 8 Phases, All 32 Lessons, Free XP Shop, Unlimited XP" → Journey shows 6+ phases all unlocked (no lock icons) → More view UK English now selectable. All verified.

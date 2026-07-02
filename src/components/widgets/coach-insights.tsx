@@ -223,6 +223,13 @@ function FocusAreaCard({ area, index }: { area: FocusArea; index: number }) {
       : area.score >= 70
       ? "Progressing"
       : "Needs work";
+  // Semantic accent (meaningful: green = mastered, amber = progressing, red = needs work)
+  const accent =
+    area.score >= 85
+      ? "var(--gr)"
+      : area.score >= 70
+      ? "var(--yl)"
+      : "var(--rd)";
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -233,22 +240,30 @@ function FocusAreaCard({ area, index }: { area: FocusArea; index: number }) {
         damping: 24,
         delay: index * 0.06,
       }}
-      className="bg-[var(--card)] border border-[var(--border)] rounded-lg p-3"
+      className="bg-[var(--card)] border border-[var(--border)] rounded-lg p-3.5"
     >
       <div className="flex items-center gap-3">
-        <div className="w-11 h-11 rounded-xl flex items-center justify-center font-mono text-lg font-bold shrink-0 bg-[var(--card-h)] border border-[var(--border)] text-[var(--t1)]">
+        <div className="w-12 h-12 rounded-xl flex items-center justify-center font-mono text-base font-bold shrink-0 bg-[var(--card-h)] border border-[var(--border)] text-[var(--t1)]">
           /{area.phoneme}/
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2 mb-1.5">
-            <span className="text-[10px] uppercase tracking-wider font-mono text-[var(--t3)]">
+            <span className="text-[10px] uppercase tracking-[0.1em] font-mono text-[var(--t3)] flex items-center gap-1.5">
+              <span
+                className="w-1.5 h-1.5 rounded-full shrink-0"
+                style={{ background: accent }}
+                aria-hidden
+              />
               {label}
             </span>
-            <span className="font-mono text-sm font-bold text-[var(--t1)]">
+            <span className="font-mono text-sm font-bold text-[var(--t1)] tabular-nums">
               {area.score}
+              <span className="text-[var(--t3)] text-[10px] font-normal ml-0.5">
+                %
+              </span>
             </span>
           </div>
-          {/* Thin score bar: var(--border) track, var(--p) fill */}
+          {/* Thin score bar: var(--border) track, semantic fill */}
           <div className="h-1 rounded-full bg-[var(--border)] overflow-hidden">
             <motion.div
               initial={{ width: 0 }}
@@ -258,13 +273,14 @@ function FocusAreaCard({ area, index }: { area: FocusArea; index: number }) {
                 ease: "easeOut",
                 delay: index * 0.06 + 0.1,
               }}
-              className="h-full bg-[var(--p)] rounded-full"
+              className="h-full rounded-full"
+              style={{ background: accent }}
             />
           </div>
         </div>
       </div>
       {area.reason && (
-        <p className="text-xs text-[var(--t2)] leading-relaxed mt-2.5">
+        <p className="text-xs text-[var(--t2)] leading-relaxed mt-3 pt-3 border-t border-[var(--border)]">
           {area.reason}
         </p>
       )}
@@ -305,17 +321,17 @@ function RecommendedLessonCard({
       whileTap={{ scale: 0.98 }}
       onClick={() => lesson && onOpen(lesson.title)}
       disabled={!lesson}
-      className="w-full text-left bg-[var(--card)] border border-[var(--border)] rounded-lg p-3 hover:border-[var(--border2)] transition group"
+      className="w-full text-left bg-[var(--card)] border border-[var(--border)] rounded-lg p-3.5 hover:border-[var(--border2)] hover:bg-[var(--card-h)] transition group"
       style={{ cursor: lesson ? "pointer" : "default" }}
       aria-label={`Open lesson: ${rec.lesson}`}
     >
-      <div className="flex items-start gap-3">
-        <div className="w-9 h-9 rounded-xl bg-[var(--card-h)] border border-[var(--border)] flex items-center justify-center shrink-0">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-[var(--card-h)] border border-[var(--border)] flex items-center justify-center shrink-0">
           <BookOpen className="w-4 h-4 text-[var(--t1)]" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-0.5">
-            <span className="text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-[var(--card-h)] text-[var(--t3)] border border-[var(--border)]">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[9px] font-mono uppercase tracking-[0.1em] px-1.5 py-0.5 rounded bg-[var(--card-h)] text-[var(--t3)] border border-[var(--border)] shrink-0">
               P{rec.phase}
             </span>
             <span className="font-d text-sm font-bold text-[var(--t1)] truncate">
@@ -323,13 +339,13 @@ function RecommendedLessonCard({
             </span>
           </div>
           {rec.reason && (
-            <p className="text-xs text-[var(--t2)] leading-relaxed">
+            <p className="text-xs text-[var(--t2)] leading-relaxed line-clamp-2">
               {rec.reason}
             </p>
           )}
         </div>
         {lesson && (
-          <ChevronRight className="w-4 h-4 text-[var(--t3)] group-hover:translate-x-0.5 transition-transform shrink-0 mt-1" />
+          <ChevronRight className="w-4 h-4 text-[var(--t3)] group-hover:text-[var(--t1)] group-hover:translate-x-0.5 transition shrink-0" />
         )}
       </div>
     </motion.button>
@@ -342,12 +358,15 @@ function TipItem({ tip, index }: { tip: string; index: number }) {
       initial={{ opacity: 0, x: -8 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: 0.1 + index * 0.06, duration: 0.3 }}
-      className="flex items-start gap-2.5"
+      className="flex items-start gap-3"
     >
-      <span className="text-[var(--t3)] mt-1.5 shrink-0 select-none" aria-hidden>
-        —
+      <span
+        className="font-mono text-[10px] font-bold text-[var(--t3)] mt-0.5 shrink-0 tabular-nums"
+        aria-hidden
+      >
+        {String(index + 1).padStart(2, "0")}
       </span>
-      <span className="text-xs text-[var(--t2)] leading-relaxed flex-1 pt-0.5">
+      <span className="text-xs text-[var(--t2)] leading-relaxed flex-1">
         {tip}
       </span>
     </motion.li>
@@ -360,15 +379,64 @@ function LoadingState() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="flex flex-col items-center justify-center py-10"
+      className="py-1"
     >
-      {/* Simple spinner: thin border track + var(--p) top */}
-      <div className="w-8 h-8 rounded-full border-2 border-[var(--border)] border-t-[var(--p)] animate-spin mb-4" />
-      <div className="text-sm font-d font-semibold text-[var(--t2)]">
-        Analyzing…
+      {/* Spinner + status row */}
+      <div className="flex items-center gap-3 mb-6">
+        <div className="w-8 h-8 rounded-full border-2 border-[var(--border)] border-t-[var(--p)] animate-spin shrink-0" />
+        <div>
+          <div className="text-sm font-d font-semibold text-[var(--t1)]">
+            Analyzing your pronunciation…
+          </div>
+          <div className="text-[11px] text-[var(--t3)] mt-0.5 font-mono">
+            Reading phoneme scores · picking lessons · crafting tips
+          </div>
+        </div>
       </div>
-      <div className="text-[11px] text-[var(--t3)] mt-1 font-mono">
-        Reading phoneme scores · picking lessons · crafting tips
+
+      {/* Skeleton — Focus Areas preview */}
+      <div className="mb-5">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-3.5 h-3.5 rounded-sm bg-[var(--card-h)] animate-pulse" />
+          <div className="h-3 w-28 rounded bg-[var(--card-h)] animate-pulse" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          {[0, 1].map((i) => (
+            <div
+              key={i}
+              className="rounded-lg border border-[var(--border)] p-3.5"
+            >
+              <div className="flex items-center gap-3 mb-2.5">
+                <div className="w-12 h-12 rounded-xl bg-[var(--card-h)] animate-pulse" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-2.5 w-20 rounded bg-[var(--card-h)] animate-pulse" />
+                  <div className="h-1 w-full rounded bg-[var(--card-h)] animate-pulse" />
+                </div>
+              </div>
+              <div className="h-2 w-3/4 rounded bg-[var(--card-h)] animate-pulse" />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Skeleton — Recommended Lessons preview */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-3.5 h-3.5 rounded-sm bg-[var(--card-h)] animate-pulse" />
+          <div className="h-3 w-32 rounded bg-[var(--card-h)] animate-pulse" />
+        </div>
+        {[0, 1].map((i) => (
+          <div
+            key={i}
+            className="rounded-lg border border-[var(--border)] p-3.5 flex items-center gap-3"
+          >
+            <div className="w-10 h-10 rounded-xl bg-[var(--card-h)] animate-pulse shrink-0" />
+            <div className="flex-1 space-y-2">
+              <div className="h-2.5 w-2/3 rounded bg-[var(--card-h)] animate-pulse" />
+              <div className="h-2 w-1/2 rounded bg-[var(--card-h)] animate-pulse" />
+            </div>
+          </div>
+        ))}
       </div>
     </motion.div>
   );
@@ -606,15 +674,15 @@ export function CoachInsights() {
       className="relative"
       aria-label="Coach Insights"
     >
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between mb-3">
         <h2 className="font-d text-base font-bold flex items-center gap-2 text-[var(--t1)]">
-          <Sparkles className="w-4 h-4 text-[var(--t1)]" />
+          <Sparkles className="w-4 h-4 text-[var(--t1)]" strokeWidth={2.25} />
           <span>Coach Insights</span>
         </h2>
         {view === "success" && (
           <button
             onClick={handleGetInsights}
-            className="text-[10px] font-mono uppercase tracking-wider flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-[var(--card)] border border-[var(--border)] text-[var(--t2)] hover:text-[var(--t1)] hover:border-[var(--border2)] transition"
+            className="text-[10px] font-mono uppercase tracking-[0.1em] flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-[var(--card)] border border-[var(--border)] text-[var(--t2)] hover:text-[var(--t1)] hover:border-[var(--border2)] transition"
             aria-label="Refresh insights"
           >
             <RefreshCw className="w-3 h-3" />
@@ -636,10 +704,10 @@ export function CoachInsights() {
                 exit={{ opacity: 0, y: -8 }}
                 className="text-center py-4"
               >
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl mb-3 bg-[var(--card-h)] border border-[var(--border)]">
-                  <Sparkles className="w-7 h-7 text-[var(--t1)]" />
+                <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-4 bg-[var(--card-h)] border border-[var(--border)]">
+                  <Sparkles className="w-6 h-6 text-[var(--t1)]" strokeWidth={2} />
                 </div>
-                <div className="font-d text-base font-bold text-[var(--t1)] mb-1">
+                <div className="font-d text-lg font-bold text-[var(--t1)] mb-1.5">
                   Get your AI practice plan
                 </div>
                 <p className="text-xs text-[var(--t2)] leading-relaxed max-w-xs mx-auto mb-4">
@@ -651,12 +719,30 @@ export function CoachInsights() {
                         phonemeMastery.length !== 1 ? "s" : ""
                       } tracked — I'll build a personalized plan in seconds.`}
                 </p>
+
+                {/* Insight type chips — preview what you'll get */}
+                <div className="flex items-center justify-center gap-1.5 mb-5">
+                  {[
+                    { icon: Target, label: "Focus Areas" },
+                    { icon: BookOpen, label: "Lessons" },
+                    { icon: Lightbulb, label: "Tips" },
+                  ].map((chip) => (
+                    <span
+                      key={chip.label}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--bg2)] border border-[var(--border)] text-[10px] font-mono uppercase tracking-[0.08em] text-[var(--t3)]"
+                    >
+                      <chip.icon className="w-3 h-3" strokeWidth={2} />
+                      {chip.label}
+                    </span>
+                  ))}
+                </div>
+
                 <motion.button
                   onClick={handleGetInsights}
                   whileTap={{ scale: 0.98 }}
-                  className="inline-flex items-center gap-2 bg-[var(--p)] text-white rounded-xl px-5 py-2.5 text-sm font-semibold hover:opacity-80 transition"
+                  className="inline-flex items-center gap-2 bg-[var(--p)] text-white rounded-xl px-6 py-3 text-sm font-semibold hover:opacity-90 transition"
                 >
-                  <Zap className="w-4 h-4" />
+                  <Zap className="w-4 h-4" strokeWidth={2.25} />
                   Get AI Insights
                 </motion.button>
               </motion.div>
@@ -683,8 +769,8 @@ export function CoachInsights() {
                 exit={{ opacity: 0, y: -8 }}
                 className="flex flex-col items-center text-center py-6"
               >
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-3 bg-[var(--card-h)] border border-[var(--border)]">
-                  <AlertTriangle className="w-6 h-6 text-[var(--rd)]" />
+                <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-3 bg-[var(--card-h)] border border-[var(--border)]">
+                  <AlertTriangle className="w-5 h-5 text-[var(--rd)]" strokeWidth={2} />
                 </div>
                 <div className="font-d text-sm font-bold text-[var(--t1)] mb-1">
                   Couldn&apos;t fetch insights
@@ -694,7 +780,7 @@ export function CoachInsights() {
                 </p>
                 <button
                   onClick={handleGetInsights}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold border border-[var(--border2)] text-[var(--t1)] hover:bg-[var(--card-h)] transition"
+                  className="inline-flex items-center gap-2 px-4 min-h-[36px] rounded-xl text-xs font-semibold border border-[var(--border2)] text-[var(--t1)] hover:bg-[var(--card-h)] transition"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                   Try again
@@ -717,12 +803,12 @@ export function CoachInsights() {
                     {/* Focus Areas */}
                     {parsed.focusAreas.length > 0 && (
                       <section>
-                        <div className="flex items-center gap-2 mb-2.5">
-                          <Target className="w-3.5 h-3.5 text-[var(--t1)]" />
+                        <div className="flex items-center gap-2 mb-3">
+                          <Target className="w-3.5 h-3.5 text-[var(--t1)]" strokeWidth={2.25} />
                           <h3 className="font-d text-sm font-bold text-[var(--t1)]">
                             Your Focus Areas
                           </h3>
-                          <span className="text-[10px] font-mono text-[var(--t3)] ml-auto">
+                          <span className="text-[10px] font-mono uppercase tracking-[0.1em] text-[var(--t3)] ml-auto">
                             {parsed.focusAreas.length} sound
                             {parsed.focusAreas.length !== 1 ? "s" : ""}
                           </span>
@@ -744,12 +830,12 @@ export function CoachInsights() {
                     {/* Recommended Lessons */}
                     {parsed.recommendedLessons.length > 0 && (
                       <section>
-                        <div className="flex items-center gap-2 mb-2.5">
-                          <BookOpen className="w-3.5 h-3.5 text-[var(--t1)]" />
+                        <div className="flex items-center gap-2 mb-3">
+                          <BookOpen className="w-3.5 h-3.5 text-[var(--t1)]" strokeWidth={2.25} />
                           <h3 className="font-d text-sm font-bold text-[var(--t1)]">
                             Recommended Lessons
                           </h3>
-                          <span className="text-[10px] font-mono text-[var(--t3)] ml-auto">
+                          <span className="text-[10px] font-mono uppercase tracking-[0.1em] text-[var(--t3)] ml-auto">
                             tap to open
                           </span>
                         </div>
@@ -771,11 +857,15 @@ export function CoachInsights() {
                     {/* Practice Tips */}
                     {parsed.tips.length > 0 && (
                       <section>
-                        <div className="flex items-center gap-2 mb-2.5">
-                          <Lightbulb className="w-3.5 h-3.5 text-[var(--t1)]" />
+                        <div className="flex items-center gap-2 mb-3">
+                          <Lightbulb className="w-3.5 h-3.5 text-[var(--t1)]" strokeWidth={2.25} />
                           <h3 className="font-d text-sm font-bold text-[var(--t1)]">
                             Practice Tips
                           </h3>
+                          <span className="text-[10px] font-mono uppercase tracking-[0.1em] text-[var(--t3)] ml-auto">
+                            {parsed.tips.length} tip
+                            {parsed.tips.length !== 1 ? "s" : ""}
+                          </span>
                         </div>
                         <ul className="space-y-2.5">
                           {parsed.tips.map((tip, i) => (
@@ -786,7 +876,7 @@ export function CoachInsights() {
                     )}
 
                     {/* Footer note */}
-                    <div className="text-[10px] text-[var(--t3)] font-mono text-center pt-2 border-t border-[var(--border)]">
+                    <div className="text-[10px] text-[var(--t3)] font-mono text-center pt-3 mt-1 border-t border-[var(--border)]">
                       Generated by AccentAI Coach ·{" "}
                       <button
                         onClick={handleGetInsights}
@@ -799,16 +889,16 @@ export function CoachInsights() {
                 ) : (
                   // Fallback: raw text response
                   <section>
-                    <div className="flex items-center gap-2 mb-2.5">
-                      <Sparkles className="w-3.5 h-3.5 text-[var(--t1)]" />
+                    <div className="flex items-center gap-2 mb-3">
+                      <Sparkles className="w-3.5 h-3.5 text-[var(--t1)]" strokeWidth={2.25} />
                       <h3 className="font-d text-sm font-bold text-[var(--t1)]">
                         Coach Advice
                       </h3>
                     </div>
-                    <div className="rounded-lg p-3.5 bg-[var(--card-h)] border border-[var(--border)] text-xs text-[var(--t2)] leading-relaxed whitespace-pre-wrap">
+                    <div className="rounded-lg p-3.5 bg-[var(--bg2)] border border-[var(--border)] text-xs text-[var(--t2)] leading-relaxed whitespace-pre-wrap">
                       {rawText}
                     </div>
-                    <div className="text-[10px] text-[var(--t3)] font-mono text-center pt-2 mt-2">
+                    <div className="text-[10px] text-[var(--t3)] font-mono text-center pt-3 mt-3 border-t border-[var(--border)]">
                       Generated by AccentAI Coach
                     </div>
                   </section>

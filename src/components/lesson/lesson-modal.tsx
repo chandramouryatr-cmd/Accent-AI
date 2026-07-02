@@ -2,11 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, X, Check, RotateCcw, NotebookPen, Gauge, Volume2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, Check, RotateCcw, NotebookPen, Volume2 } from "lucide-react";
 import type { Lesson, LessonStep } from "@/lib/types";
 import { useAppStore } from "@/lib/store";
 import { speak, stopSpeaking, loadVoices, unlockTTS, isSpeaking, onSpeakingChange } from "@/lib/tts";
-import { WaveformCanvas } from "@/components/widgets/waveform-canvas";
 import { MouthDiagram } from "@/components/widgets/mouth-diagram";
 import { VowelChart } from "@/components/widgets/vowel-chart";
 import { StressBars } from "@/components/widgets/stress-bars";
@@ -150,7 +149,7 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
   // pattern instead of setState-in-effect (react-hooks/set-state-in-effect).
   const [prevStepIdx, setPrevStepIdx] = useState(stepIdx);
   const [showNotesPanel, setShowNotesPanel] = useState(false);
-  const [ttsSpeed, setTtsSpeed] = useState(1);
+  const ttsSpeed = 1;
   // Speaking state — drives the header indicator (Bug 3 fix)
   const [speaking, setSpeaking] = useState(false);
 
@@ -551,8 +550,6 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
               step={step}
               lesson={lesson}
               speak={handleSpeak}
-              ttsSpeed={ttsSpeed}
-              setTtsSpeed={setTtsSpeed}
               quizAnswer={quizAnswer}
               setQuizAnswer={setQuizAnswer}
               practiceScore={practiceScore}
@@ -695,8 +692,6 @@ interface StepRendererProps {
   step: LessonStep;
   lesson: Lesson;
   speak: (text: string) => void;
-  ttsSpeed: number;
-  setTtsSpeed: (s: number) => void;
   quizAnswer: number | null;
   setQuizAnswer: (n: number | null) => void;
   practiceScore: number | null;
@@ -710,11 +705,11 @@ interface StepRendererProps {
 }
 
 function StepRenderer(props: StepRendererProps) {
-  const { step, lesson, speak, ttsSpeed, setTtsSpeed } = props;
+  const { step, lesson, speak } = props;
 
   switch (step.type) {
     case "intro":
-      return <IntroStepView step={step} lesson={lesson} speak={speak} ttsSpeed={ttsSpeed} setTtsSpeed={setTtsSpeed} />;
+      return <IntroStepView step={step} lesson={lesson} />;
     case "concept":
       return <ConceptStepView step={step} />;
     case "example":
@@ -752,27 +747,17 @@ function StepRenderer(props: StepRendererProps) {
 
 // ─── Individual step views ───
 
-const TTS_SPEEDS = [0.6, 0.8, 1, 1.2] as const;
-
-function IntroStepView({ step, lesson, speak, ttsSpeed, setTtsSpeed }: {
+function IntroStepView({ step, lesson }: {
   step: Extract<LessonStep, { type: "intro" }>;
   lesson: Lesson;
-  speak: (t: string) => void;
-  ttsSpeed: number;
-  setTtsSpeed: (s: number) => void;
 }) {
   return (
-    <div className="space-y-5 text-center relative">
-      {/* Subtle background glow */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-64 h-64 rounded-full bg-[rgba(99,102,241,0.06)] blur-[60px]" />
-      </div>
-
+    <div className="space-y-5 text-center">
       <motion.div
         initial={{ scale: 0.6, opacity: 0, rotate: -8 }}
         animate={{ scale: 1, opacity: 1, rotate: 0 }}
         transition={{ type: "spring", stiffness: 200, damping: 14 }}
-        className="relative z-10 flex flex-col items-center gap-1.5 mb-2"
+        className="flex flex-col items-center gap-1.5 mb-2"
       >
         <div className="animate-gentle-float">
           <IntroIllustration visual={step.visual} emoji={step.emoji} size={120} />
@@ -793,7 +778,6 @@ function IntroStepView({ step, lesson, speak, ttsSpeed, setTtsSpeed }: {
         initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
-        className="relative z-10"
       >
         <div className="flex items-center justify-center gap-2 mb-2">
           <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--t3)] font-mono">
@@ -801,65 +785,13 @@ function IntroStepView({ step, lesson, speak, ttsSpeed, setTtsSpeed }: {
           </div>
           <DifficultyBadge lesson={lesson} size="sm" />
         </div>
-        <h1 className="font-d text-3xl font-bold mb-2">
-          <span className="grad-text">{step.title}</span>
+        <h1 className="font-d text-3xl font-bold mb-2 text-[var(--t1)]">
+          {step.title}
         </h1>
         <p className="text-[var(--t2)] text-base mb-4">{step.subtitle}</p>
         <p className="text-[var(--t2)] text-sm leading-relaxed max-w-md mx-auto">
           {step.description}
         </p>
-      </motion.div>
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4 }}
-        className="relative z-10"
-      >
-        <div className="rounded-2xl overflow-hidden border border-[var(--border)] relative">
-          <WaveformCanvas height={140} />
-          <div className="absolute inset-0 bg-gradient-to-t from-[var(--bg)] via-transparent to-transparent" />
-        </div>
-      </motion.div>
-      <motion.button
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.5 }}
-        whileHover={{ scale: 1.04 }}
-        whileTap={{ scale: 0.96 }}
-        onClick={() => speak(step.title)}
-        className="px-5 py-2.5 rounded-xl bg-[var(--card-h)] border border-[var(--border2)] text-sm font-semibold flex items-center gap-2 mx-auto hover:bg-[var(--card)] transition relative z-10"
-      >
-        ▶ Hear the title
-      </motion.button>
-
-      {/* TTS Speed Control */}
-      <motion.div
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.6 }}
-        className="flex items-center justify-center gap-1.5 relative z-10"
-      >
-        <Gauge className="w-3.5 h-3.5 text-[var(--t3)] shrink-0" />
-        {TTS_SPEEDS.map((speed) => {
-          const isSelected = ttsSpeed === speed;
-          return (
-            <motion.button
-              key={speed}
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.92 }}
-              onClick={() => setTtsSpeed(speed)}
-              className={`px-2.5 py-1 rounded-full text-[11px] font-mono font-semibold transition-all ${
-                isSelected
-                  ? "bg-[var(--grad-btn)] text-white shadow-[0_0_10px_rgba(99,102,241,0.5)]"
-                  : "bg-[var(--card)] text-[var(--t3)] border border-[var(--border)] hover:border-[var(--p3)] hover:text-[var(--t2)]"
-              }`}
-              aria-label={`Set speed to ${speed}x`}
-              aria-pressed={isSelected}
-            >
-              {speed}×
-            </motion.button>
-          );
-        })}
       </motion.div>
     </div>
   );
@@ -1064,9 +996,6 @@ function ShadowStepView({ step, speak }: { step: Extract<LessonStep, { type: "sh
           </div>
           <div className="font-d text-xl text-[var(--t1)]">{step.phrase}</div>
           <div className="font-mono text-sm text-[var(--t3)] mt-1">{step.ipa}</div>
-        </div>
-        <div className="rounded-xl overflow-hidden border border-[var(--border)] mb-3">
-          <WaveformCanvas height={80} />
         </div>
         <button
           onClick={() => {

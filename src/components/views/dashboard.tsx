@@ -546,7 +546,9 @@ export function DashboardView() {
 
       {/* Daily Challenge */}
       <div>
-        <h2 className="font-d text-base font-bold mb-2 text-[var(--t1)]">Daily Challenge</h2>
+        <h2 className="font-d text-base font-bold mb-3 text-[var(--t1)]">
+          Daily Challenge
+        </h2>
         <DailyChallengeCard />
       </div>
 

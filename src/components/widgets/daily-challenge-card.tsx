@@ -12,14 +12,30 @@ import {
 } from "@/lib/daily-challenges";
 import { useToastStore } from "@/lib/toast-store";
 
-// Kept for reference but no longer used for the badge background — minimal monochrome only.
-const DIFFICULTY_COLORS: Record<string, string> = {
-  Easy: "#10b981",
-  Medium: "#f59e0b",
-  Hard: "#ef4444",
-};
-
 const STORAGE_KEY = "accentai-dc-completed";
+
+// Subtle difficulty indicator — 3 dots, filled = level. Minimal, no color.
+function DifficultyIndicator({ difficulty }: { difficulty: string }) {
+  const level = difficulty === "Easy" ? 1 : difficulty === "Medium" ? 2 : 3;
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-[10px] font-mono uppercase tracking-[0.1em] text-[var(--t3)]">
+        {difficulty}
+      </span>
+      <div className="flex items-center gap-0.5">
+        {[0, 1, 2].map((i) => (
+          <span
+            key={i}
+            className={
+              "w-1 h-1 rounded-full transition-colors " +
+              (i < level ? "bg-[var(--t1)]" : "bg-[var(--border2)]")
+            }
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export function DailyChallengeCard() {
   const accent = useAppStore((s) => s.accent);
@@ -82,66 +98,74 @@ export function DailyChallengeCard() {
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4 }}
-      className="bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden"
+      className={
+        "bg-[var(--card)] border rounded-xl overflow-hidden transition-colors " +
+        (completed
+          ? "border-[var(--border2)]"
+          : "border-[var(--border)]")
+      }
     >
-      <div className="p-4">
+      <div className="p-5">
         {/* Header */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <span className="text-base">{challenge.emoji}</span>
-            <div>
-              <div className="text-[10px] uppercase tracking-wider font-mono text-[var(--t3)]">
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="flex items-start gap-2.5 min-w-0">
+            <span className="text-xl leading-none mt-0.5 shrink-0">
+              {challenge.emoji}
+            </span>
+            <div className="min-w-0">
+              <div className="text-[10px] uppercase tracking-[0.12em] font-mono text-[var(--t3)]">
                 Daily Challenge
               </div>
-              <div className="font-d font-bold text-sm text-[var(--t1)]">
-                Master the {challenge.focus}
+              <div className="font-d font-bold text-sm text-[var(--t1)] mt-0.5 leading-snug">
+                {challenge.focus}
               </div>
             </div>
           </div>
-          <span className="text-[10px] font-mono uppercase tracking-wide text-[var(--t3)] bg-[var(--card-h)] border border-[var(--border)] rounded-full px-2 py-1">
-            {challenge.difficulty}
-          </span>
+          <DifficultyIndicator difficulty={challenge.difficulty} />
         </div>
 
-        {/* Phrase */}
-        <div className="bg-[var(--bg2)] border border-[var(--border)] rounded-lg p-3 mb-3">
-          <div className="font-d text-base font-semibold mb-1.5 leading-snug text-[var(--t1)]">
-            “{challenge.phrase}”
+        {/* Phrase — prominent */}
+        <div className="mb-4">
+          <div className="font-d text-lg font-bold leading-snug text-[var(--t1)]">
+            &ldquo;{challenge.phrase}&rdquo;
           </div>
-          <div className="font-mono text-xs text-[var(--t3)] leading-relaxed">
+          <div className="font-mono text-xs text-[var(--t3)] leading-relaxed mt-1.5">
             {challenge.ipa}
           </div>
         </div>
 
-        {/* Tip — simple left-border accent */}
-        <div className="flex gap-2 mb-3 border-l-2 border-[var(--border2)] pl-3">
-          <span className="text-sm leading-relaxed">💡</span>
+        {/* Tip — clean card with subtle background */}
+        <div className="mb-4 flex gap-2.5 rounded-lg bg-[var(--bg2)] border border-[var(--border)] p-3">
+          <span className="text-sm leading-relaxed shrink-0" aria-hidden>
+            💡
+          </span>
           <p className="text-xs text-[var(--t2)] leading-relaxed flex-1">
             {challenge.tip}
           </p>
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-2">
+        {/* Actions — primary/secondary hierarchy, min 40px height */}
+        <div className="flex items-stretch gap-2">
           <button
             onClick={handlePlay}
-            className="flex-1 py-2 rounded-lg flex items-center justify-center gap-1.5 text-xs font-semibold bg-[var(--p)] text-white transition hover:opacity-90"
+            className="flex-1 min-h-[40px] px-3 rounded-lg flex items-center justify-center gap-1.5 text-xs font-semibold bg-[var(--p)] text-white transition hover:opacity-90 active:scale-[0.98]"
           >
             <Volume2 className="w-3.5 h-3.5" />
             Hear it
           </button>
           <button
             onClick={handlePlaySlow}
-            className="flex-1 py-2 rounded-lg flex items-center justify-center gap-1.5 text-xs font-semibold border border-[var(--border2)] text-[var(--t1)] hover:bg-[var(--card-h)] transition"
+            aria-label="Play slowly"
+            className="min-h-[40px] px-3.5 rounded-lg flex items-center justify-center gap-1.5 text-xs font-semibold border border-[var(--border2)] text-[var(--t1)] hover:bg-[var(--card-h)] transition active:scale-[0.98]"
           >
             <Volume2 className="w-3.5 h-3.5" />
             Slow
           </button>
           <motion.button
             onClick={handleComplete}
-            whileTap={{ scale: 0.94 }}
+            whileTap={{ scale: 0.98 }}
             className={
-              "flex-1 py-2 rounded-lg flex items-center justify-center gap-1.5 text-xs font-semibold transition " +
+              "flex-1 min-h-[40px] px-3 rounded-lg flex items-center justify-center gap-1.5 text-xs font-semibold transition " +
               (completed
                 ? "bg-[var(--p)] text-white"
                 : "border border-[var(--p)] text-[var(--p)] hover:bg-[var(--card-h)]")
@@ -149,7 +173,7 @@ export function DailyChallengeCard() {
           >
             {completed ? (
               <>
-                <Check className="w-3.5 h-3.5" /> Done!
+                <Check className="w-3.5 h-3.5" /> Done
               </>
             ) : (
               <>
@@ -159,10 +183,19 @@ export function DailyChallengeCard() {
           </motion.button>
         </div>
 
-        {/* Footer note */}
-        <div className="mt-3 flex items-center justify-between text-[10px] font-mono text-[var(--t3)]">
-          <span>New challenge every day · {DAILY_CHALLENGES.length} total</span>
-          <span>{completed ? "Completed today" : "Not done yet"}</span>
+        {/* Footer note — subtle separator */}
+        <div className="mt-4 pt-3 flex items-center justify-between text-[10px] font-mono text-[var(--t3)] border-t border-[var(--border)]">
+          <span>New challenge daily · {DAILY_CHALLENGES.length} total</span>
+          <span className="flex items-center gap-1.5">
+            {completed ? (
+              <>
+                <Check className="w-3 h-3 text-[var(--gr)]" />
+                <span className="text-[var(--t2)]">Completed today</span>
+              </>
+            ) : (
+              <span>Not done yet</span>
+            )}
+          </span>
         </div>
       </div>
     </motion.div>
