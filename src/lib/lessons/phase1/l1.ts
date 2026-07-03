@@ -71,7 +71,7 @@ const lesson: Lesson = {
       lipShape: "spread",
       sound: "iː",
       exampleWord: "see / sheep / machine",
-      image: "/vowels/ii-fleece.png",
+      image: "/vowels/ii-fleece.jpg",
     },
     {
       id: "mouth-ei",
@@ -83,7 +83,7 @@ const lesson: Lesson = {
       lipShape: "spread",
       sound: "eɪ",
       exampleWord: "face / say / play",
-      image: "/vowels/ei-face.png",
+      image: "/vowels/ei-face.jpg",
     },
     {
       id: "mouth-ai",
@@ -95,7 +95,7 @@ const lesson: Lesson = {
       lipShape: "slightly-open",
       sound: "aɪ",
       exampleWord: "price / time / my",
-      image: "/vowels/ai-price.png",
+      image: "/vowels/ai-price.jpg",
     },
     {
       id: "mouth-ou",
@@ -107,7 +107,7 @@ const lesson: Lesson = {
       lipShape: "rounded",
       sound: "oʊ",
       exampleWord: "goat / go / boat",
-      image: "/vowels/ou-goat.png",
+      image: "/vowels/ou-goat.jpg",
     },
     {
       id: "mouth-ae",
@@ -119,7 +119,7 @@ const lesson: Lesson = {
       lipShape: "spread",
       sound: "æ",
       exampleWord: "cat / bad / apple",
-      image: "/vowels/ae-trap.png",
+      image: "/vowels/ae-trap.jpg",
     },
     {
       id: "example-1",

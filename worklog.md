@@ -2650,3 +2650,28 @@ Unresolved Issues / Next Phase Priorities:
 - MEDIUM: Practice, Progress views still have residual old dark-theme/colored styling (carried over).
 - MEDIUM: The mouth-diagram.tsx widget still has the old colored SVG gradients (indigo/violet/cyan/pink/orange) when no image is provided — other lessons that use mouth-diagram without an image still show the old colored SVG. Consider simplifying that SVG to minimal too.
 - LOW: Consider adding similar reference images to other lessons (Consonant Clusters, Mouth Positioning) for visual consistency.
+
+---
+Task ID: 15 (Round 15 — Main Agent)
+Task: Replace the 5 vowel images in the Vowel Sounds A–E lesson with new user-provided versions
+
+Work Log:
+- User uploaded 5 new vowel images (.jpg versions). Used VLM (z-ai vision) to identify each:
+  - AMx.jpg → /eɪ/ FACE
+  - AMsa.jpg → /iː/ FLEECE
+  - AMa.jpg → /aɪ/ PRICE
+  - AM.jpg → /oʊ/ GOAT
+  - AMs.jpg → /æ/ TRAP
+- Removed the 5 old .png files from /public/vowels/ (ei-face.png, ii-fleece.png, ai-price.png, ou-goat.png, ae-trap.png).
+- Copied the 5 new .jpg files to /public/vowels/ with the same clean base names (.jpg extension):
+  - ei-face.jpg, ii-fleece.jpg, ai-price.jpg, ou-goat.jpg, ae-trap.jpg
+- Updated phase1/l1.ts: changed all 5 `image:` paths from `.png` → `.jpg` (MultiEdit, 5 replacements).
+- No changes needed to types.ts or mouth-diagram.tsx — the `image?: string` field and rendering logic are extension-agnostic.
+- `bun run lint` → EXIT 0.
+- Dev server: clean compiles, GET / 200, no 404s for image paths.
+- agent-browser + VLM verification:
+  - Step 4 (/iː/): VLM confirmed "/iː/; example word: FLEECE" image visible and clear.
+  - Step 7 (/oʊ/): VLM confirmed "/əʊ/; example word: goat" image visible and clear.
+
+Stage Summary:
+- All 5 vowel images in the Vowel Sounds A–E lesson have been replaced with the new user-provided .jpg versions. The mapping is correct (each image matched to its phoneme via VLM analysis). Old .png files removed; lesson file paths updated to .jpg. Lint passes, dev server clean, images render correctly in the browser.
