@@ -71,6 +71,43 @@ const lesson: Lesson = {
       lipShape: "spread",
       sound: "iː",
       exampleWord: "see / sheep / machine",
+      image: "/vowels/ii-fleece.png",
+    },
+    {
+      id: "mouth-ei",
+      type: "mouth-diagram",
+      title: "Mouth Position for /eɪ/",
+      description:
+        "For the /eɪ/ sound (as in 'face'), start with your tongue in a front-mid position, then glide upward toward /ɪ/. Lips stay slightly spread. It's a diphthong — two sounds blending into one smooth motion.",
+      tonguePosition: "front-mid",
+      lipShape: "spread",
+      sound: "eɪ",
+      exampleWord: "face / say / play",
+      image: "/vowels/ei-face.png",
+    },
+    {
+      id: "mouth-ai",
+      type: "mouth-diagram",
+      title: "Mouth Position for /aɪ/",
+      description:
+        "For the /aɪ/ sound (as in 'price'), drop your jaw and start with the tongue low and central, then glide up to a high front position. Lips are open and relaxed throughout. Feel the jaw close as the tongue rises.",
+      tonguePosition: "central-mid",
+      lipShape: "slightly-open",
+      sound: "aɪ",
+      exampleWord: "price / time / my",
+      image: "/vowels/ai-price.png",
+    },
+    {
+      id: "mouth-ou",
+      type: "mouth-diagram",
+      title: "Mouth Position for /oʊ/",
+      description:
+        "For the /oʊ/ sound (as in 'goat'), pull your tongue back to mid-height and round your lips into a small 'O' shape. The lips protrude slightly forward. This is the most 'back' of the 5 core vowels.",
+      tonguePosition: "back-low",
+      lipShape: "rounded",
+      sound: "oʊ",
+      exampleWord: "goat / go / boat",
+      image: "/vowels/ou-goat.png",
     },
     {
       id: "mouth-ae",
@@ -82,6 +119,7 @@ const lesson: Lesson = {
       lipShape: "spread",
       sound: "æ",
       exampleWord: "cat / bad / apple",
+      image: "/vowels/ae-trap.png",
     },
     {
       id: "example-1",

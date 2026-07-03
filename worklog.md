@@ -2589,3 +2589,64 @@ Unresolved Issues / Next Phase Priorities:
 - MEDIUM: Practice, Progress views still have residual old dark-theme/colored styling — should be simplified to match minimal white/black aesthetic (carried over from Round 11/12).
 - MEDIUM: AI Coach FAB + chat panel may still have colored styling.
 - LOW: TTS voice quality is ultimately bounded by what voices the user's browser/OS has installed. On Chrome (any OS) Google voices are available; on Edge the Microsoft Natural voices; on macOS the system voices. If none are present, it falls back to the best available English voice. Consider detecting voice quality and showing a hint if only robotic voices are available.
+
+---
+Task ID: 14 (Round 14 — Main Agent)
+Task: Add 5 user-provided vowel-sound images to the "Vowel Sounds A–E" lesson (P1·L1), matched to each of the 5 core vowels
+
+Work Log:
+- User uploaded 5 ChatGPT-generated vowel diagrams. Used VLM (z-ai vision) to identify each:
+  - 11_58_25 AM.png → /eɪ/ FACE (letter A)
+  - 11_58_31 AM.png → /iː/ FLEECE (letter E)
+  - 11_58_39 AM.png → /aɪ/ PRICE (letter I)
+  - 11_58_45 AM.png → /oʊ/ GOAT (letter O)
+  - 11_58_52 AM.png → /æ/ TRAP (short A)
+- Read phase1/l1.ts: lesson had only 2 mouth-diagram steps (/iː/ and /æ/). Needed to add 3 more (eɪ, aɪ, oʊ) and wire images to all 5.
+- Read types.ts MouthDiagramStep + mouth-diagram.tsx widget to plan the integration.
+
+### Step 1: Copy images to /public/vowels/
+- Copied 5 images with clean names: ei-face.png, ii-fleece.png, ai-price.png, ou-goat.png, ae-trap.png → /home/z/my-project/public/vowels/
+
+### Step 2: Add image? field to MouthDiagramStep type
+- Added `image?: string` to the MouthDiagramStep interface in types.ts with a JSDoc comment explaining it's a reference image path shown above the SVG.
+
+### Step 3: Update mouth-diagram.tsx widget
+- Destructured `image` from step props.
+- Added an image block after the description: `<img src={image} ... className="w-full h-auto block" />` inside a `rounded-2xl overflow-hidden border bg-[var(--card)]` container.
+- Wrapped the SVG cross-section + tongue/lip legend in `{!image && (<>...</>)}` so they're hidden when an image is present (avoiding redundancy — the image already shows mouth/tongue/lip/jaw info). Kept the "Hear" and "Try it" buttons visible.
+- Fixed a JSX parsing error (multi-element conditional) by adding a `<>...</>` fragment wrapper.
+
+### Step 4: Update phase1/l1.ts lesson
+- Wired `image: "/vowels/ii-fleece.png"` to the existing mouth-ee step (/iː/).
+- Wired `image: "/vowels/ae-trap.png"` to the existing mouth-ae step (/æ/).
+- Added 3 NEW mouth-diagram steps with descriptions, tonguePosition, lipShape, sound, exampleWord, and image:
+  - mouth-ei: /eɪ/ FACE → front-mid, spread, /vowels/ei-face.png
+  - mouth-ai: /aɪ/ PRICE → central-mid, slightly-open, /vowels/ai-price.png
+  - mouth-ou: /oʊ/ GOAT → back-low, rounded, /vowels/ou-goat.png
+- Lesson now has 5 sequential mouth-diagram steps (Steps 4-8) covering all 5 core vowels, each with its educational image.
+
+### Verification
+- `bun run lint` → EXIT 0 (after fixing the fragment error).
+- Dev server: clean compiles, `GET / 200` after fix (one transient 500 during the brief fragment-error window, resolved).
+- agent-browser + VLM verification:
+  - Opened Vowel Sounds A–E lesson → step navigator shows 14 steps total, with Steps 4-8 = mouth diagrams for /iː/, /eɪ/, /aɪ/, /oʊ/, /æ/.
+  - Step 4 (/iː/): VLM confirmed "/iː/ FLEECE" image clearly visible, 3D anatomical illustration with pink tongue, labels legible, no visual issues.
+  - Step 5 (/eɪ/): VLM confirmed /eɪ/ (face) image visible.
+  - Step 7 (/oʊ/): VLM confirmed /oʊ/ (goat) image visible.
+
+Stage Summary:
+- **5 vowel images integrated** into the Vowel Sounds A–E lesson, each matched to its phoneme:
+  - Step 4: /iː/ FLEECE → ii-fleece.png
+  - Step 5: /eɪ/ FACE → ei-face.png
+  - Step 6: /aɪ/ PRICE → ai-price.png
+  - Step 7: /oʊ/ GOAT → ou-goat.png
+  - Step 8: /æ/ TRAP → ae-trap.png
+- **3 new mouth-diagram steps added** (previously only /iː/ and /æ/ had mouth diagrams; now all 5 core vowels do).
+- **MouthDiagram widget enhanced**: when `step.image` is provided, the image renders as the primary visual and the SVG cross-section + tongue/lip legend are hidden (the image is more informative). The "Hear" and "Try it" buttons remain functional.
+- **Type-safe**: `image?: string` added to MouthDiagramStep interface; all other step types unaffected.
+- Lint: PASS. Dev server: clean. Browser-verified: images render clearly on all 5 mouth-diagram steps.
+
+Unresolved Issues / Next Phase Priorities:
+- MEDIUM: Practice, Progress views still have residual old dark-theme/colored styling (carried over).
+- MEDIUM: The mouth-diagram.tsx widget still has the old colored SVG gradients (indigo/violet/cyan/pink/orange) when no image is provided — other lessons that use mouth-diagram without an image still show the old colored SVG. Consider simplifying that SVG to minimal too.
+- LOW: Consider adding similar reference images to other lessons (Consonant Clusters, Mouth Positioning) for visual consistency.

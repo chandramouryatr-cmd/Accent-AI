@@ -81,6 +81,10 @@ export interface MouthDiagramStep extends BaseStep {
   lipShape: "relaxed" | "rounded" | "spread" | "slightly-open";
   sound?: string; // e.g. "æ"
   exampleWord?: string;
+  /** Optional path to a reference image (e.g. "/vowels/ae-trap.png") shown
+   *  above the interactive SVG. When provided, the image is rendered as the
+   *  primary visual and the SVG mouth cross-section is hidden. */
+  image?: string;
 }
 
 export interface VowelChartStep extends BaseStep {

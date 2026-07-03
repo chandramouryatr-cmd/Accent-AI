@@ -15,7 +15,7 @@ interface Props {
 // a "speaking" animation state, and a Try-It (visual-only) button.
 
 export function MouthDiagram({ step, speak }: Props) {
-  const { tonguePosition, lipShape, sound, exampleWord, description, title } = step;
+  const { tonguePosition, lipShape, sound, exampleWord, description, title, image } = step;
   const [speaking, setSpeaking] = useState(false);
   const [tryIt, setTryIt] = useState(false);
 
@@ -67,7 +67,20 @@ export function MouthDiagram({ step, speak }: Props) {
       {title && <h4 className="font-d font-semibold text-lg text-[var(--t1)]">{title}</h4>}
       <p className="text-[var(--t2)] text-sm leading-relaxed">{description}</p>
 
+      {image && (
+        <div className="relative rounded-2xl overflow-hidden border border-[var(--border)] bg-[var(--card)]">
+          <img
+            src={image}
+            alt={`Mouth position diagram for the ${sound ? `/${sound}/` : ""} vowel sound`}
+            className="w-full h-auto block"
+            loading="lazy"
+          />
+        </div>
+      )}
+
       <div className="relative rounded-2xl p-4 bg-[rgba(99,102,241,0.04)] border border-[var(--border)]">
+        {!image && (
+        <>
         <svg viewBox="0 0 280 280" className="w-full max-w-[320px] mx-auto block">
           <defs>
             <linearGradient id="tongueGrad" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -310,6 +323,8 @@ export function MouthDiagram({ step, speak }: Props) {
             <span className="text-[var(--t2)]">Lips: {lipShape}</span>
           </div>
         </div>
+        </>
+        )}
 
         <div className="mt-3 flex gap-2">
           {exampleWord && (
