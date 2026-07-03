@@ -8,7 +8,7 @@ import { PHASES } from "@/lib/types";
 import { ALL_LESSONS, getLessonsForPhase } from "@/lib/lessons";
 import { DifficultyBadge } from "@/components/widgets/difficulty-badge";
 
-type FilterMode = "all" | "completed" | "in-progress" | "not-started" | "bookmarked";
+type FilterMode = "all" | "completed" | "in-progress" | "not-started";
 
 /** Check if a completed lesson needs review (>2 days since completion or last review) */
 function needsReview(completedAt: number | null, lastReviewedAt: number | null): boolean {
@@ -115,8 +115,6 @@ export function JourneyView() {
       result = result.filter((item) => item.status === "in-progress");
     } else if (activeFilter === "not-started") {
       result = result.filter((item) => item.status === "not-started");
-    } else if (activeFilter === "bookmarked") {
-      result = result.filter((item) => item.isBookmarked);
     }
 
     return result;
@@ -127,7 +125,6 @@ export function JourneyView() {
     { key: "completed", label: "Completed" },
     { key: "in-progress", label: "In Progress" },
     { key: "not-started", label: "Not Started" },
-    { key: "bookmarked", label: "⭐ Bookmarked" },
   ];
 
   return (

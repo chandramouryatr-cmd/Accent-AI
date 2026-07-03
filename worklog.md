@@ -2501,3 +2501,38 @@ Stage Summary:
 - **Developer Switch fully wired**: toggle in More view (section 8) unlocks — all 8 phases in Journey, all 32 lessons, free XP shop items, AND UK English accent in onboarding (when dev mode is on, UK card is selectable; off = "Soon" badge). The 8 decorative coming-soon accents (German/French/etc.) remain locked since they're not valid Accent types.
 - **Lint: PASS** (exit 0). Dev server compiles cleanly.
 - **agent-browser verification (full flow)**: onboarding login → accent select (UK locked, dev off) → select USA → begin → dashboard (Daily Challenge + Coach Insights look polished) → open lesson → intro has NO "Hear the title"/waveform/speed-control/glow (confirmed via vision) → Continue advances step 1→2 ✓ → close lesson → More view → enable Developer Mode → "Unlocked: All 8 Phases, All 32 Lessons, Free XP Shop, Unlimited XP" → Journey shows 6+ phases all unlocked (no lock icons) → More view UK English now selectable. All verified.
+
+---
+Task ID: 12 (Round 12 — Main Agent)
+Agent: Main Orchestrator
+Task: Remove the "Bookmarked" filter chip from the Journey view filter row (user pointed at screenshot of filter buttons: All / Completed / In Progress / Not Started / ⭐ Bookmarked)
+
+Work Log:
+- User uploaded screenshot (pasted_image_1783058418928.png) showing the Journey view filter chip row with 5 buttons: "All" (selected/black), "Completed", "In Progress", "Not Started", and "⭐ Bookmarked" (only one with an icon, breaks the status-filter pattern).
+- Used VLM (z-ai vision) to analyze the screenshot and confirm the "Bookmarked" chip is the out-of-place element (only one with a star icon; the other 4 form a coherent status-based set).
+- Read journey.tsx (lines 1-200) to locate the filter logic:
+  - Line 11: `type FilterMode = "all" | "completed" | "in-progress" | "not-started" | "bookmarked";`
+  - Lines 118-120: `else if (activeFilter === "bookmarked") { result = result.filter((item) => item.isBookmarked); }`
+  - Line 130: `{ key: "bookmarked", label: "⭐ Bookmarked" },` in the filterChips array
+- Applied 3 edits via MultiEdit:
+  1. Removed `"bookmarked"` from the FilterMode union type.
+  2. Removed the `else if (activeFilter === "bookmarked")` filter branch from the filteredLessons useMemo.
+  3. Removed the `{ key: "bookmarked", label: "⭐ Bookmarked" }` entry from the filterChips array.
+- Preserved the bookmark FUNCTIONALITY (the `isBookmarked` field in allLessonsFlat, the `bookmarkedLessons`/`toggleBookmark` store hooks, and the Star toggle button on individual lesson cards) — only the FILTER CHIP was removed, not the bookmark feature itself.
+- Ran `bun run lint` → EXIT 0 (no errors, no warnings).
+- Dev log clean (all GET / 200, no runtime errors, clean compiles).
+- Verified end-to-end with agent-browser + VLM:
+  - Opened app → Try Demo → selected USA English → Begin Journey → Dashboard.
+  - Clicked "Journey" bottom-nav tab → Journey view loaded.
+  - Screenshot confirmed the filter row now shows exactly 4 chips: "All", "Completed", "In Progress", "Not Started". NO "Bookmarked" button, NO star icon.
+
+Stage Summary:
+- Journey view filter row reduced from 5 chips to 4 chips. The "⭐ Bookmarked" filter chip is removed entirely. The remaining 4 chips ("All" / "Completed" / "In Progress" / "Not Started") form a clean, coherent status-based filter set with no icon-only outlier.
+- FilterMode type, filteredLessons useMemo, and filterChips array all cleaned up — no dead code, no orphaned branches.
+- Bookmark feature (star toggle on lesson cards, bookmarkedLessons store state) is fully preserved — users can still bookmark lessons, they just can no longer filter the list by bookmarked status.
+- Lint: PASS. Dev server: clean. Browser-verified: filter row renders correctly with 4 chips.
+
+Unresolved Issues / Next Phase Priorities:
+- MEDIUM: Practice, Progress views still have residual old dark-theme styling — should be simplified to match the minimal white/black aesthetic (carried over from Round 11).
+- MEDIUM: AI Coach FAB + chat panel may still have colored styling.
+- LOW: Consider a visual "DEV" indicator pill on Dashboard/Journey when devMode is ON so the user knows features are unlocked.
