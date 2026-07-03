@@ -154,6 +154,55 @@ export interface SpeakOptions {
   onStart?: () => void;
 }
 
+/**
+ * Preferred voice names per locale, ordered from most natural/human-sounding
+ * to acceptable. These are the neural/online/macOS-system voices that sound
+ * far less robotic than the default desktop SAPI voices ("Microsoft David",
+ * "Microsoft Zira", etc.).
+ *
+ * - Google voices: Chrome on all platforms — neural, very natural.
+ * - Microsoft *Online (Natural)*: Edge / Chromium — neural cloud voices.
+ * - Samantha / Alex / Daniel / etc.: macOS / iOS system voices, high quality.
+ */
+const VOICE_PREFERENCE: { lang: string; names: string[] }[] = [
+  {
+    lang: "en-US",
+    names: [
+      "Google US English",
+      "Microsoft Aria Online (Natural) - English (United States)",
+      "Microsoft Jenny Online (Natural) - English (United States)",
+      "Microsoft Guy Online (Natural) - English (United States)",
+      "Microsoft Ana Online (Natural) - English (United States)",
+      "Samantha",
+      "Alex",
+      "Tessa",
+      "Aaron",
+      "Karen",
+      "Moira",
+      "Rishi",
+      "Fred",
+      "Zoe",
+    ],
+  },
+  {
+    lang: "en-GB",
+    names: [
+      "Google UK English Female",
+      "Google UK English Male",
+      "Microsoft Sonia Online (Natural) - English (United Kingdom)",
+      "Microsoft Ryan Online (Natural) - English (United Kingdom)",
+      "Microsoft Libby Online (Natural) - English (United Kingdom)",
+      "Daniel",
+      "Kate",
+      "Serena",
+      "Martha",
+      "Arthur",
+    ],
+  },
+];
+
+const QUALITY_RE = /google|natural|online|neural/i;
+
 function pickVoice(lang: string): SpeechSynthesisVoice | undefined {
   let voices: SpeechSynthesisVoice[] = voicesCache;
   if (voices.length === 0 && isTTSAvailable()) {
@@ -161,7 +210,31 @@ function pickVoice(lang: string): SpeechSynthesisVoice | undefined {
     if (voices.length > 0) voicesCache = voices;
   }
   if (voices.length === 0) return undefined;
+
   const base = lang.split("-")[0];
+  const pref = VOICE_PREFERENCE.find((p) => p.lang === lang);
+
+  // Tier 1: preferred high-quality voice name + exact lang match
+  if (pref) {
+    for (const name of pref.names) {
+      const v = voices.find((v) => v.name === name && v.lang === lang);
+      if (v) return v;
+    }
+    // Tier 2: preferred name anywhere (some voices report lang loosely)
+    for (const name of pref.names) {
+      const v = voices.find((v) => v.name === name);
+      if (v) return v;
+    }
+  }
+
+  // Tier 3: any Google / Natural / Online / Neural voice for exact lang
+  const qualityExact =
+    voices.find((v) => v.lang === lang && QUALITY_RE.test(v.name)) ||
+    voices.find((v) => v.lang.startsWith(lang) && QUALITY_RE.test(v.name)) ||
+    voices.find((v) => v.lang.startsWith(base) && QUALITY_RE.test(v.name));
+  if (qualityExact) return qualityExact;
+
+  // Tier 4: exact lang, then prefix, then any english
   return (
     voices.find((v) => v.lang === lang) ||
     voices.find((v) => v.lang.startsWith(lang)) ||
@@ -198,7 +271,10 @@ function speakInternal(
   const utter = new SpeechSynthesisUtterance(text);
   const lang = opts.lang || (opts.accent === "uk" ? "en-GB" : "en-US");
   utter.lang = lang;
-  utter.rate = opts.rate ?? 1;
+  // Slightly slower default rate (0.95) reads as more conversational and less
+  // rushed/robotic. Callers that pass an explicit rate (e.g. slow-play) still
+  // get exactly what they ask for.
+  utter.rate = opts.rate ?? 0.95;
   utter.pitch = opts.pitch ?? 1;
   utter.volume = opts.volume ?? 1;
 

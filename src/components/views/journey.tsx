@@ -8,8 +8,6 @@ import { PHASES } from "@/lib/types";
 import { ALL_LESSONS, getLessonsForPhase } from "@/lib/lessons";
 import { DifficultyBadge } from "@/components/widgets/difficulty-badge";
 
-type FilterMode = "all" | "completed" | "in-progress" | "not-started";
-
 /** Check if a completed lesson needs review (>2 days since completion or last review) */
 function needsReview(completedAt: number | null, lastReviewedAt: number | null): boolean {
   if (!completedAt) return false;
@@ -50,7 +48,6 @@ export function JourneyView() {
   const devMode = useAppStore((s) => s.devMode);
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeFilter, setActiveFilter] = useState<FilterMode>("all");
 
   // Precompute progress + unlock state for all phases
   const phaseInfo = useMemo(() => {
@@ -96,36 +93,14 @@ export function JourneyView() {
     });
   }, [lessons, bookmarkedLessons]);
 
-  // Apply search + filter
+  // Apply search
   const filteredLessons = useMemo(() => {
-    let result = allLessonsFlat;
-
-    // Search filter
-    if (isSearching) {
-      const q = searchQuery.trim().toLowerCase();
-      result = result.filter((item) =>
-        item.lesson.title.toLowerCase().includes(q)
-      );
-    }
-
-    // Status filter
-    if (activeFilter === "completed") {
-      result = result.filter((item) => item.status === "completed");
-    } else if (activeFilter === "in-progress") {
-      result = result.filter((item) => item.status === "in-progress");
-    } else if (activeFilter === "not-started") {
-      result = result.filter((item) => item.status === "not-started");
-    }
-
-    return result;
-  }, [allLessonsFlat, isSearching, searchQuery, activeFilter]);
-
-  const filterChips: { key: FilterMode; label: string }[] = [
-    { key: "all", label: "All" },
-    { key: "completed", label: "Completed" },
-    { key: "in-progress", label: "In Progress" },
-    { key: "not-started", label: "Not Started" },
-  ];
+    if (!isSearching) return allLessonsFlat;
+    const q = searchQuery.trim().toLowerCase();
+    return allLessonsFlat.filter((item) =>
+      item.lesson.title.toLowerCase().includes(q)
+    );
+  }, [allLessonsFlat, isSearching, searchQuery]);
 
   return (
     <div className="space-y-4">
@@ -153,25 +128,8 @@ export function JourneyView() {
         />
       </div>
 
-      {/* Filter chips */}
-      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
-        {filterChips.map((chip) => (
-          <button
-            key={chip.key}
-            onClick={() => setActiveFilter(chip.key)}
-            className={`shrink-0 px-4 py-1.5 rounded-full text-xs font-semibold transition whitespace-nowrap ${
-              activeFilter === chip.key
-                ? "bg-[var(--grad-btn)] text-white"
-                : "bg-[var(--card)] border border-[var(--border)] text-[var(--t2)] hover:border-[var(--p3)]"
-            }`}
-          >
-            {chip.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Search/filter results — flat list */}
-      {isSearching || activeFilter !== "all" ? (
+      {/* Search results — flat list */}
+      {isSearching ? (
         <div className="space-y-2">
           {filteredLessons.length === 0 ? (
             <div className="text-center py-8">
@@ -252,31 +210,6 @@ export function JourneyView() {
       ) : (
         /* Normal phase-grouped view */
         <div className="relative">
-          {/* Animated timeline line with draw effect */}
-          <div className="absolute left-7 top-8 bottom-8 w-0.5 overflow-hidden">
-            <motion.div
-              className="w-full bg-gradient-to-b from-[#6366f1] via-[#8b5cf6] to-[#22d3ee] origin-top"
-              initial={{ height: 0 }}
-              animate={{ height: "100%" }}
-              transition={{ duration: 1.5, ease: "easeOut" }}
-              style={{ opacity: 0.4 }}
-            />
-          </div>
-          {/* Glowing nodes at each phase point */}
-          {phaseInfo.map(({ isUnlocked, isDone }, ni) => (
-            <div
-              key={`node-${ni}`}
-              className={`absolute left-[22px] w-3 h-3 rounded-full z-10 ${
-                isDone
-                  ? "bg-[var(--p)] border-2 border-[var(--p3)] animate-node-glow"
-                  : isUnlocked
-                  ? "bg-[rgba(99,102,241,0.3)] border-2 border-[var(--p3)] animate-node-glow"
-                  : "bg-[var(--bg2)] border border-[var(--border)]"
-              }`}
-              style={{ top: `${40 + ni * 80}px` }}
-            />
-          ))}
-
           <div className="space-y-3">
             {phaseInfo.map(({ phase, lessons: phaseLessons, done, total, pct, isUnlocked, isDone }, i) => {
               const isExpanded = expandedPhase === i;

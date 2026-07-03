@@ -149,7 +149,7 @@ export function LessonModal({ lesson, onClose, onNext }: Props) {
   // pattern instead of setState-in-effect (react-hooks/set-state-in-effect).
   const [prevStepIdx, setPrevStepIdx] = useState(stepIdx);
   const [showNotesPanel, setShowNotesPanel] = useState(false);
-  const ttsSpeed = 1;
+  const ttsSpeed = 0.95;
   // Speaking state — drives the header indicator (Bug 3 fix)
   const [speaking, setSpeaking] = useState(false);
 

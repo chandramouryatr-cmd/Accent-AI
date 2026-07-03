@@ -2536,3 +2536,56 @@ Unresolved Issues / Next Phase Priorities:
 - MEDIUM: Practice, Progress views still have residual old dark-theme styling — should be simplified to match the minimal white/black aesthetic (carried over from Round 11).
 - MEDIUM: AI Coach FAB + chat panel may still have colored styling.
 - LOW: Consider a visual "DEV" indicator pill on Dashboard/Journey when devMode is ON so the user knows features are unlocked.
+
+---
+Task ID: 13 (Round 13 — Main Agent)
+Task: Remove timeline dots + gradient line, remove entire filter chips row from Journey, and make TTS voice more human-sounding
+
+Work Log:
+- User uploaded screenshot (pasted_image_1783058451171.png) showing Journey view with 3 issues: (1) decorative dots along a vertical timeline line on the left, (2) the filter chips row ("All/Completed/In Progress/Not Started"), (3) TTS voice sounding too robotic/AI.
+- Used VLM (z-ai vision) to analyze the screenshot and confirm the dots are timeline node markers along a colored gradient line.
+
+### Change 1 + 2: journey.tsx — remove dots/line + remove filter row
+- Removed the `FilterMode` type definition entirely.
+- Removed the `activeFilter` useState.
+- Simplified `filteredLessons` useMemo: removed all status-filter branches (completed/in-progress/not-started), kept ONLY the search filter.
+- Removed the `filterChips` array definition.
+- Removed the entire filter chips JSX row (`<div className="flex gap-2 overflow-x-auto...">` block with the 4 chip buttons).
+- Changed the results condition from `isSearching || activeFilter !== "all"` → `isSearching` (flat list now only shows when searching).
+- Removed the animated timeline gradient line (`absolute left-7 top-8 bottom-8 w-0.5` with `bg-gradient-to-b from-[#6366f1] via-[#8b5cf6] to-[#22d3ee]` — a leftover from the old colored theme).
+- Removed the glowing node dots (`phaseInfo.map(...)` rendering `absolute left-[22px] w-3 h-3 rounded-full` circles with `animate-node-glow`).
+- Phase cards now rely solely on their own left-side number/emoji/lock tiles for visual structure — no decorative spine needed.
+
+### Change 3: tts.ts — prefer natural/human-sounding voices
+- Added a `VOICE_PREFERENCE` table mapping en-US and en-GB to ordered lists of high-quality voice names:
+  - en-US: "Google US English", Microsoft Aria/Jenny/Guy/Ana Online (Natural), macOS Samantha/Alex/Tessa/Aaron/Karen/Moira/Rishi/Fred/Zoe
+  - en-GB: Google UK English Female/Male, Microsoft Sonia/Ryan/Libby Online (Natural), macOS Daniel/Kate/Serena/Martha/Arthur
+- Added a `QUALITY_RE = /google|natural|online|neural/i` regex to detect high-quality voices by name.
+- Rewrote `pickVoice()` with a 4-tier selection:
+  - Tier 1: preferred name + exact lang match
+  - Tier 2: preferred name anywhere (handles loose lang reporting)
+  - Tier 3: any Google/Natural/Online/Neural voice for the lang
+  - Tier 4: fallback to exact lang / prefix / any English
+  This avoids the robotic default desktop SAPI voices ("Microsoft David", "Microsoft Zira") in favor of neural/cloud/system voices that sound far more human.
+- Changed the default rate in `speakInternal` from `1` → `0.95` (slightly slower = more conversational, less rushed). Callers passing explicit rates (slow-play 0.6, pronunciation drills 0.7-0.85) are unaffected.
+- Changed lesson-modal.tsx `ttsSpeed` from `1` → `0.95` so lesson narration also benefits from the more natural pace.
+
+### Verification
+- `bun run lint` → EXIT 0 (no errors, no warnings).
+- Dev server compiles cleanly (all `✓ Compiled in ...ms`, `GET / 200`, no runtime errors after changes).
+- agent-browser + VLM verification:
+  - Navigated to Journey view → VLM confirmed: "(1) No - There are no horizontal row of filter button chips... (2) No - There are no small circular dots arranged vertically along a timeline line."
+  - Phase cards render cleanly with phase tiles (ear icon for Phase 1 CURRENT, lock icons for locked phases) — no decorative dots, no leftover gradient line.
+  - Opened Vowel Sounds A–E lesson → modal opens cleanly, intro screen shows title + Continue button, no "Hear" button (removed in prior round), no errors.
+  - Fresh full page load → dashboard renders with "Good morning, Alex", Start Here section, lesson cards — no runtime errors.
+
+Stage Summary:
+- **Timeline dots + gradient line REMOVED** from Journey view. The colored indigo/violet/cyan spine and the glowing node circles are gone. Phase cards now stand on their own with clean left-side tiles.
+- **Filter chips row REMOVED** entirely from Journey view. The "All / Completed / In Progress / Not Started" chips are gone. The search bar is PRESERVED (users can still search lessons). FilterMode type, activeFilter state, filterChips array, and all filter logic cleaned up — no dead code.
+- **TTS voice now prefers natural/human voices**: Google US/UK English (Chrome neural), Microsoft Online Natural voices (Edge), and macOS system voices (Samantha/Alex/Daniel) are tried first before falling back to generic English voices. Default rate nudged to 0.95 for a more conversational pace. This avoids the robotic desktop SAPI defaults on Windows.
+- Lint: PASS. Dev server: clean. Browser-verified: Journey view clean, lesson modal opens, no runtime errors.
+
+Unresolved Issues / Next Phase Priorities:
+- MEDIUM: Practice, Progress views still have residual old dark-theme/colored styling — should be simplified to match minimal white/black aesthetic (carried over from Round 11/12).
+- MEDIUM: AI Coach FAB + chat panel may still have colored styling.
+- LOW: TTS voice quality is ultimately bounded by what voices the user's browser/OS has installed. On Chrome (any OS) Google voices are available; on Edge the Microsoft Natural voices; on macOS the system voices. If none are present, it falls back to the best available English voice. Consider detecting voice quality and showing a hint if only robotic voices are available.
