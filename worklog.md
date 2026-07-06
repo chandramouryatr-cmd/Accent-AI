@@ -2675,3 +2675,83 @@ Work Log:
 
 Stage Summary:
 - All 5 vowel images in the Vowel Sounds A–E lesson have been replaced with the new user-provided .jpg versions. The mapping is correct (each image matched to its phoneme via VLM analysis). Old .png files removed; lesson file paths updated to .jpg. Lint passes, dev server clean, images render correctly in the browser.
+
+---
+Task ID: 16 (Round 16 — Main Agent)
+Task: Convert the web app into a mobile application (PWA — installable, standalone, offline-capable)
+
+Work Log:
+- User: "let me clear this i want this whole web app to be a mobile application"
+- Clarified the hard constraint: this sandbox runs Next.js on a single web port (3000) behind Caddy, with no native build toolchain — a true React Native/Expo rebuild (with expo-speech-recognition etc.) is NOT possible here. The realistic, production-grade path to a "mobile application" in this environment is a **Progressive Web App (PWA)**: installable to the home screen, full-screen standalone, offline-capable, app-icon + splash screen. This is how Twitter Lite, Starbucks, Pinterest ship to mobile without app stores.
+
+### 1. App icon generation
+- Used z-ai image generation CLI to create a 1024×1024 minimal monochrome icon: "bold geometric soundwave forming a speech bubble, solid black on pure white, centered with padding, flat, no text, maskable-safe".
+- VLM-verified the icon is minimal, monochrome, centered, maskable-safe.
+- Resized with `sharp` (available in env) to all PWA sizes in /public/icons/:
+  - icon-192.png, icon-512.png, icon-1024.png (standard PWA)
+  - icon-maskable-512.png (opaque white bg for safe-zone masking)
+  - apple-touch-icon.png (180×180, opaque)
+  - favicon-32.png
+
+### 2. PWA manifest — /public/manifest.webmanifest
+- name: "AccentAI — Master Native-Level English", short_name: "AccentAI"
+- display: "standalone", orientation: "portrait"
+- background_color: "#ffffff", theme_color: "#ffffff" (matches light minimal theme)
+- start_url: "/", scope: "/"
+- 4 icon entries (192 any, 512 any, 512 maskable, 1024 any)
+- categories: education/productivity/lifestyle
+
+### 3. Service worker — /public/sw.js
+- Versioned caches (accentai-v1-shell/static/runtime)
+- Network-first for navigation (fresh HTML online, cached shell offline → fallback to "/" or /offline)
+- Cache-first for static assets (icons, /_next/static, /_next/image, /vowels/, google fonts)
+- Stale-while-revalidate for Next.js chunks & same-origin GETs
+- skipWaiting + clients.claim for clean activation; old caches purged on version bump
+
+### 4. Offline fallback route — /src/app/offline/page.tsx
+- Minimal "📵 You're offline" page with "Try again" link back to "/".
+- Pre-cached by the SW app shell so it renders with no connection.
+
+### 5. SW registration component — /src/components/service-worker-register.tsx
+- Client component, mounts in root layout.
+- Registers /sw.js (scope "/") after window load (no first-paint competition).
+- No-op SSR + no-op if no serviceWorker support.
+
+### 6. Root layout metadata — /src/app/layout.tsx
+- Added `manifest: "/manifest.webmanifest"`.
+- Added `appleWebApp: { capable: true, title: "AccentAI", statusBarStyle: "default" }`.
+- Added `icons` block (icon 32/192/512, apple-touch-icon 180).
+- Viewport: `maximumScale: 1, userScalable: false` (app-like, no pinch-zoom), `viewportFit: "cover"` (enables safe-area insets), `themeColor: "#ffffff"` (was stale "#07070F" from dark theme — fixed).
+- Mounted <ServiceWorkerRegister /> in the body.
+
+### 7. Mobile-native CSS polish — /src/app/globals.css @layer base
+- Removed `-webkit-tap-highlight-color` globally (app feel).
+- `overscroll-behavior: none` on html (no pull-to-refresh / rubber-band).
+- Body: safe-area-inset padding (top/bottom/left/right env()), `overscroll-behavior-y: contain`, `user-select: none` + `-webkit-touch-callout: none` on body (no long-press select on UI chrome).
+- Re-enabled text selection for content: `input, textarea, [contenteditable], .selectable, p, li, h1-h4` get `user-select: text`.
+- `button { touch-action: manipulation; }` (removes 300ms tap delay).
+- `:focus:not(:focus-visible) { outline: none; }` (no mouse focus ring, keyboard a11y preserved).
+- Did NOT use `position: fixed` on body (would break modals + sticky-footer flex layout) — used gentler overscroll-contain approach instead.
+
+### Verification
+- `bun run lint` → EXIT 0.
+- Dev server: clean compiles, GET / 200, GET /offline 200 (SW pre-caching visible in logs).
+- curl checks: manifest 200 (application/manifest+json), sw.js 200 (application/javascript), icon-192/512 200, apple-touch-icon 200, /offline 200.
+- HTML head contains: `<meta theme-color #ffffff>`, `<link manifest>`, `<meta apple-mobile-web-app-title AccentAI>`, `<meta apple-mobile-web-app-status-bar-style>`, `<link apple-touch-icon>`.
+- agent-browser: `navigator.serviceWorker.getRegistrations()` → "1 registration(s); scope: http://localhost:3000/"; active state = "activated".
+- Console: clean (only React DevTools suggestion + HMR).
+- End-to-end flow verified: onboarding → Try Demo → select USA → Begin Journey → dashboard → open Vowel Sounds lesson → Step 4 (/iː/) renders with image + description + Back/Continue buttons intact. VLM confirmed "no visual issues from mobile styling".
+
+Stage Summary:
+- **AccentAI is now a Progressive Web App (mobile application).** It is installable to the phone home screen (Chrome/Edge "Install app", Safari "Add to Home Screen"), opens full-screen standalone with no browser chrome, locked to portrait, with a custom app icon + splash screen (white bg + theme). It works offline after first visit (service worker caches the app shell + static assets + visited pages).
+- **App icon**: AI-generated minimal monochrome soundwave-in-speech-bubble, resized to 192/512/1024/maskable/apple-touch/favicon.
+- **Manifest + meta tags**: full PWA manifest, apple-web-app meta, theme-color #ffffff, icons, viewport locked (no pinch-zoom, cover-fit for safe areas).
+- **Service worker**: network-first navigation, cache-first static, SWR runtime — registered & activated, scope "/".
+- **Mobile-native CSS**: no tap highlight, no overscroll bounce, safe-area insets, no UI text-selection (content still selectable), no tap delay.
+- Lint: PASS. Dev server: clean. Browser-verified: SW active, app renders, lessons + vowel images intact, no console errors.
+
+Unresolved Issues / Next Phase Priorities:
+- MEDIUM: For full app-store distribution, the PWA can be wrapped with Capacitor/ PWABuilder to produce APK/IPA — requires a native build environment (not available in this sandbox). The PWA as-is is installable directly from the browser.
+- MEDIUM: Practice, Progress views still have residual old dark-theme/colored styling (carried over).
+- LOW: Consider an "Install app" prompt (beforeinstallprompt event) to surface an install button in the UI when the browser says the PWA is installable.
+- LOW: The speech-recognition question from the previous turn — the existing Web Speech API wrapper works in the installed PWA on Chrome/Edge Android and Safari iOS (iOS 14.5+ supports SpeechRecognition in PWAs). For higher accuracy, the z-ai ASR cloud skill remains an option.

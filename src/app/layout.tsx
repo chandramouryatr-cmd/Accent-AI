@@ -4,6 +4,7 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
+import { ServiceWorkerRegister } from "@/components/service-worker-register";
 
 const bricolage = Bricolage_Grotesque({
   variable: "--font-d",
@@ -35,13 +36,29 @@ export const metadata: Metadata = {
     "native English",
   ],
   authors: [{ name: "AccentAI" }],
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "AccentAI",
+    statusBarStyle: "default",
+  },
+  icons: {
+    icon: [
+      { url: "/icons/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
   viewportFit: "cover",
-  themeColor: "#07070F",
+  themeColor: "#ffffff",
 };
 
 export default function RootLayout({
@@ -56,6 +73,7 @@ export default function RootLayout({
           {children}
           <Toaster />
           <SonnerToaster />
+          <ServiceWorkerRegister />
         </ThemeProvider>
       </body>
     </html>
