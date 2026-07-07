@@ -2755,3 +2755,86 @@ Unresolved Issues / Next Phase Priorities:
 - MEDIUM: Practice, Progress views still have residual old dark-theme/colored styling (carried over).
 - LOW: Consider an "Install app" prompt (beforeinstallprompt event) to surface an install button in the UI when the browser says the PWA is installable.
 - LOW: The speech-recognition question from the previous turn — the existing Web Speech API wrapper works in the installed PWA on Chrome/Edge Android and Safari iOS (iOS 14.5+ supports SpeechRecognition in PWAs). For higher accuracy, the z-ai ASR cloud skill remains an option.
+
+---
+Task ID: 17 (Round 17 — Main Agent)
+Task: Convert the web app into a REAL native mobile application (React Native + Expo), not a PWA, not a Capacitor wrapper. User explicitly requested an actual installable app after the PWA + Capacitor discussions.
+
+Work Log:
+- User clarified: "no i want to create actual application" — wants a genuine native mobile app, not a PWA or Capacitor wrapper.
+- Was direct with user about the hard sandbox constraint: this sandbox has no Android SDK, no Xcode, no JDK — it cannot compile an .apk or .ipa. But it CAN write the complete React Native + Expo source code, which the user then builds on their own machine with one command (`eas build` or `expo prebuild`).
+- Chose Expo SDK 52 + React Native 0.76 as the framework (modern standard for RN apps, used by Discord/Bluesky/Coinbase). expo-router for file-based navigation (mirrors Next.js mental model). NativeWind v4 for Tailwind-style styling. Zustand for state (matches web app).
+
+### 1. Project scaffold — /home/z/my-project/mobile-app/
+- Created directory structure: app/ (expo-router), src/components, src/lib, src/hooks, assets/.
+- Copied ALL lesson data from the web app: src/lib/types.ts, src/lib/phoneme-data.ts, and all 32 lessons across 8 phases (src/lib/lessons/phase1-8/l1-4.ts). The mobile app shares the exact same lesson content as the web app — single source of truth.
+- Copied icon assets from the web app's /public/icons/ (icon-1024.png → icon.png, icon-512.png → adaptive-icon.png, icon-192.png → splash-icon.png, favicon-32.png → favicon.png).
+
+### 2. Config files
+- package.json: Expo 52, expo-router 4, expo-speech, expo-speech-recognition, expo-av, expo-haptics, expo-secure-store, @react-native-async-storage/async-storage, nativewind 4, react-native-svg, react-native-reanimated, react-native-screens, react-native-safe-area-context, lucide-react-native, zustand 5.
+- app.json: name "AccentAI", slug, bundleIdentifier com.accentai.app, iOS infoPlist with NSSpeechRecognitionUsageDescription + NSMicrophoneUsageDescription, Android permissions (RECORD_AUDIO, INTERNET), expo-speech-recognition plugin with permission strings, extra.apiBaseUrl for backend config.
+- tsconfig.json: extends expo/tsconfig/base, @/* path alias.
+- babel.config.js: babel-preset-expo with nativewind jsxImportSource + nativewind/babel.
+- metro.config.js: withNativeWind wrapper.
+- tailwind.config.js: nativewind preset, custom theme (colors, typography matching web app).
+- global.css: tailwind base/components/utilities for nativewind.
+- .env.example: API_BASE_URL documentation.
+
+### 3. Core libraries (src/lib/)
+- theme.ts: colors (matching web app's clean minimal white aesthetic), spacing, radius, typography scale.
+- store.ts: Zustand store with AsyncStorage persistence. Mirrors the web app's store — onboarded, accent, userName, xp, streak, lessons progress, badges, history, daily goal, bookmarks, challenge high score, chat messages. Includes completeLesson, markStepViewed, toggleBookmark, setDailyGoal, addXP, addChatMessage, clearChat, resetAll.
+- api.ts: AI coach API client. Streams from the Next.js /api/ai-coach endpoint via SSE. Parses data: {token} chunks, calls onToken for each, returns full text. Auto-injects user context (accent, xp, streak, completedLessons) from the store.
+- tts.ts: expo-speech wrapper — speak(text, {accent, rate, pitch}), stopSpeaking(). Native equivalent of the web app's Web Speech API wrapper. Uses en-US / en-GB based on accent.
+- recognition.ts: expo-speech-recognition wrapper using ExpoSpeechRecognitionModule. SpeechRecognitionService class with requestPermissions(), isAvailable(), start(handlers, accent), stop(). Uses addSpeechRecognitionListener for result/error/start/end events. Handles iOS 60-second cap by being single-shot.
+
+### 4. Navigation (app/)
+- _layout.tsx: Root layout. SafeAreaProvider, StatusBar, Stack navigator. Onboarding gate — shows loader while AsyncStorage hydrates, redirects index→onboarding or tabs based on onboarded state. Lesson route is a slide-up modal.
+- index.tsx: Pure redirect based on onboarded state.
+- onboarding.tsx: First-run flow. Sparkles hero, feature pills (speech recognition / native audio / AI coach), name TextInput, accent selector (USA/UK with flags + descriptions), Begin Journey CTA. KeyboardAvoidingView for iOS.
+- (tabs)/_layout.tsx: Bottom tab navigator with 5 tabs — Home, Journey, Practice, Coach, More. Lucide icons, active tint = primary green.
+
+### 5. Tab screens
+- (tabs)/index.tsx (Dashboard): Greeting + accent flag, 3 stat chips (streak/XP/lessons done), daily goal ProgressRing, "Continue learning" card (next incomplete lesson, dark bg, phase emoji), overall progress bar, 3 quick actions (browse journey / free practice / ask coach).
+- (tabs)/journey.tsx: 8-phase roadmap. Each phase is an expandable card with phase emoji, name, done/total count, XP. Expanded view lists 4 lessons each with completion check, duration, XP, difficulty badge, best score. Phases lock until previous is complete.
+- (tabs)/practice.tsx: Free pronunciation practice. Current phrase card (dark bg, phrase + IPA, Listen + Speak buttons). 5 quick phrases to pick from. Transcript + score display after speaking. Phoneme quick reference grid (12 phonemes from PHONEME_DRILL_DATA, tap to hear). Uses local accumulator to avoid stale closure in onEnd callback. Awards +10 XP on 70%+ score.
+- (tabs)/coach.tsx: AI coach chat. Streams replies from the Next.js /api/ai-coach endpoint via SSE. Welcome message on first load. 4 suggestion chips. FlatList of message bubbles (user right-aligned primary, assistant left-aligned surface). Streaming indicator with ActivityIndicator. KeyboardAvoidingView for iOS. Clear chat button in header.
+- (tabs)/more.tsx: Profile card, 6 stat boxes (XP/streak/lessons/avg score/daily goal/badges), daily goal stepper (−/+ buttons), badges grid, reset all progress (with Alert confirmation), version/build info rows.
+
+### 6. Lesson player (app/lesson/[id].tsx)
+- Full-screen modal with progress bar in header, step counter, close X.
+- StepRenderer dispatches to 9 step-type views: IntroStepView, ConceptStepView, MouthDiagramStepView, ExampleStepView, TapPronounceStepView, TipStepView, PracticeStepView, QuizStepView, CompletionStepView.
+- Each step that has speakable text gets a Volume2 "Listen" button that calls expo-speech.
+- PracticeStepView wires up speech recognition: Listen/Stop toggle, transcript display, word-overlap scoring (0-100%), pass threshold check.
+- QuizStepView: 4 options, tap to select, immediate correct/wrong coloring, explanation panel after answer.
+- CompletionStepView: Award icon, +XP badge, earned badge chip, next lesson title.
+- Footer: Back button + Continue/Complete button (disabled until quiz answered).
+- Marks step viewed on each navigation, calls completeLesson with final score on last step.
+
+### 7. Component
+- src/components/ProgressRing.tsx: SVG-based circular progress indicator using react-native-svg. Configurable size, strokeWidth, color, trackColor, optional children.
+
+### 8. README.md
+- Complete build & run instructions: prerequisites, install, backend URL config, dev server (expo start), EAS Build (cloud, recommended), local build (expo prebuild + gradle/xcodebuild), app store submission.
+- Feature parity checklist (✅ done vs still to wire up).
+- Notes on speech recognition differences between iOS and Android.
+
+### Verification
+- `bun install` in mobile-app/: 881 packages installed successfully.
+- `bunx tsc --noEmit`: EXIT 0 — zero type errors across all 51 source files.
+- Web app (Next.js on port 3000): untouched, still serving GET / 200 cleanly.
+- `bun run lint` (web project): was failing due to mobile-app's CommonJS config files using require(). Fixed by adding "mobile-app/**" to eslint.config.mjs ignores. Lint now EXIT 0.
+- Cannot run `expo start` in this sandbox (no Android/iOS toolchain, no emulator) — but the source is complete and type-checks. User runs `eas build` on their own machine to produce the actual APK/IPA.
+
+Stage Summary:
+- **AccentAI is now a real React Native + Expo mobile application.** The complete source lives in /home/z/my-project/mobile-app/ (51 TypeScript files, 32 lessons copied from web app, full navigation shell, 5 tab screens, complete lesson player with 9 step types, AI coach chat with SSE streaming, speech recognition, TTS, AsyncStorage persistence).
+- **Type-check passes** (tsc --noEmit EXIT 0). **Lint passes** (web project EXIT 0 after ignoring mobile-app/).
+- **Build path is documented** in mobile-app/README.md: user runs `eas build --platform android --profile preview` for a real APK, or `npx expo prebuild && cd android && ./gradlew assembleRelease` for a local build. No sandbox involvement needed for compilation.
+- **Web app is untouched** and still healthy on port 3000.
+- The app shares lesson data 1:1 with the web app — any lesson edit in src/lib/lessons/ can be copied to mobile-app/src/lib/lessons/ to keep both platforms in sync.
+
+Unresolved Issues / Next Phase Priorities:
+- MEDIUM: Vowel reference images (mouth-diagram step's `image` field) currently show a placeholder text. Need to bundle /public/vowels/*.jpg as Expo assets and render with <Image source={require(...)} />. The recurring dev task should wire this up.
+- MEDIUM: Step types not yet implemented in mobile: vowel-chart (interactive quadrilateral), stress-bars, rhythm, linking, intonation, shadow, compare. These fall back to a "(not yet implemented)" message. The recurring dev task should add them.
+- MEDIUM: XP shop (streak freezes, double XP, custom theme) not yet ported.
+- LOW: Daily challenge mode, push notifications (expo-notifications), dark mode, haptic feedback.
+- LOW: Backend URL is currently set to a placeholder in app.json. User must set API_BASE_URL to their deployed Next.js backend (or LAN IP for local dev) before building.

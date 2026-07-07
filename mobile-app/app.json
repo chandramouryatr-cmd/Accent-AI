@@ -1,0 +1,56 @@
+{
+  "expo": {
+    "name": "AccentAI",
+    "slug": "accentai",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "accentai",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.accentai.app",
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "AccentAI uses speech recognition to evaluate your pronunciation and provide instant feedback.",
+        "NSMicrophoneUsageDescription": "AccentAI needs microphone access so you can practice speaking and get pronunciation feedback.",
+        "NSSpeechRecognitionUsageDescription": "AccentAI uses speech recognition to evaluate your pronunciation and provide instant feedback."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.accentai.app",
+      "permissions": ["android.permission.RECORD_AUDIO", "android.permission.INTERNET"]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow AccentAI to use your microphone to practice pronunciation",
+          "speechRecognitionPermission": "Allow AccentAI to use speech recognition to evaluate your pronunciation"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": ""
+      },
+      "apiBaseUrl": "https://your-deployed-nextjs-backend.com"
+    }
+  }
+}

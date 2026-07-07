@@ -1,0 +1,188 @@
+import type { Lesson } from "../../types";
+
+// Phase 7 — Lesson 4: Public Speaking
+// Projection, varied intonation, audience engagement. Rise-fall contour, dramatic pauses in rhythm.
+// 11 steps: intro, concept, concept, intonation, example, rhythm, tap-pronounce, tip, practice, quiz, completion.
+
+const lesson: Lesson = {
+  id: "p7l4",
+  phaseId: 6,
+  lessonIndex: 3,
+  title: "Public Speaking",
+  subtitle: "Project, vary, and engage — speak to the back of the room",
+  duration: 12,
+  xp: 175,
+  objectives: [
+    "Project the voice using breath support, not throat strain",
+    "Vary intonation across a rise-fall arc to maintain audience attention",
+    "Use dramatic pauses (long-duration beats) to mark key moments",
+    "Engage an audience with anchor words and direct address",
+  ],
+  steps: [
+    {
+      id: "intro",
+      type: "intro",
+      title: "Public Speaking",
+      subtitle: "Fill the room — not just with words, but with presence",
+      description:
+        "Public speaking is a different beast from a meeting or a phone call. You are not communicating information — you are commanding attention. The tools are projection (filling the room without shouting), varied intonation (preventing monotone), dramatic pauses (forcing the audience to lean in), and anchor words (the three or four words they will remember tomorrow). This lesson teaches the prosody that separates a speaker from a TED speaker.",
+      visual: "intonation",
+      emoji: "🏛️",
+    },
+    {
+      id: "concept-1",
+      type: "concept",
+      title: "Projection — From the Belly, Not the Throat",
+      body: [
+        "Projection is not volume. Shouting comes from the throat and damages the voice; projection comes from the diaphragm and fills the room without strain. The mechanics: inhale low so your belly expands (not your chest), then speak on the exhale while keeping the belly muscles gently engaged. The air pressure behind the voice is what carries it to the back row.",
+        "Native-trained speakers think of projection as 'sending the voice to a spot on the back wall'. They aim at a person sitting in the last row and speak as if having a one-on-one conversation with that person. This automatically calibrates volume. Without that target, speakers default to the volume of a normal conversation, which is roughly 60% of what a 200-seat room needs.",
+      ],
+      bulletPoints: [
+        "BREATHE LOW — belly expands on inhale, not chest",
+        "ENGAGE BELLY MUSCLES on the exhale while speaking",
+        "AIM AT THE BACK ROW — pick a person, speak to them",
+        "DO NOT SHOUT — shouting strains the throat and reads as nervous",
+        "VARY DYNAMICS — soft for intimacy, projected for emphasis",
+      ],
+      visual: "wave",
+      visualLabel: "Projecting from diaphragm, not throat",
+    },
+    {
+      id: "concept-2",
+      type: "concept",
+      title: "Varied Intonation — The Engine of Attention",
+      body: [
+        "A monotone speaker loses an audience in thirty seconds. A varied-intonation speaker can hold one for an hour. The principle: every sentence should move pitch — up for new information, down for resolution, sustained for suspense. The wider the variation, the more engaged the audience. A 10-minute speech with only five pitch levels will put people to sleep; the same content with twenty pitch levels will make them lean forward.",
+        "The three tools of variation are: (1) pitch range — move between low and high across sentences; (2) pitch direction — rise for new info, fall for closure, sustain for tension; (3) pitch jump — sudden shifts up or down to mark key terms. Combine them and your speech has the dynamic range of music. Without them, it has the dynamic range of a dial tone.",
+      ],
+      bulletPoints: [
+        "RISE on new information or open questions",
+        "FALL on resolution, conclusion, or final statements",
+        "SUSTAIN (level pitch) for tension, suspense, or building",
+        "JUMP UP on key terms — sudden shift signals importance",
+        "WIDE RANGE beats narrow range — 20 pitch levels > 5",
+      ],
+      visual: "intonation",
+      visualLabel: "Wide vs narrow pitch variation",
+    },
+    {
+      id: "intonation-rise-fall",
+      type: "intonation",
+      title: "Rise-Fall Arc for a Speech Climax",
+      phrase: "We started with nothing. We built it. Together — we changed everything.",
+      contour: [
+        { x: 4, y: 30 },
+        { x: 12, y: 35 },
+        { x: 22, y: 40 },
+        { x: 32, y: 38 },
+        { x: 42, y: 45 },
+        { x: 50, y: 55 },
+        { x: 58, y: 50 },
+        { x: 66, y: 65 },
+        { x: 72, y: 70 },
+        { x: 78, y: 78 },
+        { x: 84, y: 90 },
+        { x: 90, y: 95 },
+        { x: 95, y: 60 },
+        { x: 100, y: 20 },
+      ],
+      pattern: "rise-fall",
+      description:
+        "The arc rises gently through 'We started with nothing' (y 30→45), climbs through 'We built it' (y 50→65), peaks sharply on 'Together — we CHANGED' (y 78→95), then crashes down through 'everything' (y 60→20). This is the classic speech climax: build, build, peak, crash. The audience's attention is anchored at the peak — that is the word they remember. The fall after gives them emotional resolution.",
+    },
+    {
+      id: "example-speech",
+      type: "example",
+      title: "Speech Excerpt with Anchor Words",
+      phrase: "I have a dream that one day, on the red hills of Georgia, the sons of former slaves and the sons of former slave owners will be able to sit down together.",
+      ipa: "/aɪ hæv ə driːm ðæt wʌn deɪ ɒn ðə rɛd hɪlz ʌv ˈdʒɔːrʤə ðə sʌnz ʌv ˈfɔːrmər sleɪvz ænd ðə sʌnz ʌv ˈfɔːrmər sleɪv ˈoʊnərz wɪl biː ˈeɪbəl tuː sɪt daʊn təˈɡɛðər/",
+      highlightWords: ["dream", "one", "day", "red", "hills", "Georgia", "sons", "slaves", "sit", "down", "together"],
+      tip: "Note the iconic anchor words: DREAM, DAY, RED HILLS, SONS, SLAVES, SIT DOWN, TOGETHER. These are the words Martin Luther King Jr. hit with pitch jumps. The function words (I, have, a, that, on, the, of, will, be, able, to) are completely unstressed — they reduce to schwas. The contrast is what makes the anchor words land. End on a sustained fall on 'together' — let the final word ring.",
+      tapWords: [
+        { word: "dream", ipa: "/driːm/" },
+        { word: "Georgia", ipa: "/ˈdʒɔːrʤə/" },
+        { word: "together", ipa: "/təˈɡɛðər/" },
+      ],
+    },
+    {
+      id: "rhythm-dramatic-pauses",
+      type: "rhythm",
+      title: "Rhythm with Dramatic Pauses",
+      phrase: "I have seen the future. And it... is... now.",
+      beats: [
+        { text: "I", duration: 1, stressed: false },
+        { text: "have", duration: 1, stressed: false },
+        { text: "SEEN", duration: 2, stressed: true },
+        { text: "the", duration: 1, stressed: false },
+        { text: "FU", duration: 2, stressed: true },
+        { text: "ture", duration: 1, stressed: false },
+        { text: "—", duration: 4, stressed: false },
+        { text: "And", duration: 1, stressed: false },
+        { text: "it", duration: 1, stressed: false },
+        { text: "—", duration: 3, stressed: false },
+        { text: "is", duration: 1, stressed: false },
+        { text: "—", duration: 3, stressed: false },
+        { text: "NOW", duration: 4, stressed: true },
+        { text: "—", duration: 5, stressed: false },
+      ],
+      description:
+        "Notice the dramatic pauses (durations 3–5): a four-beat pause after 'future' (lets the audience absorb the big claim), then three-beat pauses between 'it', 'is', and 'NOW' (building anticipation). The final word NOW gets duration 4 with a five-beat silence after. These long silences feel awkward to the speaker but electric to the audience — they are the moments people remember.",
+    },
+    {
+      id: "tap-pronounce-power-words",
+      type: "tap-pronounce",
+      title: "Power Words for Speeches",
+      description: "Tap each word. These are the high-impact terms that anchor a public speech — pronounce them with full force.",
+      words: [
+        { word: "future", ipa: "/ˈfjuːtʃər/", meaning: "FU-ture — diphthong /juː/ on stressed syllable" },
+        { word: "freedom", ipa: "/ˈfriːdəm/", meaning: "FREE-dom — long /iː/ vowel" },
+        { word: "together", ipa: "/təˈɡɛðər/", meaning: "to-GETH-er — stress on 2nd, /ð/ in middle" },
+        { word: "imagine", ipa: "/ɪˈmædʒɪn/", meaning: "i-MAG-ine — stress on 2nd, /æ/ vowel" },
+        { word: "courage", ipa: "/ˈkɜːrɪdʒ/", meaning: "COUR-age — stress on 1st, /ɜː/ vowel" },
+        { word: "moment", ipa: "/ˈmoʊmənt/", meaning: "MO-ment — diphthong /oʊ/ on stressed" },
+        { word: "everything", ipa: "/ˈɛvriθɪŋ/", meaning: "EV-ery-thing — /θ/ in final cluster" },
+      ],
+    },
+    {
+      id: "tip-1",
+      type: "tip",
+      title: "💡 Native Trick — Pick Three Anchor Words",
+      body: "Before you give any speech, identify the three words you want the audience to repeat tomorrow. Those are your anchor words. They get a pitch jump, a lengthened vowel, and a post-stress pause — all three emphasis tools combined. Every other word in the speech serves them. Most learners give every content word equal emphasis, which means no word lands. Native speakers know that less is more: three anchor words per speech beat three hundred equally-emphasized words every time. The audience cannot remember everything, so choose what they remember for them.",
+      variant: "success",
+    },
+    {
+      id: "practice",
+      type: "practice",
+      title: "Deliver a Speech Climax",
+      phrase: "We can do this. We will do this. And we will do it — together.",
+      ipa: "/wiː kæn duː ðɪs wiː wɪl duː ðɪs ænd wiː wɪl duː ɪt təˈɡɛðər/",
+      tip: "Three short sentences building in intensity. Sentence 1 ('We can do this') — moderate pitch, fall on 'this'. Sentence 2 ('We will do this') — slightly higher pitch, sharper fall on 'this'. Sentence 3 — climb through 'we will do it', pause one beat, then peak on 'to-GETH-er' with pitch jump on 'GETH'. Let 'together' ring for two beats before stopping.",
+      passScore: 82,
+    },
+    {
+      id: "quiz",
+      type: "quiz",
+      question: "You're giving a 10-minute speech to a 200-person audience. Halfway through, you notice people checking their phones. What is the best recovery move?",
+      options: [
+        "Speak louder and faster — energy will pull them back",
+        "Stop, pause dramatically for 5 seconds, then deliver your next line softly — the silence forces them to look up",
+        "Apologize for going long and skip to the conclusion — get out fast",
+        "Ask a rhetorical question to the room and wait for someone to answer",
+      ],
+      correct: 1,
+      explanation:
+        "A long, deliberate silence is the most powerful tool a public speaker has for re-capturing attention. Phones buzz, conversations start, attention drifts — and a 5-second silence cuts through all of it because the audience instinctively looks up to see what's wrong. Then speaking the next line softly (rather than loudly) forces them to lean in to hear. Option 1 — louder and faster — reads as panic and makes the problem worse; loud monotone is still monotone. Option 3 — skip to conclusion — abandons your prepared material and signals defeat. Option 4 — rhetorical question — works but only if you have one ready and the audience expects interaction; with a disengaged room, the silence often hangs awkwardly. Silence + soft re-entry is the universal native-speaker recovery.",
+    },
+    {
+      id: "completion",
+      type: "completion",
+      title: "Public Speaking Complete!",
+      subtitle: "You can now project from the diaphragm, vary intonation across a rise-fall arc, use dramatic pauses, and pick anchor words. You fill the room.",
+      xp: 175,
+      badge: "🌍 World Ready",
+      nextLessonTitle: "Tone Adaptation",
+    },
+  ],
+};
+
+export default lesson;
