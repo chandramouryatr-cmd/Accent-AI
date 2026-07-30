@@ -96,7 +96,7 @@ const lesson: Lesson = {
       phrase: "Three small children splash through the stream",
       ipa: "/θriː smɔːl tʃɪldrən splæʃ θruː ðə striːm/",
       highlightWords: ["Three", "small", "splash", "through", "stream"],
-      tip: "Notice how 'splash' and 'stream' each pack three consonants into a single syllable — the mouth barely moves between them.",
+      tip: "Notice how 'three', 'splash', and 'stream' each pack two or three consonants into a single syllable — the mouth barely moves between them.",
       tapWords: [
         { word: "three", ipa: "/θriː/" },
         { word: "small", ipa: "/smɔːl/" },
@@ -133,7 +133,7 @@ const lesson: Lesson = {
       title: "Drill the Clusters",
       phrase: "Strange students splash through streams",
       ipa: "/streɪndʒ studənts splæʃ θruː striːmz/",
-      tip: "Four clusters in one sentence: /str/, /st/, /spl/, /θr/, /str/. Go slow — accuracy first, speed second.",
+      tip: "Five clusters in one sentence: /str/ (strange), /st/ (students), /spl/ (splash), /θr/ (through), /str/ (streams). Go slow — accuracy first, speed second.",
       passScore: 75,
     },
     {
