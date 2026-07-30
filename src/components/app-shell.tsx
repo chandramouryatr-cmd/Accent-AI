@@ -107,7 +107,7 @@ export function AppShell() {
 
       {/* Bottom nav — minimal */}
       <footer className="fixed bottom-0 left-0 right-0 z-30 bg-[var(--bg)]/95 backdrop-blur-sm border-t border-[var(--border)] safe-bottom">
-        <nav className="max-w-3xl mx-auto px-2 py-2 flex items-center justify-around">
+        <nav aria-label="Main navigation" className="max-w-3xl mx-auto px-2 py-2 flex items-center justify-around">
           {TABS.map((t) => {
             const isActive = activeTab === t.id;
             return (
