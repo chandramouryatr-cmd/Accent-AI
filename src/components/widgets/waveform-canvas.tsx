@@ -56,7 +56,13 @@ export function WaveformCanvas({
     ];
 
     let t = 0;
-    const draw = () => {
+    let lastTime = 0;
+    // Use deltaTime so animation speed is consistent at 60Hz, 90Hz, and 120Hz.
+    // The magic constant 0.016 is one 60fps frame in seconds; we scale to that.
+    const TARGET_DT = 1 / 60;
+    const draw = (now: number) => {
+      const dt = lastTime === 0 ? TARGET_DT : Math.min((now - lastTime) / 1000, 0.1);
+      lastTime = now;
       ctx.clearRect(0, 0, w, h);
       const cy = h / 2;
       for (const wv of waves) {
@@ -72,10 +78,10 @@ export function WaveformCanvas({
         ctx.lineWidth = 2;
         ctx.stroke();
       }
-      t += 0.016;
+      t += dt;
       rafRef.current = requestAnimationFrame(draw);
     };
-    draw();
+    rafRef.current = requestAnimationFrame(draw);
 
     return () => {
       cancelAnimationFrame(rafRef.current);
