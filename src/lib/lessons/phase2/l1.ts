@@ -60,7 +60,7 @@ const lesson: Lesson = {
       bulletPoints: [
         "/ðə/ — the (before consonants): the cat",
         "/ðiː/ — the (before vowels): the apple",
-        "/ə/ — a, an (always weak)",
+        "/ə/ — a, an (almost always weak; strong form /eɪ/ only when naming the letter or for emphasis)",
         "/əv/ — of (always weak, never /ʌv/ in speech)",
         "/tə/ — to (before consonants): to sleep",
         "/tuː/ — to (before vowels): to eat",
@@ -127,7 +127,7 @@ const lesson: Lesson = {
       title: "Now You Try",
       phrase: "He said that he had to take a look at the book",
       ipa: "/hiː sɛd ðət hiː hæd tə teɪk ə lʊk ət ðə bʊk/",
-      tip: "Five function words reduce: that, to, a, at, the. Three content words anchor: said, take, look, book. Feel the rubber band stretch and snap.",
+      tip: "Five function words reduce: that, to, a, at, the. Four content words anchor: said, take, look, book. Feel the rubber band stretch and snap.",
       passScore: 70,
     },
     {
