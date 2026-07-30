@@ -50,5 +50,40 @@ test
 prompt
 
 server.log
+
 # Skills directory
 /skills/
+
+# AccentAI — additional exclusions for GitHub
+# Temp tool output (read caches, bash outputs)
+/tool-results/
+
+# QA screenshots & downloaded images
+/download/
+
+# User-uploaded design assets
+/upload/
+
+# Agent handover context (internal dev logs)
+/agent-ctx/
+
+# Local SQLite database binary
+/db/
+
+# Example/demo services (not part of the main app)
+/examples/
+/mini-services/
+
+# Stray root-level screenshots
+/*.png
+
+# VLM config / local-only
+vlm-modal.json
+
+# Local process/runtime files (keep the .sh scripts)
+.zscripts/dev.log
+.zscripts/dev.pid
+.zscripts/dev.out.log
+
+# OS files
+Thumbs.db
