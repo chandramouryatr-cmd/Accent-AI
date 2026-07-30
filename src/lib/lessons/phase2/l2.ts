@@ -25,7 +25,7 @@ const lesson: Lesson = {
       title: "Syllable Stress Rules",
       subtitle: "Where the beat falls changes everything",
       description:
-        "Stress is the heartbeat of an English word. Put it on the wrong syllable and a native listener won't even recognize the word — 'phoTOgraphy' sounds like a completely different word than 'phoTOgraphy' vs 'PHOtograph'. The good news: English stress follows predictable rules. Learn the rules and you can stress almost any new word correctly on the first try.",
+        "Stress is the heartbeat of an English word. Put it on the wrong syllable and a native listener won't even recognize the word — 'phoTOgraphy' sounds like a completely different word than 'PHOtograph'. The good news: English stress follows predictable rules. Learn the rules and you can stress almost any new word correctly on the first try.",
       visual: "stress-bars",
       emoji: "📊",
     },
@@ -39,7 +39,7 @@ const lesson: Lesson = {
         "RULE 2 — Suffix attracts stress: Suffixes like '-ic', '-tion', '-sion', '-ity', '-ical', '-ian' pull the stress to the syllable immediately BEFORE them. pho-TO-graph-IC, in-for-MA-tion, eco-NOM-ic.",
         "RULE 3 — Suffix neutral (stress stays on root): Suffixes like '-ness', '-ly', '-ful', '-less', '-ment' don't change the stress. HAPPY → HAPPIness, SUDden → SUDdenly.",
         "RULE 4 — Compound nouns: Stress the FIRST element. BLACKboard, POSTman, BASEball. Compound adjectives (adjective + noun) also stress first: BLACKbird.",
-        "RULE 5 — Compound verbs/phrasal: Stress the SECOND element (the particle). un-DERstand, look-UP, give-IN.",
+        "RULE 5 — Phrasal verbs: Stress the SECOND element (the particle). look-UP, give-IN, stand-OUT. Note: prefix-verb compounds like 'underSTAND' also stress the final syllable, but these are a separate pattern from true phrasal verbs.",
       ],
       bulletPoints: [
         "Noun→first, Verb→second: RE-cord vs re-CORD",
@@ -76,7 +76,7 @@ const lesson: Lesson = {
         { text: "phy", stressed: false },
       ],
       description:
-        "Add the '-y' suffix and the stress jumps to the second syllable: /fəˈtɑːɡrəfi/. The first syllable 'pho' reduces to /fə/. Notice how the SAME root word 'photo' sounds completely different in each form.",
+        "The '-graphy' ending follows the antepenultimate rule — stress falls on the third-from-last syllable: /fəˈtɑːɡrəfi/. The first syllable 'pho' reduces to /fə/. Notice how the SAME root word 'photo' sounds completely different in each form.",
     },
     {
       id: "stress-bars-photographic",
@@ -136,7 +136,7 @@ const lesson: Lesson = {
       title: "Now You Try",
       phrase: "The economic situation demanded immediate attention",
       ipa: "/ði ˌɛkəˈnɑːmɪk ˌsɪtʃuˈeɪʃən dɪˈmændɪd ɪˈmiːdiət əˈtɛnʃən/",
-      tip: "Four stress-attracting suffixes in one sentence: -ic (e-co-NOM-ic), -tion (si-tu-A-tion), -ate suffix on 'immediate' (im-ME-diate), and -tion again on 'attention' (at-TEN-tion). Land each stressed syllable clearly.",
+      tip: "Four stress patterns in one sentence: -ic (e-co-NOM-ic), -tion (si-tu-A-tion), antepenultimate rule on 'immediate' (im-ME-diate — stress third from last), and -tion again on 'attention' (at-TEN-tion). Land each stressed syllable clearly.",
       passScore: 75,
     },
     {
