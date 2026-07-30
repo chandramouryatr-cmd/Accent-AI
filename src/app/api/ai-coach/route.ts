@@ -260,6 +260,10 @@ export async function POST(req: NextRequest) {
           upstreamReader = completion.getReader();
           let buffer = "";
 
+          // Track whether [DONE] has already been forwarded to avoid sending
+          // it twice (once from the upstream SSE and once unconditionally at end).
+          let doneSent = false;
+
           try {
             while (true) {
               const { done, value } = await upstreamReader.read();
@@ -276,7 +280,10 @@ export async function POST(req: NextRequest) {
 
                 const dataStr = trimmed.slice(5).trim();
                 if (dataStr === "[DONE]") {
-                  controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+                  if (!doneSent) {
+                    controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+                    doneSent = true;
+                  }
                   continue;
                 }
 
@@ -287,7 +294,6 @@ export async function POST(req: NextRequest) {
                   if (token) {
                     controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token })}\n\n`));
                   }
-                  // If finish_reason is set, we'll also handle [DONE] if it appears
                 } catch {
                   // Non-JSON line, skip
                 }
@@ -300,7 +306,10 @@ export async function POST(req: NextRequest) {
               if (trimmed.startsWith("data:")) {
                 const dataStr = trimmed.slice(5).trim();
                 if (dataStr === "[DONE]") {
-                  controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+                  if (!doneSent) {
+                    controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+                    doneSent = true;
+                  }
                 } else {
                   try {
                     const parsed = JSON.parse(dataStr);
@@ -315,8 +324,10 @@ export async function POST(req: NextRequest) {
               }
             }
 
-            // Always ensure we send [DONE] at the end
-            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            // Send [DONE] exactly once — only if not already sent from upstream
+            if (!doneSent) {
+              controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            }
             controller.close();
           } catch (streamErr) {
             console.error("[ai-coach] Stream reading error:", streamErr);
