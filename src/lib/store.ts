@@ -145,6 +145,9 @@ export const useAppStore = create<AppState>()(
       setExpandedPhase: (i) => set({ expandedPhase: i }),
 
       completeLesson: (lessonId, score, xp, badge, timeSpent) => {
+        // Sanitize inputs to prevent negative or out-of-range values corrupting state
+        score = Math.max(0, Math.min(100, score));
+        xp = Math.max(0, xp);
         const state = get();
         const existing = state.lessons[lessonId];
         // only award XP the first time
@@ -168,10 +171,19 @@ export const useAppStore = create<AppState>()(
           if (state.lastActiveDate === yesterday) {
             newStreak = state.streak + 1;
           } else if (state.lastActiveDate && newStreakFreezes > 0) {
-            // Missed a day but have a streak freeze — consume it
-            newStreakFreezes -= 1;
-            newStreak = state.streak + 1;
-            freezeConsumed = true;
+            // Missed exactly one day and have a streak freeze — consume it.
+            // A freeze only covers a single missed day; if the user missed
+            // multiple days, the streak resets (handled by the final else below).
+            const twoDaysAgo = new Date(Date.now() - 2 * 86400000)
+              .toISOString()
+              .slice(0, 10);
+            if (state.lastActiveDate === twoDaysAgo) {
+              newStreakFreezes -= 1;
+              newStreak = state.streak + 1;
+              freezeConsumed = true;
+            } else {
+              newStreak = 1;
+            }
           } else {
             newStreak = 1;
           }
@@ -188,7 +200,8 @@ export const useAppStore = create<AppState>()(
         let goalCompleted = state.dailyGoalCompleted;
         if (goalDate !== today) {
           goalDate = today;
-          goalCompleted = 1; // this is the first lesson completed today
+          // Only count toward today's goal if this is a first-time completion
+          goalCompleted = isFirstTime ? 1 : 0;
         } else if (isFirstTime) {
           goalCompleted = state.dailyGoalCompleted + 1;
         }
@@ -252,7 +265,7 @@ export const useAppStore = create<AppState>()(
         }
       },
 
-      markStepViewed: (lessonId, _totalSteps) => {
+      markStepViewed: (lessonId, totalSteps) => {
         const state = get();
         const existing = state.lessons[lessonId];
         if (!existing) {
@@ -271,12 +284,14 @@ export const useAppStore = create<AppState>()(
             },
           });
         } else {
+          // Cap stepsViewed at totalSteps so re-viewing the same step doesn't
+          // inflate the count beyond the actual lesson length.
           set({
             lessons: {
               ...state.lessons,
               [lessonId]: {
                 ...existing,
-                stepsViewed: Math.max(existing.stepsViewed, existing.stepsViewed + 1),
+                stepsViewed: Math.min(existing.stepsViewed + 1, totalSteps),
               },
             },
           });
