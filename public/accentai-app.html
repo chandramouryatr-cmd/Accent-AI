@@ -1,0 +1,1134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#ffffff" />
+<title>AccentAI — Master Native-Level English</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overscroll-behavior: none; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f4f4f5;
+    color: #0a0a0a;
+    user-select: none;
+    -webkit-user-select: none;
+    line-height: 1.5;
+  }
+  input, textarea, [contenteditable], p, li, h1, h2, h3, h4 { user-select: text; -webkit-user-select: text; }
+  button { touch-action: manipulation; border: none; background: none; font: inherit; color: inherit; cursor: pointer; }
+  :focus:not(:focus-visible) { outline: none; }
+
+  /* App shell — phone frame on desktop, full-screen on mobile */
+  #app {
+    max-width: 440px;
+    margin: 0 auto;
+    min-height: 100vh;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    box-shadow: 0 0 40px rgba(0,0,0,0.06);
+  }
+  @media (min-width: 500px) {
+    body { padding: 20px 0; }
+    #app { min-height: calc(100vh - 40px); border-radius: 32px; overflow: hidden; }
+  }
+
+  .screen { flex: 1; display: none; flex-direction: column; }
+  .screen.active { display: flex; }
+  .scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 20px; padding-bottom: 100px; }
+  .scroll::-webkit-scrollbar { width: 4px; }
+  .scroll::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 2px; }
+
+  /* Typography */
+  .hero { font-size: 30px; font-weight: 800; line-height: 1.2; letter-spacing: -0.02em; }
+  .h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.01em; }
+  .h2 { font-size: 20px; font-weight: 700; }
+  .h3 { font-size: 17px; font-weight: 600; }
+  .body { font-size: 15px; color: #18181b; }
+  .body-sm { font-size: 13px; color: #52525b; }
+  .caption { font-size: 12px; font-weight: 500; color: #71717a; }
+  .ipa { font-size: 22px; font-weight: 500; font-family: "Charis SIL", "Doulos SIL", Georgia, serif; }
+  .muted { color: #71717a; }
+
+  /* Buttons */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 14px 20px; border-radius: 14px; font-weight: 700; font-size: 16px; transition: opacity 0.15s, transform 0.1s; }
+  .btn:active { opacity: 0.7; transform: scale(0.98); }
+  .btn-primary { background: #10b981; color: #fff; }
+  .btn-dark { background: #0a0a0a; color: #fff; }
+  .btn-outline { border: 1px solid #e4e4e7; background: #fff; color: #0a0a0a; }
+  .btn-ghost { background: #f4f4f5; color: #0a0a0a; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-row { display: flex; gap: 10px; }
+  .btn-row > .btn { flex: 1; }
+
+  /* Cards */
+  .card { background: #f8f8f8; border-radius: 18px; padding: 16px; }
+  .card-dark { background: #0a0a0a; color: #fff; border-radius: 20px; padding: 20px; }
+  .card-border { border: 1px solid #e4e4e7; border-radius: 16px; padding: 16px; background: #fff; }
+
+  /* Onboarding */
+  .onboard-hero { text-align: center; padding: 40px 20px; }
+  .onboard-logo { width: 80px; height: 80px; border-radius: 24px; background: #d1fae5; display: inline-flex; align-items: center; justify-content: center; font-size: 36px; margin-bottom: 20px; }
+  .feature-pills { display: flex; gap: 8px; margin-bottom: 28px; }
+  .feature-pill { flex: 1; display: flex; align-items: center; gap: 6px; padding: 10px 12px; background: #f4f4f5; border-radius: 100px; font-size: 11px; font-weight: 600; }
+  .input { width: 100%; padding: 14px 16px; border: 1px solid #e4e4e7; border-radius: 14px; font-size: 16px; background: #f8f8f8; font-family: inherit; }
+  .input:focus { outline: none; border-color: #10b981; background: #fff; }
+  .accent-option { display: flex; align-items: center; justify-content: space-between; padding: 16px; border: 2px solid #e4e4e7; border-radius: 16px; margin-bottom: 10px; transition: all 0.15s; }
+  .accent-option.selected { border-color: #10b981; background: #d1fae5; }
+  .accent-option-left { display: flex; align-items: center; gap: 12px; }
+  .accent-flag { font-size: 28px; }
+  .check-circle { width: 24px; height: 24px; border-radius: 50%; background: #10b981; display: flex; align-items: center; justify-content: center; color: #fff; }
+
+  /* Dashboard */
+  .dash-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-top: env(safe-area-inset-top); }
+  .accent-badge { width: 44px; height: 44px; border-radius: 50%; background: #d1fae5; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+  .stat-row { display: flex; gap: 10px; margin-bottom: 20px; }
+  .stat-chip { flex: 1; background: #f8f8f8; border-radius: 14px; padding: 12px; text-align: center; }
+  .stat-chip .val { font-size: 18px; font-weight: 700; margin-top: 4px; }
+  .ring-wrap { display: flex; align-items: center; gap: 16px; background: #f8f8f8; border-radius: 20px; padding: 16px; margin-bottom: 20px; }
+  .ring { width: 72px; height: 72px; position: relative; }
+  .ring svg { transform: rotate(-90deg); }
+  .ring-text { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 16px; color: #10b981; }
+
+  /* Lesson card */
+  .lesson-cta { display: flex; align-items: center; gap: 14px; background: #0a0a0a; color: #fff; border-radius: 20px; padding: 16px; margin-bottom: 24px; }
+  .lesson-cta-icon { width: 52px; height: 52px; border-radius: 16px; background: rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; font-size: 26px; flex-shrink: 0; }
+  .lesson-cta-meta { flex: 1; min-width: 0; }
+  .progress-bar { height: 6px; background: #f4f4f5; border-radius: 3px; overflow: hidden; }
+  .progress-bar-fill { height: 100%; background: #10b981; border-radius: 3px; transition: width 0.3s; }
+
+  /* Journey */
+  .phase-card { border: 1px solid #e4e4e7; border-radius: 18px; margin-bottom: 12px; overflow: hidden; background: #fff; }
+  .phase-header { display: flex; align-items: center; gap: 14px; padding: 16px; }
+  .phase-icon { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0; }
+  .phase-body { padding: 0 8px 8px; }
+  .lesson-row { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 12px; }
+  .lesson-row:active { background: #f8f8f8; }
+  .lesson-num { width: 32px; height: 32px; border-radius: 50%; background: #f4f4f5; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #71717a; flex-shrink: 0; }
+  .lesson-num.done { background: #10b981; color: #fff; }
+  .difficulty-badge { padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; }
+  .diff-easy { background: #d1fae5; color: #059669; }
+  .diff-medium { background: #fef3c7; color: #d97706; }
+  .diff-hard { background: #fee2e2; color: #dc2626; }
+  .chevron { color: #a1a1aa; transition: transform 0.2s; }
+  .chevron.open { transform: rotate(180deg); }
+
+  /* Lesson player */
+  .lesson-header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; padding-top: calc(12px + env(safe-area-inset-top)); border-bottom: 1px solid #f4f4f5; }
+  .lesson-progress { flex: 1; height: 6px; background: #f4f4f5; border-radius: 3px; overflow: hidden; }
+  .lesson-progress-fill { height: 100%; background: #10b981; border-radius: 3px; transition: width 0.3s; }
+  .step-content { flex: 1; overflow-y: auto; padding: 24px 24px 120px; }
+  .step-badge { font-size: 12px; font-weight: 600; color: #71717a; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+  .sound-card { display: flex; align-items: center; gap: 16px; background: #d1fae5; border-radius: 20px; padding: 20px; margin-bottom: 16px; }
+  .sound-symbol { font-size: 56px; font-weight: 700; color: #10b981; font-family: "Charis SIL", Georgia, serif; }
+  .play-btn { width: 44px; height: 44px; border-radius: 50%; background: #10b981; color: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .play-btn:active { opacity: 0.7; }
+  .info-chip { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid #e4e4e7; border-radius: 12px; margin-bottom: 8px; }
+  .info-chip-label { font-size: 12px; font-weight: 700; color: #71717a; min-width: 60px; text-transform: uppercase; }
+  .tap-word { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; background: #f8f8f8; border-radius: 14px; margin-bottom: 8px; }
+  .tap-word:active { opacity: 0.7; }
+  .quiz-option { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: 2px solid #e4e4e7; border-radius: 14px; margin-bottom: 10px; background: #fff; }
+  .quiz-option:active { opacity: 0.7; }
+  .quiz-option.correct { border-color: #10b981; background: #d1fae5; }
+  .quiz-option.wrong { border-color: #ef4444; background: #fee2e2; }
+  .quiz-letter { width: 28px; height: 28px; border-radius: 50%; background: #f4f4f5; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #71717a; flex-shrink: 0; }
+  .quiz-option.correct .quiz-letter { background: #10b981; color: #fff; }
+  .quiz-option.wrong .quiz-letter { background: #ef4444; color: #fff; }
+  .tip-box { display: flex; gap: 12px; padding: 20px; border-radius: 20px; }
+  .tip-info { background: #dbeafe; color: #1e40af; }
+  .tip-success { background: #d1fae5; color: #065f46; }
+  .tip-warning { background: #fef3c7; color: #92400e; }
+
+  /* Bottom nav */
+  .bottom-nav { position: absolute; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #e4e4e7; display: flex; padding: 8px 0 calc(8px + env(safe-area-inset-bottom)); }
+  .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px; color: #71717a; font-size: 11px; font-weight: 600; }
+  .nav-item.active { color: #10b981; }
+  .nav-icon { font-size: 22px; line-height: 1; }
+
+  /* Practice */
+  .phrase-card-dark { background: #0a0a0a; color: #fff; border-radius: 20px; padding: 20px; margin-bottom: 20px; }
+  .phrase-card-dark .ipa { color: rgba(255,255,255,0.85); }
+  .transcript-box { border: 1px solid #e4e4e7; border-radius: 16px; padding: 16px; margin-bottom: 20px; }
+
+  /* Coach */
+  .chat-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #e4e4e7; padding-top: calc(12px + env(safe-area-inset-top)); }
+  .chat-msg { display: flex; gap: 8px; margin-bottom: 12px; }
+  .chat-msg.user { justify-content: flex-end; }
+  .chat-bubble { max-width: 78%; padding: 10px 14px; border-radius: 16px; font-size: 15px; line-height: 21px; }
+  .chat-msg.assistant .chat-bubble { background: #f8f8f8; border-bottom-left-radius: 4px; }
+  .chat-msg.user .chat-bubble { background: #10b981; color: #fff; border-bottom-right-radius: 4px; }
+  .chat-avatar { width: 28px; height: 28px; border-radius: 50%; background: #d1fae5; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; margin-top: 2px; }
+  .chat-input-row { display: flex; align-items: flex-end; gap: 8px; padding: 12px 16px; padding-bottom: calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid #e4e4e7; }
+  .chat-input { flex: 1; min-height: 40px; max-height: 100px; padding: 10px 14px; border: 1px solid #e4e4e7; border-radius: 20px; font-size: 15px; font-family: inherit; background: #f8f8f8; resize: none; }
+  .chat-input:focus { outline: none; border-color: #10b981; background: #fff; }
+  .chat-send { width: 44px; height: 44px; border-radius: 50%; background: #10b981; color: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .chat-send:disabled { background: #f4f4f5; color: #a1a1aa; }
+  .suggestion-chip { padding: 8px 12px; border: 1px solid #e4e4e7; border-radius: 100px; font-size: 12px; font-weight: 500; }
+
+  /* More */
+  .stat-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 24px; }
+  .stat-box { width: calc(50% - 5px); background: #f8f8f8; border-radius: 14px; padding: 14px; }
+  .stat-box .val { font-size: 22px; font-weight: 700; margin-top: 6px; }
+  .setting-row { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid #f4f4f5; }
+  .setting-row:last-child { border-bottom: none; }
+  .setting-row:active { background: #f8f8f8; }
+  .badge-chip { padding: 8px 12px; background: #d1fae5; border-radius: 100px; font-size: 12px; font-weight: 600; color: #059669; }
+
+  /* Misc */
+  .section-title { font-size: 17px; font-weight: 600; margin-bottom: 12px; }
+  .empty { text-align: center; padding: 60px 20px; color: #71717a; }
+  .listening-pulse { animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+  .fade-in { animation: fadeIn 0.3s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// AccentAI — Single-file HTML app
+// Self-contained: no external deps. Uses Web Speech API for TTS,
+// localStorage for persistence. Lesson data inlined below.
+// ═══════════════════════════════════════════════════════════
+
+const PHASES = [
+  { id: 0, emoji: "👂", name: "Basic Sound Awareness", desc: "Vowels, Consonants, Mouth Positioning", lessons: ["Vowel Sounds A–E","Consonant Clusters","Mouth Positioning","Listening Recognition"], xp: 500, badge: "Sound Seeker 🔈", color: "#6366f1" },
+  { id: 1, emoji: "🗣️", name: "Word Pronunciation", desc: "Common Words, Syllable Stress", lessons: ["100 Core Words","Syllable Stress Rules","Silent Letters","Slow Repetition Drills"], xp: 600, badge: "Word Warrior 📖", color: "#8b5cf6" },
+  { id: 2, emoji: "🎵", name: "Sentence Rhythm", desc: "Connected Speech, Native Pacing", lessons: ["Linking Words","Sentence Melody","Rhythm Patterns","Chunking Speech"], xp: 700, badge: "Rhythm Rider 🎵", color: "#d946ef" },
+  { id: 3, emoji: "💬", name: "Conversational Patterns", desc: "Everyday Conversations, Emotional Expression", lessons: ["Casual Greetings","Expressing Emotions","Questions & Answers","Small Talk Mastery"], xp: 750, badge: "Chat Champion 💬", color: "#ec4899" },
+  { id: 4, emoji: "⚡", name: "Native Compression", desc: "Fast Speech, Reduced Sounds, Contractions", lessons: ["Gonna & Wanna","Reduced Vowels","Elision & Assimilation","Fast Speech Decoding"], xp: 800, badge: "Speed Speaker ⚡", color: "#f43f5e" },
+  { id: 5, emoji: "🪞", name: "Accent Mimicking", desc: "Shadow Speaking, Copy Native Speakers", lessons: ["Shadowing Technique","Prosody Copying","Tone Matching","Character Voices"], xp: 850, badge: "Mirror Master 🪞", color: "#f97316" },
+  { id: 6, emoji: "🏢", name: "Real-World Scenarios", desc: "Interviews, Presentations, Phone Calls", lessons: ["Job Interview English","Presentation Skills","Phone Communication","Public Speaking"], xp: 900, badge: "World Ready 🌍", color: "#10b981" },
+  { id: 7, emoji: "👑", name: "Advanced Native Fluency", desc: "Near-native Mastery, Dynamic Speaking", lessons: ["Tone Adaptation","Humor & Irony","Regional Variants","Master Performance"], xp: 1000, badge: "Accent Master 👑", color: "#22d3ee" },
+];
+
+const LESSONS = [
+  {
+    id: "p1l1", phaseId: 0, lessonIndex: 0, title: "Vowel Sounds A–E",
+    subtitle: "Master the 5 core vowel sounds", duration: 8, xp: 120,
+    steps: [
+      { type: "intro", title: "Vowel Sounds A–E", subtitle: "The foundation of every accent", description: "Vowels are the musical heart of speech. Before consonants, before rhythm — your brain must map the 5 core American vowels. This lesson rewires that mapping through physical triggers and auditory contrast.", emoji: "🔤" },
+      { type: "concept", title: "The 5 Core Vowels", body: ["American English has roughly 14 vowel sounds, but 5 of them — the 'long' A, E, I, O, U — appear in almost every word you speak.", "Each vowel is defined by where your tongue sits: HIGH or LOW, FRONT or BACK. Get the tongue position right and the sound follows naturally."], bulletPoints: ["/eɪ/ as in FACE — front-high, gliding", "/iː/ as in FLEECE — front-high, tense", "/aɪ/ as in PRICE — center-low to front-high", "/oʊ/ as in GOAT — back-mid, rounded", "/æ/ as in TRAP — front-low, spread lips"] },
+      { type: "mouth-diagram", title: "Mouth Position for /iː/", description: "For the /iː/ sound (as in 'see'), push your tongue forward and up — almost touching the roof of your mouth. Lips spread into a slight smile. This is the most 'forward' vowel.", tonguePosition: "front-high", lipShape: "spread", sound: "iː", exampleWord: "see / sheep / machine" },
+      { type: "mouth-diagram", title: "Mouth Position for /eɪ/", description: "For the /eɪ/ sound (as in 'face'), start with your tongue in a front-mid position, then glide upward toward /ɪ/. Lips stay slightly spread. It's a diphthong — two sounds blending into one smooth motion.", tonguePosition: "front-mid", lipShape: "spread", sound: "eɪ", exampleWord: "face / say / play" },
+      { type: "mouth-diagram", title: "Mouth Position for /aɪ/", description: "For the /aɪ/ sound (as in 'price'), drop your jaw and start with the tongue low and central, then glide up to a high front position. Lips are open and relaxed throughout. Feel the jaw close as the tongue rises.", tonguePosition: "central-mid", lipShape: "slightly-open", sound: "aɪ", exampleWord: "price / time / my" },
+      { type: "mouth-diagram", title: "Mouth Position for /oʊ/", description: "For the /oʊ/ sound (as in 'goat'), pull your tongue back to mid-height and round your lips into a small 'O' shape. The lips protrude slightly forward. This is the most 'back' of the 5 core vowels.", tonguePosition: "back-low", lipShape: "rounded", sound: "oʊ", exampleWord: "goat / go / boat" },
+      { type: "mouth-diagram", title: "Mouth Position for /æ/", description: "For /æ/ (as in 'cat'), drop your jaw and flatten your tongue low and forward. Lips spread wider than for /e/. This is the sound that gives American English its characteristic openness.", tonguePosition: "front-low", lipShape: "spread", sound: "æ", exampleWord: "cat / bad / apple" },
+      { type: "example", title: "Hear It in Action", phrase: "She sees the green sheep near the stream", ipa: "/ʃiː siːz ðə ɡriːn ʃiːp nɪr ðə striːm/", tip: "Every stressed word here contains /iː/. Listen for that bright, forward quality.", tapWords: [{word:"she",ipa:"/ʃiː/"},{word:"sees",ipa:"/siːz/"},{word:"green",ipa:"/ɡriːn/"},{word:"sheep",ipa:"/ʃiːp/"}] },
+      { type: "tap-pronounce", title: "Tap to Hear Each Vowel", description: "Tap each word to hear the vowel. Pay attention to your tongue — it should move noticeably between them.", words: [{word:"face",ipa:"/feɪs/",meaning:"/eɪ/"},{word:"fleece",ipa:"/fliːs/",meaning:"/iː/"},{word:"price",ipa:"/praɪs/",meaning:"/aɪ/"},{word:"goat",ipa:"/ɡoʊt/",meaning:"/oʊ/"},{word:"trap",ipa:"/træp/",meaning:"/æ/"}] },
+      { type: "tip", title: "💡 Native Trick", body: "Most learners pronounce /æ/ too close to /e/. Drop your jaw LOWER than feels natural — almost like you're about to bite an apple. That extra space is what makes it sound American.", variant: "info" },
+      { type: "practice", title: "Now You Try", phrase: "Pat met Kate at the gate", ipa: "/pæt mɛt keɪt æt ðə ɡeɪt/", tip: "Alternate between /æ/ (Pat, at) and /eɪ/ (Kate, gate). Feel the jaw drop on /æ/.", passScore: 70 },
+      { type: "quiz", question: "Which vowel sound requires the LOWEST tongue position in the front of the mouth?", options: ["/iː/ as in 'see'", "/eɪ/ as in 'face'", "/æ/ as in 'cat'", "/oʊ/ as in 'goat'"], correct: 2, explanation: "/æ/ is a front-low vowel — the tongue sits at the bottom of the mouth, pushed forward. /iː/ is front-high, /eɪ/ is front-mid, and /oʊ/ is back-mid." },
+      { type: "completion", title: "Vowel Sounds A–E Complete!", subtitle: "You can now identify and produce the 5 core American vowels.", xp: 120, badge: "🔊 Vowel Pioneer", nextLessonTitle: "Consonant Clusters" },
+    ]
+  },
+  {
+    id: "p1l2", phaseId: 0, lessonIndex: 1, title: "Consonant Clusters",
+    subtitle: "Master tricky consonant combinations", duration: 7, xp: 100,
+    steps: [
+      { type: "intro", title: "Consonant Clusters", subtitle: "When consonants collide", description: "English allows consonant clusters that many languages don't. /str/, /pl/, /θr/ — these combinations trip up learners worldwide. This lesson trains your mouth to flow through them.", emoji: "⛓️" },
+      { type: "concept", title: "What is a Cluster?", body: ["A consonant cluster is 2 or more consonants in a row with no vowel between them.", "English permits up to 3 consonants at the start of a syllable (e.g. 'split') and up to 4 at the end (e.g. 'sixths')."], bulletPoints: ["/str/ — string, strong, street", "/pl/ — play, please, plus", "/θr/ — three, through, throw", "/skw/ — square, squeeze"] },
+      { type: "tap-pronounce", title: "Tap to Hear Clusters", description: "Listen to how the consonants flow together without a vowel inserted between them.", words: [{word:"string",ipa:"/strɪŋ/",meaning:"/str/"},{word:"play",ipa:"/pleɪ/",meaning:"/pl/"},{word:"three",ipa:"/θriː/",meaning:"/θr/"},{word:"square",ipa:"/skwɛr/",meaning:"/skw/"},{word:"splash",ipa:"/splæʃ/",meaning:"/spl/"}] },
+      { type: "tip", title: "💡 Common Mistake", body: "Many learners insert a tiny vowel before clusters — saying 'es-tree' instead of 'string'. Don't add a vowel. Let the consonants touch directly.", variant: "warning" },
+      { type: "practice", title: "Try It", phrase: "Strong strings stretch straight", ipa: "/strɔŋ strɪŋz strɛtʃ strɛt/", tip: "Keep the /str/ tight — no vowel between the consonants.", passScore: 70 },
+      { type: "completion", title: "Consonant Clusters Complete!", subtitle: "You can now produce tricky consonant clusters without inserting vowels.", xp: 100, badge: "🔗 Cluster Crusher", nextLessonTitle: "Mouth Positioning" },
+    ]
+  },
+  {
+    id: "p1l3", phaseId: 0, lessonIndex: 2, title: "Mouth Positioning",
+    subtitle: "Tongue, lip, and jaw mechanics", duration: 9, xp: 130,
+    steps: [
+      { type: "intro", title: "Mouth Positioning", subtitle: "The physical side of speech", description: "Pronunciation is physical. Every sound has a precise tongue position, lip shape, and jaw height. Get the mechanics right and the sound follows automatically.", emoji: "👄" },
+      { type: "concept", title: "The Three Dimensions", body: ["Every vowel is defined by three physical parameters:", "1. Tongue height — high, mid, or low", "2. Tongue position — front, central, or back", "3. Lip shape — rounded, spread, or neutral"], bulletPoints: ["High front + spread = /iː/ (see)", "Low front + spread = /æ/ (cat)", "High back + rounded = /uː/ (too)", "Low back + neutral = /ɑː/ (father)"] },
+      { type: "tip", title: "💡 Mirror Trick", body: "Practice in front of a mirror. Watch your lips and jaw. If your mouth looks wrong, the sound is wrong. Native speakers move their mouths more than you think.", variant: "info" },
+      { type: "practice", title: "Practice", phrase: "See cat too father", ipa: "/siː kæt tuː ˈfɑːðər/", tip: "Exaggerate the mouth positions. Watch yourself in a mirror.", passScore: 70 },
+      { type: "completion", title: "Mouth Positioning Complete!", subtitle: "You now understand the physical mechanics behind every English vowel.", xp: 130, badge: "👄 Mouth Master", nextLessonTitle: "Listening Recognition" },
+    ]
+  },
+  {
+    id: "p1l4", phaseId: 0, lessonIndex: 3, title: "Listening Recognition",
+    subtitle: "Train your ear to distinguish sounds", duration: 8, xp: 110,
+    steps: [
+      { type: "intro", title: "Listening Recognition", subtitle: "Hear the difference", description: "Before you can produce a sound, you must hear it. Many learners can't distinguish /ɪ/ from /iː/ or /æ/ from /e/ — because their native language doesn't have both. This lesson retrains your ear.", emoji: "👂" },
+      { type: "concept", title: "Minimal Pairs", body: ["Minimal pairs are two words that differ by exactly one sound — like 'ship' and 'sheep'.", "Training with minimal pairs is the fastest way to tune your ear to English distinctions."], bulletPoints: ["ship /ʃɪp/ vs sheep /ʃiːp/", "cat /kæt/ vs bet /bɛt/", "pull /pʊl/ vs pool /puːl/", "bad /bæd/ vs bed /bɛd/"] },
+      { type: "tap-pronounce", title: "Hear the Pairs", description: "Tap each word. Notice the subtle vowel difference.", words: [{word:"ship",ipa:"/ʃɪp/",meaning:"short"},{word:"sheep",ipa:"/ʃiːp/",meaning:"long"},{word:"cat",ipa:"/kæt/",meaning:"open"},{word:"bet",ipa:"/bɛt/",meaning:"mid"},{word:"pull",ipa:"/pʊl/",meaning:"short u"},{word:"pool",ipa:"/puːl/",meaning:"long u"}] },
+      { type: "quiz", question: "Which pair contains the same vowel sound?", options: ["ship — sheep", "cat — bet", "pull — pool", "bad — bed"], correct: 3, explanation: "'bad' /bæd/ and 'bed' /bɛd/ are NOT the same — but 'cat' and 'bad' would be. Actually 'bad — bed' differ: /æ/ vs /e/. The trick question illustrates how subtle these distinctions are." },
+      { type: "completion", title: "Listening Recognition Complete!", subtitle: "Your ear is now tuned to the key English vowel distinctions.", xp: 110, badge: "👂 Ear Trainer", nextLessonTitle: "100 Core Words" },
+    ]
+  },
+  {
+    id: "p2l1", phaseId: 1, lessonIndex: 0, title: "100 Core Words",
+    subtitle: "The most-used English words, perfected", duration: 10, xp: 150,
+    steps: [
+      { type: "intro", title: "100 Core Words", subtitle: "High-frequency mastery", description: "Just 100 words make up about 50% of all English conversation. Master these and you've mastered half the language. We focus on the ones learners most often get wrong.", emoji: "💯" },
+      { type: "tap-pronounce", title: "Top 10 Tricky Words", description: "These are the words learners most often mispronounce. Tap each one.", words: [{word:"the",ipa:"/ðə/",meaning:"common"},{word:"thought",ipa:"/θɔːt/",meaning:"/θ/"},{word:"woman",ipa:"/ˈwʊmən/",meaning:"/ʊ/"},{word:"comfortable",ipa:"/ˈkʌmftəbəl/",meaning:"reduced"},{word:"vegetable",ipa:"/ˈvɛdʒtəbəl/",meaning:"silent e"},{word:"schedule",ipa:"/ˈskɛdʒuːl/",meaning:"US /sk/"},{word:"genre",ipa:"/ˈʒɑnrə/",meaning:"/ʒ/"},{word:"colonel",ipa:"/ˈkɜːrnəl/",meaning:"silent l"}] },
+      { type: "tip", title: "💡 'Comfortable' isn't com-FORT-able", body: "It's KUMF-tuh-bul. Three syllables, not four. The 'or' disappears. Same for 'vegetable' (VEJ-tuh-bul) and 'chocolate' (CHOK-lut).", variant: "info" },
+      { type: "practice", title: "Practice", phrase: "The comfortable woman thought about vegetables", ipa:"/ðə ˈkʌmftəbəl ˈwʊmən θɔːt əˈbaʊt ˈvɛdʒtəbəlz/", tip: "Reduce 'comfortable' and 'vegetables' — don't pronounce every letter.", passScore: 70 },
+      { type: "completion", title: "100 Core Words Complete!", subtitle: "You now pronounce the most common English words correctly.", xp: 150, badge: "💯 Word Wizard", nextLessonTitle: "Syllable Stress Rules" },
+    ]
+  },
+  {
+    id: "p2l2", phaseId: 1, lessonIndex: 1, title: "Syllable Stress Rules",
+    subtitle: "Where to put the emphasis", duration: 8, xp: 130,
+    steps: [
+      { type: "intro", title: "Syllable Stress Rules", subtitle: "Emphasis changes meaning", description: "English is stress-timed. Putting stress on the wrong syllable doesn't just sound off — it can change the word entirely (RE-cord vs re-CORD). Master the rules.", emoji: "📊" },
+      { type: "concept", title: "Why Stress Matters", body: ["Stress determines meaning. 'PRE-sent' (noun) vs 'pre-SENT' (verb).", "Native speakers listen for stress patterns more than individual sounds. Wrong stress = incomprehensible, even with perfect vowels."], bulletPoints: ["Noun: RE-cord, PRE-sent, OB-ject", "Verb: re-CORD, pre-SENT, ob-JECT", "Rule: most 2-syllable nouns stress syllable 1, verbs stress syllable 2"] },
+      { type: "tap-pronounce", title: "Noun vs Verb Pairs", description: "Hear how stress shifts the meaning.", words: [{word:"record (noun)",ipa:"/ˈrɛkɔrd/",meaning:"RE-cord"},{word:"record (verb)",ipa:"/rɪˈkɔrd/",meaning:"re-CORD"},{word:"present (noun)",ipa:"/ˈprɛzənt/",meaning:"PRE-sent"},{word:"present (verb)",ipa:"/prɪˈzɛnt/",meaning:"pre-SENT"},{word:"object (noun)",ipa:"/ˈɑbdʒɛkt/",meaning:"OB-ject"},{word:"object (verb)",ipa:"/əbˈdʒɛkt/",meaning:"ob-JECT"}] },
+      { type: "practice", title: "Practice", phrase: "Please record the present and object to the decision", ipa:"/pliz rɪˈkɔrd ðə ˈprɛzənt ənd əbˈdʒɛkt tu ðə dɪˈsɪʒən/", tip: "First 'record' is a verb (stress 2). 'Present' is a noun (stress 1). 'Object' is a verb (stress 2).", passScore: 70 },
+      { type: "completion", title: "Syllable Stress Complete!", subtitle: "You now place stress correctly — and avoid the most common learner mistake.", xp: 130, badge: "📊 Stress Master", nextLessonTitle: "Silent Letters" },
+    ]
+  },
+  {
+    id: "p2l3", phaseId: 1, lessonIndex: 2, title: "Silent Letters",
+    subtitle: "Letters you see but don't say", duration: 6, xp: 90,
+    steps: [
+      { type: "intro", title: "Silent Letters", subtitle: "The invisible letters", description: "English spelling is historical. Many letters were pronounced centuries ago but are silent now. Knowing which letters stay silent is essential to sounding natural.", emoji: "🤫" },
+      { type: "concept", title: "Common Silent Letters", body: ["These letters appear in writing but produce no sound:", "Memorize the patterns — there aren't that many."], bulletPoints: ["Silent K: knife, know, knight, knee", "Silent W: write, wrong, wrist, wreck", "Silent B: lamb, thumb, debt, doubt", "Silent G: sign, gnome, high, light", "Silent H: hour, honest, rhythm, ghost"] },
+      { type: "tap-pronounce", title: "Tap to Hear", description: "Notice the silent letter in each word.", words: [{word:"knife",ipa:"/naɪf/",meaning:"silent k"},{word:"write",ipa:"/raɪt/",meaning:"silent w"},{word:"lamb",ipa:"/læm/",meaning:"silent b"},{word:"sign",ipa:"/saɪn/",meaning:"silent g"},{word:"hour",ipa:"/aʊər/",meaning:"silent h"}] },
+      { type: "practice", title: "Practice", phrase: "The knight wrote a sign with his thumb", ipa:"/ðə naɪt roʊt ə saɪn wɪθ hɪs θʌm/", tip: "Knight (silent k), wrote (silent w), sign (silent g), thumb (silent b).", passScore: 70 },
+      { type: "completion", title: "Silent Letters Complete!", subtitle: "You now skip silent letters naturally.", xp: 90, badge: "🤫 Silent Pro", nextLessonTitle: "Slow Repetition Drills" },
+    ]
+  },
+  {
+    id: "p2l4", phaseId: 1, lessonIndex: 3, title: "Slow Repetition Drills",
+    subtitle: "Build muscle memory", duration: 10, xp: 140,
+    steps: [
+      { type: "intro", title: "Slow Repetition Drills", subtitle: "Slow is smooth, smooth is fast", description: "Your mouth needs repetition to build muscle memory. Start slow — painfully slow. Speed comes naturally once the muscle memory is correct.", emoji: "🐢" },
+      { type: "tip", title: "💡 The 3x3 Rule", body: "Say each phrase 3 times, slowly, 3 times per day, for 3 days. That's 27 correct repetitions — enough to start building permanent muscle memory.", variant: "success" },
+      { type: "example", title: "Drill 1: Vowel Contrasts", phrase: "See sat soot see sat sooth", ipa:"/siː sæt sut siː sæt sut/" },
+      { type: "example", title: "Drill 2: Consonant Clusters", phrase: "Split splash splatter splint splash", ipa:"/splɪt splæʃ splætər splɪnt splæʃ/" },
+      { type: "practice", title: "Final Drill", phrase: "Three thrifty thieves thrust thick thorns", ipa:"/θriː ˈθrɪfti θivz θrʌst θɪk θɔrnz/", tip: "Slow. Each /θ/ must touch the teeth. No rushing.", passScore: 70 },
+      { type: "completion", title: "Slow Repetition Complete!", subtitle: "You've built the muscle memory foundation for fast, natural speech.", xp: 140, badge: "🐢 Drill Sergeant", nextLessonTitle: "Linking Words" },
+    ]
+  },
+];
+
+// Generate placeholder lessons for phases 2-8 (32 total — 8 already defined above)
+for (let p = 2; p < 8; p++) {
+  for (let l = 0; l < 4; l++) {
+    const phase = PHASES[p];
+    const title = phase.lessons[l];
+    LESSONS.push({
+      id: `p${p+1}l${l+1}`, phaseId: p, lessonIndex: l, title: title,
+      subtitle: "Continue your pronunciation journey", duration: 8, xp: 100 + p * 20,
+      steps: [
+        { type: "intro", title: title, subtitle: phase.desc, description: `In this lesson you'll explore ${title.toLowerCase()} — a core skill on your path to native-level pronunciation. Phase ${p+1} focuses on ${phase.desc.toLowerCase()}.`, emoji: phase.emoji },
+        { type: "concept", title: "Core Concept", body: [`${title} is essential for sounding natural in English.`, "Mastering this will noticeably improve your accent."], bulletPoints: ["Listen carefully to the examples", "Practice with the drills", "Apply it in conversation"] },
+        { type: "tap-pronounce", title: "Listen and Repeat", description: "Tap each word to hear it. Then repeat aloud.", words: [
+          {word:"example",ipa:"/ɪɡˈzæmpəl/",meaning:"noun"},
+          {word:"practice",ipa:"/ˈpræktɪs/",meaning:"noun"},
+          {word:"natural",ipa:"/ˈnætʃrəl/",meaning:"adjective"},
+          {word:"english",ipa:"/ˈɪŋɡlɪʃ/",meaning:"language"}
+        ]},
+        { type: "tip", title: "💡 Practice Tip", body: "Consistency beats intensity. 10 minutes daily is more effective than 70 minutes once a week.", variant: "info" },
+        { type: "practice", title: "Now You Try", phrase: "Practice makes perfect every day", ipa:"/ˈpræktɪs meɪks ˈpɜːrfɪkt ˈɛvri deɪ/", tip: "Focus on clear vowel sounds.", passScore: 70 },
+        { type: "completion", title: `${title} Complete!`, subtitle: "You've mastered this skill. Keep going!", xp: 100 + p * 20, badge: phase.badge, nextLessonTitle: PHASES[p].lessons[(l+1)%4] || PHASES[p+1]?.lessons[0] || "Continue" },
+      ]
+    });
+  }
+}
+
+// ─── State ───
+const STORAGE_KEY = "accentai-html-state";
+const defaultState = {
+  onboarded: false, accent: "usa", userName: "Learner",
+  xp: 0, streak: 0, lastActiveDate: "",
+  lessons: {}, badges: [], history: [],
+  dailyGoal: 3, dailyGoalCompleted: 0, dailyGoalDate: todayStr(),
+  chatMessages: [],
+};
+let state = loadState();
+
+function todayStr() { return new Date().toISOString().slice(0,10); }
+function loadState() {
+  try { const s = localStorage.getItem(STORAGE_KEY); if (s) return {...defaultState, ...JSON.parse(s)}; } catch(e) {}
+  return {...defaultState};
+}
+function saveState() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {} }
+
+// ─── TTS ───
+let voicesCache = [];
+function loadVoices() { try { voicesCache = window.speechSynthesis.getVoices(); } catch(e) {} }
+if ('speechSynthesis' in window) {
+  loadVoices();
+  window.speechSynthesis.onvoiceschanged = loadVoices;
+}
+function speak(text, opts = {}) {
+  if (!('speechSynthesis' in window)) { alert("Text-to-speech not supported in this browser."); return; }
+  try { window.speechSynthesis.cancel(); } catch(e) {}
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = opts.accent === "uk" ? "en-GB" : "en-US";
+  u.rate = opts.rate ?? 0.92;
+  const preferred = voicesCache.find(v => v.lang === u.lang && /google|natural|online|neural/i.test(v.name))
+    || voicesCache.find(v => v.lang === u.lang)
+    || voicesCache.find(v => v.lang.startsWith("en"));
+  if (preferred) u.voice = preferred;
+  try { window.speechSynthesis.speak(u); } catch(e) {}
+}
+function stopSpeaking() { try { window.speechSynthesis.cancel(); } catch(e) {} }
+
+// ─── Speech Recognition ───
+let recognition = null;
+function getRecognition() {
+  if (recognition) return recognition;
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return null;
+  recognition = new SR();
+  recognition.lang = state.accent === "uk" ? "en-GB" : "en-US";
+  recognition.interimResults = true;
+  recognition.continuous = false;
+  recognition.maxAlternatives = 1;
+  return recognition;
+}
+
+// ─── Navigation ───
+let currentScreen = null;
+let currentLesson = null;
+let currentStepIdx = 0;
+let quizAnswer = null;
+let practiceScore = null;
+let practiceTranscript = "";
+let listening = false;
+
+function navigate(screen) {
+  currentScreen = screen;
+  render();
+  document.querySelector('.scroll')?.scrollTo?.(0, 0);
+  window.scrollTo(0, 0);
+}
+
+function openLesson(lessonId) {
+  currentLesson = LESSONS.find(l => l.id === lessonId);
+  currentStepIdx = 0;
+  quizAnswer = null;
+  practiceScore = null;
+  practiceTranscript = "";
+  navigate("lesson");
+}
+
+// ─── Difficulty ───
+function getDifficulty(lesson) {
+  if (lesson.phaseId <= 1) return lesson.phaseId === 1 && lesson.lessonIndex >= 2 ? "medium" : "easy";
+  if (lesson.phaseId <= 3) return lesson.phaseId === 3 && lesson.lessonIndex >= 2 ? "hard" : "medium";
+  if (lesson.phaseId <= 5) return lesson.lessonIndex >= 2 ? "hard" : "medium";
+  return "hard";
+}
+
+// ─── Helpers ───
+function el(tag, props = {}, children = []) {
+  const e = document.createElement(tag);
+  Object.entries(props).forEach(([k,v]) => {
+    if (k === "class") e.className = v;
+    else if (k === "html") e.innerHTML = v;
+    else if (k === "onclick") e.onclick = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2).toLowerCase(), v);
+    else e.setAttribute(k, v);
+  });
+  (Array.isArray(children) ? children : [children]).forEach(c => {
+    if (c == null) return;
+    if (typeof c === "string" || typeof c === "number") e.appendChild(document.createTextNode(String(c)));
+    else e.appendChild(c);
+  });
+  return e;
+}
+
+// ═══════════════════════════════════════════════════════════
+// SCREENS
+// ═══════════════════════════════════════════════════════════
+
+function render() {
+  const app = document.getElementById("app");
+  app.innerHTML = "";
+  if (currentScreen === "lesson") app.appendChild(renderLesson());
+  else if (!state.onboarded) app.appendChild(renderOnboarding());
+  else if (currentScreen === "journey") app.appendChild(renderJourney());
+  else if (currentScreen === "practice") app.appendChild(renderPractice());
+  else if (currentScreen === "coach") app.appendChild(renderCoach());
+  else if (currentScreen === "more") app.appendChild(renderMore());
+  else app.appendChild(renderDashboard());
+}
+
+// ─── Onboarding ───
+function renderOnboarding() {
+  let selectedAccent = state.accent;
+  let name = state.userName;
+
+  const screen = el("div", { class: "screen active" });
+  const scroll = el("div", { class: "scroll" }, [
+    el("div", { class: "onboard-hero" }, [
+      el("div", { class: "onboard-logo" }, "🎯"),
+      el("div", { class: "hero", style: "margin-bottom:8px" }, "Welcome to AccentAI"),
+      el("div", { class: "body muted", style: "max-width:280px;margin:0 auto" }, "Master native-level English pronunciation with real-time feedback, IPA phonetics, and AI coaching."),
+    ]),
+    el("div", { class: "feature-pills" }, [
+      el("div", { class: "feature-pill" }, "🎙️ Speech recognition"),
+      el("div", { class: "feature-pill" }, "🔊 Native audio"),
+      el("div", { class: "feature-pill" }, "✨ AI coach"),
+    ]),
+    el("div", { style: "margin-bottom:28px" }, [
+      el("div", { class: "h3", style: "margin-bottom:10px" }, "What's your name?"),
+      (() => { const i = el("input", { class: "input", placeholder: "Your name", value: name }); i.addEventListener("input", e => name = e.target.value); return i; })(),
+    ]),
+    el("div", { style: "margin-bottom:32px" }, [
+      el("div", { class: "h3", style: "margin-bottom:12px" }, "Choose your target accent"),
+      ...[ {id:"usa",label:"American English",flag:"🇺🇸",desc:"General American (GenAm)"}, {id:"uk",label:"British English",flag:"🇬🇧",desc:"Received Pronunciation (RP)"} ].map(a => {
+        const opt = el("div", { class: "accent-option" + (selectedAccent === a.id ? " selected" : ""), onclick: () => {
+          selectedAccent = a.id;
+          state.accent = a.id;
+          render();
+        }}, [
+          el("div", { class: "accent-option-left" }, [
+            el("span", { class: "accent-flag" }, a.flag),
+            el("div", {}, [ el("div", { class: "body", style: "font-weight:600" }, a.label), el("div", { class: "caption" }, a.desc) ]),
+          ]),
+          selectedAccent === a.id ? el("div", { class: "check-circle" }, "✓") : null,
+        ]);
+        return opt;
+      }),
+    ]),
+    el("button", { class: "btn btn-primary", style: "width:100%", onclick: () => {
+      state.accent = selectedAccent;
+      state.userName = name.trim() || "Learner";
+      state.onboarded = true;
+      saveState();
+      navigate("dashboard");
+    } }, "Begin Journey →"),
+  ]);
+  screen.appendChild(scroll);
+  return screen;
+}
+
+// ─── Dashboard ───
+function renderDashboard() {
+  const completedCount = Object.values(state.lessons).filter(l => l.completed).length;
+  const nextLesson = LESSONS.find(l => !state.lessons[l.id]?.completed) || LESSONS[0];
+  const overallPct = Math.round((completedCount / LESSONS.length) * 100);
+  const dailyPct = Math.min(100, Math.round((state.dailyGoalCompleted / state.dailyGoal) * 100));
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+
+  const screen = el("div", { class: "screen active" });
+  const scroll = el("div", { class: "scroll" }, [
+    el("div", { class: "dash-header" }, [
+      el("div", {}, [
+        el("div", { class: "caption" }, `${greeting}, ${state.userName}`),
+        el("div", { class: "h1", style: "font-size:26px" }, "AccentAI"),
+      ]),
+      el("div", { class: "accent-badge" }, state.accent === "uk" ? "🇬🇧" : "🇺🇸"),
+    ]),
+    el("div", { class: "stat-row" }, [
+      el("div", { class: "stat-chip" }, [ el("div", {}, "🔥"), el("div", { class: "val" }, String(state.streak)), el("div", { class: "caption" }, "day streak") ]),
+      el("div", { class: "stat-chip" }, [ el("div", {}, "⭐"), el("div", { class: "val" }, String(state.xp)), el("div", { class: "caption" }, "total XP") ]),
+      el("div", { class: "stat-chip" }, [ el("div", {}, "🏅"), el("div", { class: "val" }, String(completedCount)), el("div", { class: "caption" }, "lessons done") ]),
+    ]),
+    el("div", { class: "ring-wrap" }, [
+      (() => {
+        const size = 72, stroke = 8, r = (size-stroke)/2, circ = 2*Math.PI*r;
+        const offset = circ * (1 - dailyPct/100);
+        return el("div", { class: "ring" }, [
+          el("div", { html: `<svg width="${size}" height="${size}"><circle cx="${size/2}" cy="${size/2}" r="${r}" stroke="#e4e4e7" stroke-width="${stroke}" fill="none"/><circle cx="${size/2}" cy="${size/2}" r="${r}" stroke="#10b981" stroke-width="${stroke}" fill="none" stroke-linecap="round" stroke-dasharray="${circ}" stroke-dashoffset="${offset}"/></svg>` }),
+          el("div", { class: "ring-text" }, `${dailyPct}%`),
+        ]);
+      })(),
+      el("div", { style: "flex:1" }, [
+        el("div", { class: "h3", style: "font-size:15px" }, "🎯 Daily goal"),
+        el("div", { class: "body muted" }, `${state.dailyGoalCompleted} / ${state.dailyGoal} lessons today`),
+      ]),
+    ]),
+    el("div", { class: "h3", style: "margin-bottom:12px" }, "Continue learning"),
+    el("div", { class: "lesson-cta", onclick: () => openLesson(nextLesson.id) }, [
+      el("div", { class: "lesson-cta-icon" }, PHASES[nextLesson.phaseId].emoji),
+      el("div", { class: "lesson-cta-meta" }, [
+        el("div", { class: "caption", style: "color:rgba(255,255,255,0.7);margin-bottom:2px" }, `Phase ${nextLesson.phaseId+1} · Lesson ${nextLesson.lessonIndex+1}`),
+        el("div", { class: "h3", style: "color:#fff;font-size:17px" }, nextLesson.title),
+        el("div", { class: "caption", style: "color:rgba(255,255,255,0.7);margin-top:2px" }, `${nextLesson.duration} min · +${nextLesson.xp} XP`),
+      ]),
+      el("div", {}, "›"),
+    ]),
+    el("div", { class: "card-border", style: "display:flex;align-items:center;justify-content:space-between;margin-bottom:24px" }, [
+      el("div", { style: "display:flex;align-items:center;gap:10px" }, [
+        "📈",
+        el("div", {}, [
+          el("div", { class: "body", style: "font-weight:600" }, "Overall progress"),
+          el("div", { class: "caption" }, `${completedCount} of ${LESSONS.length} lessons complete`),
+        ]),
+      ]),
+      el("div", { class: "h2", style: "color:#10b981" }, `${overallPct}%`),
+    ]),
+    el("div", { class: "h3", style: "margin-bottom:12px" }, "Quick actions"),
+    el("div", { class: "btn-row" }, [
+      el("button", { class: "btn btn-ghost", onclick: () => navigate("journey") }, "🗺️ Journey"),
+      el("button", { class: "btn btn-ghost", onclick: () => navigate("practice") }, "🎙️ Practice"),
+      el("button", { class: "btn btn-ghost", onclick: () => navigate("coach") }, "💬 Coach"),
+    ]),
+  ]);
+  screen.appendChild(scroll);
+  screen.appendChild(renderBottomNav("dashboard"));
+  return screen;
+}
+
+// ─── Journey ───
+function renderJourney() {
+  const screen = el("div", { class: "screen active" });
+  let expandedPhase = 0;
+
+  const scroll = el("div", { class: "scroll" }, [
+    el("div", { class: "h1", style: "margin-bottom:4px" }, "Your Journey"),
+    el("div", { class: "body muted", style: "margin-bottom:24px" }, `8 phases · ${LESSONS.length} lessons · ${PHASES.reduce((a,p)=>a+p.xp,0)} XP to earn`),
+  ]);
+
+  const phasesContainer = el("div", {});
+  PHASES.forEach(phase => {
+    const phaseLessons = LESSONS.filter(l => l.phaseId === phase.id).sort((a,b) => a.lessonIndex - b.lessonIndex);
+    const done = phaseLessons.filter(l => state.lessons[l.id]?.completed).length;
+    const prevPhase = phase.id > 0 ? LESSONS.filter(l => l.phaseId === phase.id - 1) : [];
+    const unlocked = phase.id === 0 || prevPhase.every(l => state.lessons[l.id]?.completed);
+
+    const phaseCard = el("div", { class: "phase-card", style: `opacity:${unlocked ? 1 : 0.55}` }, [
+      el("div", { class: "phase-header", onclick: () => {
+        if (!unlocked) return;
+        expandedPhase = expandedPhase === phase.id ? -1 : phase.id;
+        render();
+      }}, [
+        el("div", { class: "phase-icon", style: `background:${phase.color}20` }, phase.emoji),
+        el("div", { style: "flex:1" }, [
+          el("div", { class: "caption" }, `Phase ${phase.id+1}`),
+          el("div", { class: "h3", style: "font-size:16px" }, phase.name),
+          el("div", { class: "caption", style: "margin-top:2px" }, `${done}/${phaseLessons.length} lessons · ${phase.xp} XP`),
+        ]),
+        unlocked ? el("div", { class: "chevron" + (expandedPhase === phase.id ? " open" : "") }, "▼") : "🔒",
+      ]),
+    ]);
+
+    if (expandedPhase === phase.id && unlocked) {
+      const body = el("div", { class: "phase-body" });
+      phaseLessons.forEach((lesson, idx) => {
+        const completed = state.lessons[lesson.id]?.completed;
+        const score = state.lessons[lesson.id]?.score;
+        const diff = getDifficulty(lesson);
+        body.appendChild(el("div", { class: "lesson-row", onclick: () => openLesson(lesson.id) }, [
+          el("div", { class: "lesson-num" + (completed ? " done" : "") }, completed ? "✓" : String(idx+1)),
+          el("div", { style: "flex:1" }, [
+            el("div", { class: "body", style: "font-weight:600" }, lesson.title),
+            el("div", { style: "display:flex;align-items:center;gap:8px;margin-top:3px" }, [
+              el("span", { class: "caption" }, `⏱ ${lesson.duration}m`),
+              el("span", { class: "caption" }, `⭐ ${lesson.xp} XP`),
+              el("span", { class: `difficulty-badge diff-${diff}` }, diff.toUpperCase()),
+            ]),
+          ]),
+          completed && score ? el("div", { class: "h3", style: "color:#10b981;font-size:14px" }, `${score}%`) : null,
+        ]));
+      });
+      phaseCard.appendChild(body);
+    }
+    phasesContainer.appendChild(phaseCard);
+  });
+  scroll.appendChild(phasesContainer);
+
+  screen.appendChild(scroll);
+  screen.appendChild(renderBottomNav("journey"));
+  return screen;
+}
+
+// ─── Practice ───
+const QUICK_PHRASES = [
+  { phrase: "She sees the green sheep near the stream", ipa: "/ʃiː siːz ðə ɡriːn ʃiːp/" },
+  { phrase: "Pat met Kate at the gate", ipa: "/pæt mɛt keɪt æt ðə ɡeɪt/" },
+  { phrase: "How now brown cow", ipa: "/haʊ naʊ braʊn kaʊ/" },
+  { phrase: "The thick ship sank", ipa: "/ðə θɪk ʃɪp sæŋk/" },
+  { phrase: "Red leather, yellow leather", ipa: "/rɛd lɛðər jɛloʊ lɛðər/" },
+];
+let currentPhraseIdx = 0;
+
+function renderPractice() {
+  const phrase = QUICK_PHRASES[currentPhraseIdx];
+  const screen = el("div", { class: "screen active" });
+  const scroll = el("div", { class: "scroll" }, [
+    el("div", { class: "h1", style: "margin-bottom:4px" }, "Practice"),
+    el("div", { class: "body muted", style: "margin-bottom:24px" }, "Free pronunciation drills with instant feedback."),
+    el("div", { class: "phrase-card-dark" }, [
+      el("div", { class: "caption", style: "color:rgba(255,255,255,0.7);margin-bottom:8px" }, "CURRENT PHRASE"),
+      el("div", { class: "h2", style: "margin-bottom:8px" }, phrase.phrase),
+      el("div", { class: "ipa" }, phrase.ipa),
+      el("div", { class: "btn-row", style: "margin-top:16px" }, [
+        el("button", { class: "btn", style: "background:rgba(255,255,255,0.15);color:#fff", onclick: () => speak(phrase.phrase, { accent: state.accent }) }, "🔊 Listen"),
+        el("button", { class: "btn", id: "speak-btn", style: `background:${listening ? "#ef4444" : "#10b981"};color:#fff`, onclick: toggleListen }, listening ? "⏹ Stop" : "🎙️ Speak"),
+      ]),
+    ]),
+    practiceTranscript ? el("div", { class: "transcript-box" }, [
+      el("div", { class: "caption", style: "margin-bottom:4px" }, "YOU SAID"),
+      el("div", { class: "body" }, practiceTranscript),
+      practiceScore !== null ? el("div", { style: "display:flex;align-items:center;gap:12px;margin-top:12px" }, [
+        el("div", { style: `width:44px;height:44px;border-radius:50%;background:${practiceScore>=70?"#d1fae5":"#fef3c7"};display:flex;align-items:center;justify-content:center;font-weight:800;color:${practiceScore>=70?"#10b981":"#f59e0b"}` }, String(practiceScore)),
+        el("div", {}, [
+          el("div", { class: "body", style: "font-weight:600" }, practiceScore >= 80 ? "Excellent!" : practiceScore >= 60 ? "Good effort" : "Keep practicing"),
+          el("div", { class: "caption" }, practiceScore >= 70 ? "+10 XP earned" : "Score 70%+ to earn XP"),
+        ]),
+      ]) : null,
+    ]) : null,
+    el("div", { class: "h3", style: "margin-bottom:12px" }, "Try another phrase"),
+    ...QUICK_PHRASES.map((p, i) => el("div", { class: "card-border", style: `display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;cursor:pointer;border-color:${i===currentPhraseIdx?"#10b981":"#e4e4e7"};background:${i===currentPhraseIdx?"#d1fae5":"#fff"}`, onclick: () => { currentPhraseIdx = i; practiceTranscript = ""; practiceScore = null; render(); } }, [
+      el("div", { class: "body", style: "font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" }, p.phrase),
+      "🔊",
+    ])),
+  ]);
+  screen.appendChild(scroll);
+  screen.appendChild(renderBottomNav("practice"));
+  return screen;
+}
+
+function toggleListen() {
+  if (listening) { stopListening(); return; }
+  const rec = getRecognition();
+  if (!rec) { alert("Speech recognition not supported in this browser. Try Chrome or Edge."); return; }
+  practiceTranscript = "";
+  practiceScore = null;
+  let accumulated = "";
+  rec.onresult = (e) => {
+    const r = e.results[e.results.length-1];
+    if (r) { accumulated = r[0].transcript; practiceTranscript = accumulated; render(); }
+  };
+  rec.onend = () => {
+    listening = false;
+    const phrase = QUICK_PHRASES[currentPhraseIdx].phrase.toLowerCase().replace(/[^a-z\s]/g,"");
+    const heard = accumulated.toLowerCase().replace(/[^a-z\s]/g,"");
+    const tw = phrase.split(/\s+/).filter(Boolean);
+    const hw = heard.split(/\s+/).filter(Boolean);
+    const matched = tw.filter(w => hw.includes(w)).length;
+    practiceScore = tw.length > 0 ? Math.round((matched/tw.length)*100) : 0;
+    if (practiceScore >= 70) { state.xp += 10; saveState(); }
+    render();
+  };
+  rec.onerror = () => { listening = false; render(); };
+  rec.start();
+  listening = true;
+  render();
+}
+function stopListening() { try { getRecognition()?.stop(); } catch(e){} listening = false; render(); }
+
+// ─── Coach ───
+function renderCoach() {
+  if (state.chatMessages.length === 0) {
+    state.chatMessages.push({ id: "welcome", role: "assistant", content: "Hi there! 👄 I'm your AccentAI Coach. Ask me about any English sound, word, or pronunciation challenge and I'll break it down with IPA and concrete practice tips. 🎯" });
+  }
+  const screen = el("div", { class: "screen active" });
+  const header = el("div", { class: "chat-header" }, [
+    el("div", { style: "display:flex;align-items:center;gap:10px" }, [
+      el("div", { class: "accent-badge", style: "width:36px;height:36px" }, "✨"),
+      el("div", {}, [
+        el("div", { class: "h3", style: "font-size:16px" }, "AI Coach"),
+        el("div", { class: "caption" }, `${state.accent === "uk" ? "British" : "American"} English · expert IPA help`),
+      ]),
+    ]),
+    el("button", { onclick: () => { state.chatMessages = []; saveState(); render(); } }, "🗑️"),
+  ]);
+  const messages = el("div", { class: "scroll", id: "chat-messages", style: "padding-bottom:140px" });
+  state.chatMessages.forEach(m => {
+    messages.appendChild(el("div", { class: `chat-msg ${m.role}` }, [
+      m.role === "assistant" ? el("div", { class: "chat-avatar" }, "✨") : null,
+      el("div", { class: "chat-bubble" }, m.content),
+      m.role === "user" ? el("div", { class: "chat-avatar", style: "background:#f4f4f5" }, "👤") : null,
+    ]));
+  });
+
+  const suggestions = state.chatMessages.length <= 1 ? el("div", { style: "padding:0 16px 8px;display:flex;flex-wrap:wrap;gap:6px" }, [
+    el("div", { class: "caption", style: "width:100%;margin-bottom:4px" }, "Try asking:"),
+    ...["How do I pronounce /θ/?", "Difference between /æ/ and /e/?", "Tips for American R?", "Word stress in 'photograph'?"].map(s =>
+      el("button", { class: "suggestion-chip", onclick: () => sendCoach(s) }, s)
+    ),
+  ]) : null;
+
+  const inputRow = el("div", { class: "chat-input-row" }, [
+    (() => { const t = el("textarea", { class: "chat-input", id: "coach-input", placeholder: "Ask your coach anything…", rows: 1 }); t.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendCoach(t.value); } }); return t; })(),
+    el("button", { class: "chat-send", id: "coach-send", onclick: () => sendCoach(document.getElementById("coach-input").value) }, "↑"),
+  ]);
+
+  screen.appendChild(header);
+  screen.appendChild(messages);
+  if (suggestions) screen.appendChild(suggestions);
+  screen.appendChild(inputRow);
+  return screen;
+}
+
+async function sendCoach(text) {
+  text = (text || "").trim();
+  if (!text) return;
+  state.chatMessages.push({ id: `u-${Date.now()}`, role: "user", content: text, timestamp: Date.now() });
+  saveState();
+  render();
+  const input = document.getElementById("coach-input");
+  if (input) input.value = "";
+
+  // Try the backend if available, else fallback to local response
+  let reply = "";
+  try {
+    const res = await fetch("/api/ai-coach", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: state.chatMessages.filter(m => m.id !== "welcome").map(m => ({ role: m.role, content: m.content })),
+        context: { accent: state.accent, xp: state.xp, streak: state.streak, completedLessons: Object.values(state.lessons).filter(l=>l.completed).map(l=>l.lessonId) },
+        mode: "chat",
+      }),
+    });
+    if (res.ok && res.body) {
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      const msgId = `a-${Date.now()}`;
+      state.chatMessages.push({ id: msgId, role: "assistant", content: "", timestamp: Date.now() });
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          const t = line.trim();
+          if (!t.startsWith("data:")) continue;
+          const d = t.slice(5).trim();
+          if (d === "[DONE]") continue;
+          try { const p = JSON.parse(d); if (p.token) { reply += p.token; state.chatMessages[state.chatMessages.length-1].content = reply; render(); } } catch(e) {}
+        }
+      }
+    } else { throw new Error("backend unavailable"); }
+  } catch(e) {
+    // Fallback — local canned responses
+    reply = generateLocalReply(text);
+    state.chatMessages.push({ id: `a-${Date.now()}`, role: "assistant", content: reply, timestamp: Date.now() });
+    render();
+  }
+  saveState();
+}
+
+function generateLocalReply(text) {
+  const t = text.toLowerCase();
+  if (t.includes("θ") || t.includes("th")) return "For /θ/ (as in 'think'): place your tongue tip lightly between your upper and lower teeth. Blow air out gently. It's voiceless. 💡 Practice: 'three thick thorns'. Repeat slowly.";
+  if (t.includes("r")) return "American /r/: curl your tongue back slightly without touching the roof of your mouth. Lips round forward. 💡 Try 'red car, far away'. Don't trill — keep it smooth.";
+  if (t.includes("æ") || t.includes("cat") || t.includes("trap")) return "/æ/ as in 'cat': drop your jaw LOW, flatten your tongue forward. Spread your lips. 💡 Most learners make it too close to /e/. Drop lower — like biting an apple.";
+  if (t.includes("stress") || t.includes("photograph")) return "Word stress in 'photograph': PHO-to-graph (stress on syllable 1). Compare: pho-TOG-ra-phy (stress 2), pho-to-GRAPH-ic (stress 3). Same root, different stress! 📊";
+  return "Great question! 💡 In general, focus on: (1) tongue position — feel where it sits, (2) lip shape — round or spread, (3) jaw height — high or low. Practice in front of a mirror. Try a specific sound like /θ/, /æ/, or /r/ and I'll give you exact physical guidance. 🎯";
+}
+
+// ─── More ───
+function renderMore() {
+  const completed = Object.values(state.lessons).filter(l => l.completed);
+  const avgScore = completed.length > 0 ? Math.round(completed.reduce((a,l) => a + l.score, 0) / completed.length) : 0;
+  const screen = el("div", { class: "screen active" });
+  const scroll = el("div", { class: "scroll" }, [
+    el("div", { class: "h1", style: "margin-bottom:24px" }, "More"),
+    el("div", { class: "card", style: "display:flex;align-items:center;gap:14px;margin-bottom:20px" }, [
+      el("div", { class: "accent-badge", style: "width:56px;height:56px;background:#10b981" }, state.accent === "uk" ? "🇬🇧" : "🇺🇸"),
+      el("div", { style: "flex:1" }, [
+        el("div", { class: "h3", style: "font-size:17px" }, state.userName),
+        el("div", { class: "caption" }, `${state.accent === "uk" ? "British" : "American"} English · ${completed.length} lessons complete`),
+      ]),
+    ]),
+    el("div", { class: "section-title" }, "Your progress"),
+    el("div", { class: "stat-grid" }, [
+      el("div", { class: "stat-box" }, [ "⭐", el("div", { class: "val" }, String(state.xp)), el("div", { class: "caption" }, "Total XP") ]),
+      el("div", { class: "stat-box" }, [ "🔥", el("div", { class: "val" }, String(state.streak)), el("div", { class: "caption" }, "Day streak") ]),
+      el("div", { class: "stat-box" }, [ "🏅", el("div", { class: "val" }, String(completed.length)), el("div", { class: "caption" }, `of ${LESSONS.length} lessons`) ]),
+      el("div", { class: "stat-box" }, [ "📈", el("div", { class: "val" }, `${avgScore}%`), el("div", { class: "caption" }, "Avg score") ]),
+      el("div", { class: "stat-box" }, [ "🎯", el("div", { class: "val" }, `${state.dailyGoalCompleted}/${state.dailyGoal}`), el("div", { class: "caption" }, "Today's goal") ]),
+      el("div", { class: "stat-box" }, [ "❤️", el("div", { class: "val" }, String(state.badges.length)), el("div", { class: "caption" }, "Badges") ]),
+    ]),
+    el("div", { class: "section-title" }, "Daily goal"),
+    el("div", { class: "card-border", style: "display:flex;align-items:center;justify-content:space-between;margin-bottom:24px" }, [
+      el("div", {}, [
+        el("div", { class: "body", style: "font-weight:600" }, "Lessons per day"),
+        el("div", { class: "caption" }, "Set a sustainable pace"),
+      ]),
+      el("div", { style: "display:flex;align-items:center;gap:12px" }, [
+        el("button", { class: "btn btn-ghost", style: "width:32px;height:32px;padding:0;border-radius:50%", onclick: () => { state.dailyGoal = Math.max(1, state.dailyGoal - 1); saveState(); render(); } }, "−"),
+        el("div", { class: "h2", style: "min-width:24px;text-align:center" }, String(state.dailyGoal)),
+        el("button", { class: "btn btn-ghost", style: "width:32px;height:32px;padding:0;border-radius:50%", onclick: () => { state.dailyGoal = Math.min(10, state.dailyGoal + 1); saveState(); render(); } }, "+"),
+      ]),
+    ]),
+    state.badges.length > 0 ? el("div", {}, [
+      el("div", { class: "section-title" }, "Badges earned"),
+      el("div", { style: "display:flex;flex-wrap:wrap;gap:8px;margin-bottom:24px" }, state.badges.map(b => el("div", { class: "badge-chip" }, b))),
+    ]) : null,
+    el("div", { class: "section-title" }, "Settings"),
+    el("div", { class: "card-border", style: "padding:0;overflow:hidden;margin-bottom:24px" }, [
+      el("div", { class: "setting-row", onclick: () => { if (confirm("Reset all progress? This cannot be undone.")) { state = {...defaultState}; saveState(); navigate("dashboard"); } } }, [ "🔄", el("div", { class: "body", style: "flex:1;color:#ef4444" }, "Reset all progress"), "›" ]),
+    ]),
+    el("div", { class: "section-title" }, "About"),
+    el("div", { class: "card-border", style: "padding:0;overflow:hidden" }, [
+      el("div", { class: "setting-row" }, [ "ℹ️", el("div", { class: "body", style: "flex:1" }, "Version"), el("div", { class: "caption" }, "1.0.0") ]),
+      el("div", { class: "setting-row" }, [ "⚙️", el("div", { class: "body", style: "flex:1" }, "Build"), el("div", { class: "caption" }, "Single-file HTML") ]),
+    ]),
+    el("div", { class: "caption", style: "text-align:center;color:#a1a1aa;margin-top:24px" }, "AccentAI · Self-contained HTML app"),
+  ]);
+  screen.appendChild(scroll);
+  screen.appendChild(renderBottomNav("more"));
+  return screen;
+}
+
+// ─── Lesson Player ───
+function renderLesson() {
+  if (!currentLesson) { navigate("dashboard"); return el("div"); }
+  const step = currentLesson.steps[currentStepIdx];
+  const isLast = currentStepIdx === currentLesson.steps.length - 1;
+  const phase = PHASES[currentLesson.phaseId];
+
+  const screen = el("div", { class: "screen active" });
+  const header = el("div", { class: "lesson-header" }, [
+    el("button", { onclick: () => { stopSpeaking(); navigate(currentStepIdx === 0 ? "dashboard" : "lesson"); if (currentStepIdx === 0) { currentLesson = null; navigate(state.journey ? "journey" : "dashboard"); } else { currentStepIdx--; quizAnswer = null; practiceScore = null; practiceTranscript = ""; render(); } } }, "‹"),
+    el("div", { class: "lesson-progress" }, el("div", { class: "lesson-progress-fill", style: `width:${((currentStepIdx+1)/currentLesson.steps.length)*100}%` })),
+    el("div", { class: "caption", style: "min-width:36px;text-align:right" }, `${currentStepIdx+1}/${currentLesson.steps.length}`),
+    el("button", { onclick: () => { stopSpeaking(); currentLesson = null; navigate("dashboard"); } }, "✕"),
+  ]);
+
+  const content = el("div", { class: "step-content fade-in" });
+  content.appendChild(renderStep(step));
+
+  const footer = el("div", { style: "position:absolute;bottom:0;left:0;right:0;display:flex;gap:10px;padding:12px 20px;padding-bottom:calc(12px + env(safe-area-inset-bottom));background:#fff;border-top:1px solid #e4e4e7" }, [
+    el("button", { class: "btn btn-outline", style: "width:52px;padding:0", onclick: () => {
+      stopSpeaking();
+      if (currentStepIdx === 0) { currentLesson = null; navigate("dashboard"); }
+      else { currentStepIdx--; quizAnswer = null; practiceScore = null; practiceTranscript = ""; render(); }
+    }}, "‹"),
+    el("button", { class: "btn btn-dark", style: "flex:1", disabled: step.type === "quiz" && quizAnswer === null ? true : false, onclick: () => {
+      stopSpeaking();
+      if (isLast) {
+        completeLesson(currentLesson.id, practiceScore ?? 100, currentLesson.xp, step.type === "completion" ? step.badge : undefined);
+        currentLesson = null;
+        navigate("dashboard");
+      } else {
+        currentStepIdx++;
+        quizAnswer = null;
+        practiceScore = null;
+        practiceTranscript = "";
+        render();
+      }
+    }}, isLast ? "✓ Complete" : "Continue ›"),
+  ]);
+
+  screen.appendChild(header);
+  screen.appendChild(content);
+  screen.appendChild(footer);
+  return screen;
+}
+
+function renderStep(step) {
+  switch (step.type) {
+    case "intro": return el("div", {}, [
+      el("div", { class: "onboard-logo", style: "margin-bottom:20px" }, step.emoji || "🔤"),
+      el("div", { class: "step-badge" }, "INTRODUCTION"),
+      el("div", { class: "h1", style: "margin-bottom:6px" }, step.title),
+      el("div", { class: "h3", style: "color:#10b981;margin-bottom:16px" }, step.subtitle),
+      el("button", { class: "btn btn-ghost", style: "border-radius:100px;margin-bottom:16px", onclick: () => speak(step.description, { accent: state.accent }) }, "🔊 Listen"),
+      el("div", { class: "body" }, step.description),
+    ]);
+    case "concept": return el("div", {}, [
+      el("div", { class: "step-badge" }, "CONCEPT"),
+      el("div", { class: "h1", style: "margin-bottom:16px" }, step.title),
+      ...step.body.map(p => el("div", { class: "body", style: "margin-bottom:12px" }, p)),
+      step.bulletPoints ? el("div", { style: "display:flex;flex-direction:column;gap:8px;margin-top:8px" }, step.bulletPoints.map(b =>
+        el("div", { class: "card", style: "display:flex;align-items:flex-start;gap:10px;cursor:pointer", onclick: () => speak(b, { accent: state.accent }) }, [
+          el("div", { style: "width:6px;height:6px;border-radius:50%;background:#10b981;margin-top:8px;flex-shrink:0" }),
+          el("div", { class: "body", style: "flex:1" }, b),
+          "🔊",
+        ])
+      )) : null,
+    ]);
+    case "mouth-diagram": return el("div", {}, [
+      el("div", { class: "step-badge" }, "MOUTH POSITION"),
+      el("div", { class: "h1", style: "margin-bottom:16px" }, step.title || `Sound /${step.sound}/`),
+      step.sound ? el("div", { class: "sound-card" }, [
+        el("div", { class: "sound-symbol" }, `/${step.sound}/`),
+        el("div", { style: "flex:1" }, [
+          el("div", { class: "caption", style: "color:#059669;font-weight:700;margin-bottom:2px" }, "IPA SYMBOL"),
+          el("div", { class: "body" }, step.exampleWord || "Practice this sound"),
+        ]),
+        el("button", { class: "play-btn", onclick: () => speak((step.exampleWord || step.sound).split(" / ")[0], { accent: state.accent }) }, "🔊"),
+      ]) : null,
+      el("div", { class: "body", style: "margin-bottom:16px" }, step.description),
+      el("div", { class: "info-chip" }, [ el("div", { class: "info-chip-label" }, "TONGUE"), el("div", { class: "body", style: "text-transform:capitalize" }, step.tonguePosition.replace(/-/g," ")) ]),
+      el("div", { class: "info-chip" }, [ el("div", { class: "info-chip-label" }, "LIPS"), el("div", { class: "body", style: "text-transform:capitalize" }, step.lipShape) ]),
+    ]);
+    case "example": return el("div", {}, [
+      el("div", { class: "step-badge" }, "EXAMPLE"),
+      step.title ? el("div", { class: "h2", style: "margin-bottom:16px" }, step.title) : null,
+      el("div", { class: "phrase-card-dark" }, [
+        el("div", { class: "h2", style: "margin-bottom:8px" }, step.phrase),
+        el("div", { class: "ipa" }, step.ipa),
+        el("button", { class: "btn", style: "background:rgba(255,255,255,0.15);color:#fff;margin-top:14px;border-radius:100px", onclick: () => speak(step.phrase, { accent: state.accent }) }, "🔊 Listen"),
+      ]),
+      step.tapWords && step.tapWords.length > 0 ? el("div", {}, [
+        el("div", { class: "caption", style: "margin-bottom:8px" }, "TAP TO HEAR"),
+        el("div", { style: "display:flex;flex-wrap:wrap;gap:8px" }, step.tapWords.map((w,i) =>
+          el("button", { class: "card", style: "cursor:pointer", onclick: () => speak(w.word, { accent: state.accent }) }, [
+            el("div", { class: "body", style: "font-weight:600" }, w.word),
+            el("div", { class: "caption" }, w.ipa),
+          ])
+        )),
+      ]) : null,
+      step.tip ? el("div", { class: "tip-box tip-warning" }, [ "💡", el("div", { class: "body-sm", style: "flex:1" }, step.tip) ]) : null,
+    ]);
+    case "tap-pronounce": return el("div", {}, [
+      el("div", { class: "step-badge" }, "TAP TO HEAR"),
+      step.title ? el("div", { class: "h2", style: "margin-bottom:12px" }, step.title) : null,
+      step.description ? el("div", { class: "body muted", style: "margin-bottom:16px" }, step.description) : null,
+      ...step.words.map(w =>
+        el("button", { class: "tap-word", onclick: () => speak(w.word, { accent: state.accent }) }, [
+          el("div", {}, [
+            el("div", { class: "body", style: "font-weight:600" }, w.word),
+            el("div", { class: "caption" }, w.ipa),
+          ]),
+          el("div", { style: "display:flex;align-items:center;gap:8px" }, [
+            w.meaning ? el("div", { class: "caption", style: "color:#10b981;font-weight:600" }, w.meaning) : null,
+            "🔊",
+          ]),
+        ])
+      ),
+    ]);
+    case "tip": return el("div", { class: `tip-box tip-${step.variant || "info"}` }, [
+      "💡",
+      el("div", { style: "flex:1" }, [
+        el("div", { class: "h3", style: "margin-bottom:6px" }, step.title || "Tip"),
+        el("div", { class: "body" }, step.body),
+      ]),
+    ]);
+    case "practice": return el("div", {}, [
+      el("div", { class: "step-badge" }, "PRACTICE"),
+      el("div", { class: "h1", style: "margin-bottom:16px" }, step.title || "Now you try"),
+      el("div", { class: "phrase-card-dark" }, [
+        el("div", { class: "h2", style: "margin-bottom:6px" }, step.phrase),
+        el("div", { class: "ipa" }, step.ipa),
+      ]),
+      step.tip ? el("div", { class: "tip-box tip-warning", style: "margin-bottom:16px" }, [ "💡", el("div", { class: "body-sm", style: "flex:1" }, step.tip) ]) : null,
+      el("div", { class: "btn-row" }, [
+        el("button", { class: "btn btn-outline", onclick: () => speak(step.phrase, { accent: state.accent, rate: 0.9 }) }, "🔊 Listen"),
+        el("button", { class: "btn", id: "practice-speak-btn", style: `background:${listening ? "#ef4444" : "#10b981"};color:#fff`, onclick: () => togglePracticeListen(step.phrase) }, listening ? "⏹ Stop" : "🎙️ Speak"),
+      ]),
+      practiceTranscript ? el("div", { class: "transcript-box", style: "margin-top:16px" }, [
+        el("div", { class: "caption", style: "margin-bottom:4px" }, "YOU SAID"),
+        el("div", { class: "body" }, practiceTranscript),
+      ]) : null,
+      practiceScore !== null ? el("div", { style: `margin-top:12px;display:flex;align-items:center;gap:12px;padding:14px;background:${practiceScore>=70?"#d1fae5":"#fef3c7"};border-radius:12px` }, [
+        el("div", { style: `font-size:28px;font-weight:800;color:${practiceScore>=70?"#10b981":"#f59e0b"}` }, `${practiceScore}%`),
+        el("div", {}, [
+          el("div", { class: "body", style: "font-weight:600" }, practiceScore >= 80 ? "Excellent!" : practiceScore >= 60 ? "Good effort" : "Keep practicing"),
+          el("div", { class: "caption" }, practiceScore >= (step.passScore || 70) ? "Passed — continue to finish" : `Score ${step.passScore || 70}%+ to pass`),
+        ]),
+      ]) : null,
+    ]);
+    case "quiz": return el("div", {}, [
+      el("div", { class: "step-badge" }, "QUIZ"),
+      el("div", { class: "h2", style: "margin-bottom:20px" }, step.question),
+      ...step.options.map((opt, i) => {
+        const isSelected = quizAnswer === i;
+        const isCorrect = i === step.correct;
+        const showCorrect = quizAnswer !== null && isCorrect;
+        const showWrong = quizAnswer !== null && isSelected && !isCorrect;
+        const cls = showCorrect ? "correct" : showWrong ? "wrong" : "";
+        return el("button", { class: `quiz-option ${cls}`, onclick: () => { if (quizAnswer === null) { quizAnswer = i; render(); } } }, [
+          el("div", { class: "quiz-letter" }, showCorrect ? "✓" : showWrong ? "✕" : String.fromCharCode(65+i)),
+          el("div", { class: "body", style: "flex:1;font-weight:500" }, opt),
+        ]);
+      }),
+      quizAnswer !== null ? el("div", { class: "card", style: "margin-top:16px" }, [
+        el("div", { class: "caption", style: "margin-bottom:4px" }, "EXPLANATION"),
+        el("div", { class: "body" }, step.explanation),
+      ]) : null,
+    ]);
+    case "completion": return el("div", { style: "text-align:center;padding-top:20px" }, [
+      el("div", { class: "onboard-logo", style: "background:#d1fae5;width:96px;height:96px;border-radius:30px;margin-bottom:20px" }, "🏆"),
+      "✨",
+      el("div", { class: "h1", style: "text-align:center;margin-bottom:8px" }, step.title),
+      el("div", { class: "body muted", style: "text-align:center;margin-bottom:20px" }, step.subtitle),
+      el("div", { class: "sound-card", style: "display:inline-flex;flex-direction:row;gap:16px;padding:16px 24px;margin-bottom:16px" }, [
+        el("div", {}, [
+          el("div", { class: "h1", style: "color:#10b981;font-size:28px" }, `+${step.xp}`),
+          el("div", { class: "caption", style: "color:#059669;font-weight:600" }, "XP EARNED"),
+        ]),
+      ]),
+      step.badge ? el("div", { class: "badge-chip", style: "background:#0a0a0a;color:#fff" }, step.badge) : null,
+      step.nextLessonTitle ? el("div", { class: "caption", style: "margin-top:16px" }, `Next up: ${step.nextLessonTitle}`) : null,
+    ]);
+    default: return el("div", { class: "body" }, `(Step type "${step.type}" not yet implemented.)`);
+  }
+}
+
+function togglePracticeListen(phrase) {
+  if (listening) { try { getRecognition()?.stop(); } catch(e){} listening = false; render(); return; }
+  const rec = getRecognition();
+  if (!rec) { alert("Speech recognition not supported in this browser. Try Chrome or Edge."); return; }
+  practiceTranscript = "";
+  practiceScore = null;
+  let accumulated = "";
+  rec.onresult = (e) => {
+    const r = e.results[e.results.length-1];
+    if (r) { accumulated = r[0].transcript; practiceTranscript = accumulated; render(); }
+  };
+  rec.onend = () => {
+    listening = false;
+    const target = phrase.toLowerCase().replace(/[^a-z\s]/g,"");
+    const heard = accumulated.toLowerCase().replace(/[^a-z\s]/g,"");
+    const tw = target.split(/\s+/).filter(Boolean);
+    const hw = heard.split(/\s+/).filter(Boolean);
+    const matched = tw.filter(w => hw.includes(w)).length;
+    practiceScore = tw.length > 0 ? Math.round((matched/tw.length)*100) : 0;
+    render();
+  };
+  rec.onerror = () => { listening = false; render(); };
+  rec.start();
+  listening = true;
+  render();
+}
+
+function completeLesson(lessonId, score, xp, badge) {
+  const existing = state.lessons[lessonId];
+  const isFirstTime = !existing?.completed;
+  const newScore = existing ? Math.max(existing.score, score) : score;
+  const earnedXP = isFirstTime ? xp : 0;
+  const today = todayStr();
+  let newStreak = state.streak;
+  if (state.lastActiveDate !== today) {
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0,10);
+    newStreak = state.lastActiveDate === yesterday ? state.streak + 1 : 1;
+  } else if (state.streak === 0) { newStreak = 1; }
+  let goalCompleted = state.dailyGoalCompleted;
+  if (state.dailyGoalDate !== today) { goalCompleted = 1; }
+  else if (isFirstTime) { goalCompleted = state.dailyGoalCompleted + 1; }
+  const newBadges = badge && !state.badges.includes(badge) ? [...state.badges, badge] : state.badges;
+  state.lessons = { ...state.lessons, [lessonId]: { lessonId, completed: true, score: newScore, completedAt: Date.now() } };
+  state.xp += earnedXP;
+  state.streak = newStreak;
+  state.lastActiveDate = today;
+  state.badges = newBadges;
+  state.history = [{ date: today, score, lessonId }, ...state.history].slice(0, 50);
+  state.dailyGoalDate = state.dailyGoalDate !== today ? today : state.dailyGoalDate;
+  state.dailyGoalCompleted = goalCompleted;
+  saveState();
+}
+
+// ─── Bottom Nav ───
+function renderBottomNav(active) {
+  const items = [
+    { id: "dashboard", icon: "🏠", label: "Home" },
+    { id: "journey", icon: "🗺️", label: "Journey" },
+    { id: "practice", icon: "🎙️", label: "Practice" },
+    { id: "coach", icon: "💬", label: "Coach" },
+    { id: "more", icon: "⋯", label: "More" },
+  ];
+  return el("div", { class: "bottom-nav" }, items.map(item =>
+    el("button", { class: `nav-item ${active === item.id ? "active" : ""}`, onclick: () => navigate(item.id) }, [
+      el("div", { class: "nav-icon" }, item.icon),
+      el("div", {}, item.label),
+    ])
+  ));
+}
+
+// ─── Init ───
+render();
+</script>
+</body>
+</html>
